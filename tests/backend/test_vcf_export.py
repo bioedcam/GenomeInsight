@@ -65,6 +65,20 @@ class TestVCFHeaders:
         vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
         assert '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">' in vcf
 
+    def test_filter_pass_header(self) -> None:
+        vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
+        assert '##FILTER=<ID=PASS,Description="All filters passed">' in vcf
+
+    def test_no_invalid_info_header(self) -> None:
+        """VCF should not contain an INFO header with ID='.'."""
+        vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
+        assert "##INFO=<ID=." not in vcf
+
+    def test_ref_alt_limitation_note(self) -> None:
+        vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
+        assert "##GenomeInsight_note=" in vcf
+        assert "inferred from genotype" in vcf
+
     def test_contig_lines_present(self) -> None:
         vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
         for chrom in [str(i) for i in range(1, 23)] + ["X", "Y", "MT"]:
@@ -80,6 +94,24 @@ class TestVCFHeaders:
         lines = vcf.strip().split("\n")
         header_line = [ln for ln in lines if ln.startswith("#CHROM")][0]
         assert header_line.endswith("MySample")
+
+    def test_sample_name_tab_sanitized(self) -> None:
+        """Tabs in sample name would corrupt the VCF header."""
+        vcf = export_vcf_from_rows([], sample_name="Bad\tName", file_date=FIXED_DATE)
+        header_line = [ln for ln in vcf.split("\n") if ln.startswith("#CHROM")][0]
+        # Tab stripped, so the name should be "BadName"
+        assert header_line.endswith("BadName")
+
+    def test_sample_name_newline_sanitized(self) -> None:
+        vcf = export_vcf_from_rows([], sample_name="Bad\nName", file_date=FIXED_DATE)
+        header_line = [ln for ln in vcf.split("\n") if ln.startswith("#CHROM")][0]
+        assert header_line.endswith("BadName")
+
+    def test_empty_sample_name_defaults(self) -> None:
+        """Empty sample name (after sanitization) falls back to SAMPLE."""
+        vcf = export_vcf_from_rows([], sample_name="\t\n", file_date=FIXED_DATE)
+        header_line = [ln for ln in vcf.split("\n") if ln.startswith("#CHROM")][0]
+        assert header_line.endswith("SAMPLE")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -202,6 +234,31 @@ class TestGenotypeConversion:
     def test_haploid(self) -> None:
         assert _genotype_to_vcf_fields("A") == ("A", ".", "0")
 
+    def test_indel_di_returns_none(self) -> None:
+        """23andMe v3 D/I indel codes are not valid nucleotides."""
+        assert _genotype_to_vcf_fields("DI") is None
+
+    def test_indel_dd_returns_none(self) -> None:
+        assert _genotype_to_vcf_fields("DD") is None
+
+    def test_indel_ii_returns_none(self) -> None:
+        assert _genotype_to_vcf_fields("II") is None
+
+    def test_single_d_returns_none(self) -> None:
+        assert _genotype_to_vcf_fields("D") is None
+
+    def test_indel_rows_skipped_in_export(self) -> None:
+        """D/I genotype rows should be skipped like no-calls."""
+        rows = [
+            ("rs100", "1", 1000, "AA"),
+            ("rs101", "1", 2000, "DI"),
+            ("rs102", "1", 3000, "DD"),
+        ]
+        vcf = export_vcf_from_rows(rows, file_date=FIXED_DATE)
+        data = _get_data_lines(vcf)
+        assert len(data) == 1
+        assert data[0].split("\t")[2] == "rs100"
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # File / stream output tests
@@ -262,6 +319,20 @@ class TestExportFromEngine:
         assert dest.exists()
         text = dest.read_text(encoding="utf-8")
         assert text.startswith("##fileformat=VCFv4.2")
+
+    def test_output_sorted_by_canonical_chrom_order(
+        self, sample_with_variants: sa.Engine,
+    ) -> None:
+        """Verify variants are sorted by canonical chrom order, not text order."""
+        vcf = export_vcf_from_engine(sample_with_variants, file_date=FIXED_DATE)
+        data = _get_data_lines(vcf)
+        chroms = [line.split("\t")[0] for line in data]
+        # Canonical order maps: 1→1, 10→10, 15→15, 19→19, 22→22
+        # Text sort would put 10 before 15 before 19 before 22 before 1
+        # Our seed data has chroms: 1(×2), 10, 15, 16, 19(×2), 22(×2)
+        chrom_order = {"1": 1, "10": 10, "15": 15, "16": 16, "19": 19, "22": 22}
+        numeric = [chrom_order.get(c, 99) for c in chroms]
+        assert numeric == sorted(numeric)
 
     def test_empty_table_produces_header_only(self, sample_engine: sa.Engine) -> None:
         vcf = export_vcf_from_engine(sample_engine, file_date=FIXED_DATE)

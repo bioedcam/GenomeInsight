@@ -44,6 +44,9 @@ _VCF_COLUMNS = (
     "SAMPLE",
 )
 
+# Valid nucleotide bases for VCF allele fields.
+_VALID_BASES: frozenset[str] = frozenset("ACGT")
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -59,12 +62,18 @@ def _genotype_to_vcf_fields(
 ) -> tuple[str, str, str] | None:
     """Convert a 23andMe genotype string to (REF, ALT, GT).
 
-    Returns ``None`` for no-call genotypes ('--') or empty strings.
+    Returns ``None`` for no-call genotypes ('--'), empty strings, and
+    genotypes containing non-nucleotide characters (D/I indel codes from
+    23andMe v3).
 
     For single-character genotypes (haploid, e.g. Y/MT), the GT field
     uses haploid notation (e.g. '0').
     """
     if not genotype or genotype == "--":
+        return None
+
+    # Reject non-nucleotide characters (e.g. D/I indel codes).
+    if not all(c in _VALID_BASES for c in genotype):
         return None
 
     if len(genotype) == 1:
@@ -89,12 +98,22 @@ def _build_header_lines(
     if file_date is None:
         file_date = date.today()
 
+    # Sanitize sample name: strip tabs, newlines, control characters.
+    safe_name = "".join(
+        c for c in sample_name if c.isprintable() and c not in "\t\n\r"
+    ) or "SAMPLE"
+
     lines = [
         f"##fileformat={_VCF_VERSION}",
         f"##fileDate={file_date.strftime('%Y%m%d')}",
         f"##source={_SOURCE}",
         f"##reference={_REFERENCE}",
-        '##INFO=<ID=.,Number=0,Type=Flag,Description="No INFO fields">',
+        (
+            "##GenomeInsight_note=REF/ALT alleles are inferred from genotype "
+            "calls, not from a reference genome. Heterozygous REF/ALT "
+            "assignment may not match the true reference allele."
+        ),
+        '##FILTER=<ID=PASS,Description="All filters passed">',
         '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
     ]
 
@@ -102,9 +121,9 @@ def _build_header_lines(
     for chrom in sorted(_CHROM_ORDER, key=_chrom_sort_key):
         lines.append(f"##contig=<ID={chrom}>")
 
-    # Column header — replace "SAMPLE" with actual sample name.
+    # Column header — replace "SAMPLE" with sanitized sample name.
     cols = list(_VCF_COLUMNS)
-    cols[-1] = sample_name
+    cols[-1] = safe_name
     lines.append("\t".join(cols))
 
     return lines
@@ -242,12 +261,13 @@ def export_vcf_from_engine(
     str
         The complete VCF content.
     """
+    # No ORDER BY — export_vcf_from_rows re-sorts by canonical chrom order.
     stmt = sa.select(
         raw_variants.c.rsid,
         raw_variants.c.chrom,
         raw_variants.c.pos,
         raw_variants.c.genotype,
-    ).order_by(raw_variants.c.chrom, raw_variants.c.pos)
+    )
 
     with engine.connect() as conn:
         rows = conn.execute(stmt).fetchall()
