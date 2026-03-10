@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend lint format run run-api run-huey clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend lint format run run-api run-frontend run-huey build-frontend clean
 
 # Default Python and Node
 PYTHON ?= python3

@@ -15,7 +15,8 @@ function applyTheme(theme: Theme) {
 
 export default function TopNav() {
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('gi-theme') as Theme) || 'system'
+    const stored = localStorage.getItem('gi-theme')
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
   })
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function TopNav() {
 
       {/* Command palette trigger placeholder */}
       <button
+        type="button"
         className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground border border-input rounded-md px-3 py-1.5 hover:bg-accent hover:text-accent-foreground transition-colors"
         aria-label="Search"
       >
@@ -63,6 +65,7 @@ export default function TopNav() {
 
       {/* Dark mode toggle */}
       <button
+        type="button"
         onClick={cycleTheme}
         className="p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
         aria-label={`Theme: ${theme}`}
