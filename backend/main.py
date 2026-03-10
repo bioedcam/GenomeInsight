@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes.column_presets import router as column_presets_router
+from backend.api.routes.databases import router as databases_router
 from backend.api.routes.ingest import router as ingest_router
 from backend.api.routes.samples import router as samples_router
 from backend.api.routes.variants import router as variants_router
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
 
     # API routes (must be included BEFORE static mount)
     api_router.include_router(column_presets_router)
+    api_router.include_router(databases_router)
     api_router.include_router(ingest_router)
     api_router.include_router(samples_router)
     api_router.include_router(variants_router)
