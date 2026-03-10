@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from alembic.config import Config
 
@@ -253,7 +254,7 @@ class TestSampleSchema:
         try:
             conn.execute("INSERT INTO sample_metadata (id, name) VALUES (2, 'Another')")
             conn.commit()
-            assert False, "Should have raised constraint error"
+            pytest.fail("Should have raised constraint error")
         except sqlite3.IntegrityError:
             pass
         conn.close()

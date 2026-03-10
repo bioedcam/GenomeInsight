@@ -205,9 +205,7 @@ def create_sample_tables(engine: sa.Engine) -> None:
         engine: SQLAlchemy engine connected to a sample database file.
     """
     with engine.connect() as conn:
-        conn.execute(sa.text("PRAGMA journal_mode=WAL"))
-        for statement in SAMPLE_TABLES_SQL.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                conn.execute(sa.text(stmt))
+        conn.execute(sa.text("PRAGMA journal_mode=WAL")).close()
+        # Use raw DBAPI executescript for safe multi-statement execution
+        conn.connection.executescript(SAMPLE_TABLES_SQL)  # type: ignore[union-attr]
         conn.commit()
