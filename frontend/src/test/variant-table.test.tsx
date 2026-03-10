@@ -120,9 +120,10 @@ afterEach(() => {
 })
 
 describe("VariantTable", () => {
-  it("shows upload prompt when no sample selected", () => {
+  it("shows upload prompt when no sample selected (P1-15e: pre-upload)", () => {
     render(<VariantTable sampleId={null} />)
     expect(screen.getByText("Upload a file to get started")).toBeInTheDocument()
+    expect(screen.getByText(/go to the dashboard/i)).toBeInTheDocument()
   })
 
   it("renders variant rows from API", async () => {
@@ -289,7 +290,8 @@ describe("VariantTable", () => {
     expect(screen.getByText("ClinVar")).toBeInTheDocument()
   })
 
-  it("shows empty state with clear suggestions when no results match", async () => {
+  it("shows pre-annotation empty state when sample has only raw variants (P1-15e)", async () => {
+    // All variants have annotation_coverage = null → pre-annotation state
     const page: VariantPage = {
       items: [
         {
@@ -322,14 +324,62 @@ describe("VariantTable", () => {
       has_more: false,
       limit: 100,
     }
-    setupFetchMock(page, makeCountResponse(1))
+
+    // Annotated count = 0, but total variants = 1 (raw variants exist)
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/api/column-presets")) {
+        return { ok: true, json: async () => ({ presets: defaultPresets }) }
+      }
+      if (url.includes("/api/variants/chromosomes")) {
+        return { ok: true, json: async () => [{ chrom: "1", count: 1 }] }
+      }
+      if (url.includes("/api/variants/count")) {
+        // When filter includes annotation_coverage:notnull → 0 annotated
+        if (url.includes("annotation_coverage")) {
+          return { ok: true, json: async () => ({ total: 0, filtered: true }) }
+        }
+        // Unfiltered total → 1
+        return { ok: true, json: async () => ({ total: 1, filtered: false }) }
+      }
+      if (url.includes("/api/variants")) {
+        return { ok: true, json: async () => page }
+      }
+      return { ok: false, status: 404 }
+    })
 
     render(<VariantTable sampleId={1} />)
 
     await waitFor(() => {
+      expect(screen.getByText("Run annotation to see results here")).toBeInTheDocument()
+    })
+    expect(screen.getByText(/1 variant.* uploaded/i)).toBeInTheDocument()
+    expect(screen.getByText("Show raw variants")).toBeInTheDocument()
+  })
+
+  it("shows no-match empty state with suggestion buttons (P1-15e)", async () => {
+    // Return annotated variants but they'll be filtered out by search
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Type a search that matches nothing
+    const searchInput = screen.getByPlaceholderText("Search rsid or gene...")
+    await user.type(searchInput, "NONEXISTENT_GENE_XYZ")
+
+    await waitFor(() => {
       expect(screen.getByText("No variants match your filters")).toBeInTheDocument()
     })
-    expect(screen.getByText("Show unannotated")).toBeInTheDocument()
+
+    // Should show clear search button and quick-apply suggestions
+    expect(screen.getByText("Clear search")).toBeInTheDocument()
+    expect(screen.getByText("Pathogenic only")).toBeInTheDocument()
+    expect(screen.getByText("Rare variants")).toBeInTheDocument()
   })
 
   it("shows ClinVar review stars correctly", async () => {
