@@ -43,6 +43,11 @@ class DBRegistry:
         self._gnomad_engine: sa.Engine | None = None
         self._dbnsfp_engine: sa.Engine | None = None
 
+    @property
+    def settings(self) -> Settings:
+        """Public accessor for the registry's Settings instance."""
+        return self._settings
+
     @staticmethod
     def _create_engine(db_path: Path, *, wal: bool = True) -> sa.Engine:
         """Create a SQLAlchemy engine for a SQLite database.
@@ -106,6 +111,16 @@ class DBRegistry:
                 Path(sample_db_path), wal=self._settings.wal_mode
             )
         return self._sample_engines[key]
+
+    def dispose_sample_engine(self, sample_db_path: str | Path) -> None:
+        """Dispose and remove a cached sample engine.
+
+        No-op if the engine is not cached.
+        """
+        key = str(sample_db_path)
+        if key in self._sample_engines:
+            self._sample_engines[key].dispose()
+            del self._sample_engines[key]
 
     def dispose_all(self) -> None:
         """Dispose all engines. Call on application shutdown."""

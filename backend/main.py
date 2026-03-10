@@ -11,6 +11,8 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.api.routes.ingest import router as ingest_router
+from backend.api.routes.samples import router as samples_router
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
 
@@ -70,6 +72,8 @@ def create_app() -> FastAPI:
     )
 
     # API routes (must be included BEFORE static mount)
+    api_router.include_router(ingest_router)
+    api_router.include_router(samples_router)
     app.include_router(api_router)
 
     # Static files - SPA fallback (only if frontend has been built)
