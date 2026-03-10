@@ -230,6 +230,8 @@ class TestIngestStatus:
 
     def test_status_not_found_job(self, client):
         response = client.get("/api/ingest/status/nonexistent-job")
+        # SSE returns 200 with error event in the stream
+        assert response.status_code == 200
         assert "not found" in response.text.lower()
 
 

@@ -41,13 +41,15 @@ def _ingest_file(file_bytes: bytes, filename: str) -> dict:
     Returns a dict with sample_id, job_id, variant_count, nocall_count.
     """
     registry = get_registry()
-    settings = registry._settings
+    settings = registry.settings
 
     # Compute SHA-256 of the uploaded file
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
     # Parse the file content (pure, no side effects)
     text = file_bytes.decode("utf-8", errors="replace")
+    if "\ufffd" in text:
+        logger.warning("File %s contains invalid UTF-8 sequences that were replaced", filename)
     result = parse_23andme(io.StringIO(text))
 
     # Register sample in reference.db

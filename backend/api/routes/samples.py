@@ -82,7 +82,7 @@ async def get_sample(sample_id: int) -> SampleResponse:
 async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
     """Update sample metadata (rename, notes, etc.)."""
     registry = get_registry()
-    settings = registry._settings
+    settings = registry.settings
 
     # Build update values from non-None fields
     update_values: dict = {}
@@ -134,6 +134,8 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
         updated_row = conn.execute(
             sa.select(samples).where(samples.c.id == sample_id)
         ).fetchone()
+    if updated_row is None:
+        raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
     return _row_to_response(updated_row)
 
 
@@ -141,7 +143,7 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
 async def delete_sample(sample_id: int) -> None:
     """Delete a sample: remove DB file and deregister from reference.db."""
     registry = get_registry()
-    settings = registry._settings
+    settings = registry.settings
 
     with registry.reference_engine.begin() as conn:
         row = conn.execute(
@@ -159,10 +161,7 @@ async def delete_sample(sample_id: int) -> None:
     sample_db_path = settings.data_dir / row.db_path
     if sample_db_path.exists():
         # Dispose engine if cached
-        key = str(sample_db_path)
-        if key in registry._sample_engines:
-            registry._sample_engines[key].dispose()
-            del registry._sample_engines[key]
+        registry.dispose_sample_engine(sample_db_path)
         # Remove the file (and WAL/SHM files)
         sample_db_path.unlink(missing_ok=True)
         wal_path = Path(f"{sample_db_path}-wal")
