@@ -15,7 +15,6 @@ Usage::
 
 from __future__ import annotations
 
-import functools
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -45,7 +44,7 @@ class DBRegistry:
         self._dbnsfp_engine: sa.Engine | None = None
 
     @staticmethod
-    def _create_engine(db_path: Path, wal: bool = True) -> sa.Engine:
+    def _create_engine(db_path: Path, *, wal: bool = True) -> sa.Engine:
         """Create a SQLAlchemy engine for a SQLite database.
 
         Args:
@@ -125,13 +124,20 @@ class DBRegistry:
             self._dbnsfp_engine = None
 
 
-@functools.lru_cache(maxsize=1)
-def get_registry(settings: Settings | None = None) -> DBRegistry:
-    """Return the singleton DBRegistry instance.
+_registry: DBRegistry | None = None
 
-    Args:
-        settings: Optional settings override. Uses get_settings() by default.
-    """
-    if settings is None:
-        settings = get_settings()
-    return DBRegistry(settings)
+
+def get_registry() -> DBRegistry:
+    """Return the singleton DBRegistry instance."""
+    global _registry  # noqa: PLW0603
+    if _registry is None:
+        _registry = DBRegistry(get_settings())
+    return _registry
+
+
+def reset_registry() -> None:
+    """Reset the registry singleton. Useful for testing."""
+    global _registry  # noqa: PLW0603
+    if _registry is not None:
+        _registry.dispose_all()
+    _registry = None

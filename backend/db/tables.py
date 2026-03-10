@@ -5,13 +5,13 @@ Two MetaData instances exist:
 
 - ``reference_metadata``: Tables in the shared reference.db
   (Alembic-managed, one file for all users).
-- ``sample_metadata``: Tables in per-sample databases
+- ``sample_metadata_obj``: Tables in per-sample databases
   (created programmatically at runtime, one file per sample).
 
 Import individual tables or entire metadata objects as needed::
 
     from backend.db.tables import clinvar_variants, raw_variants
-    from backend.db.tables import reference_metadata, sample_metadata
+    from backend.db.tables import reference_metadata, sample_metadata_obj
 """
 
 import sqlalchemy as sa

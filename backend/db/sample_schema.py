@@ -30,13 +30,12 @@ def create_sample_tables(engine: sa.Engine) -> None:
     # Create all tables defined in sample_metadata_obj
     sample_metadata_obj.create_all(engine, checkfirst=True)
 
-    # Seed predefined tags
+    # Seed predefined tags (batch insert)
     with engine.connect() as conn:
-        for tag_name in PREDEFINED_TAGS:
-            conn.execute(
-                sa.text(
-                    "INSERT OR IGNORE INTO tags (name, is_predefined) VALUES (:name, 1)"
-                ),
-                {"name": tag_name},
-            )
+        conn.execute(
+            sa.text(
+                "INSERT OR IGNORE INTO tags (name, is_predefined) VALUES (:name, 1)"
+            ),
+            [{"name": tag_name} for tag_name in PREDEFINED_TAGS],
+        )
         conn.commit()
