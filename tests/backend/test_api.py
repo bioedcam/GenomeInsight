@@ -21,7 +21,7 @@ from backend.db.tables import jobs, reference_metadata
 # ── Fixtures ──────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def ref_engine(tmp_path):
     """SQLAlchemy engine for a temporary reference.db with tables created."""
     db_path = tmp_path / "reference.db"
@@ -30,7 +30,7 @@ def ref_engine(tmp_path):
     return engine
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(tmp_path):
     """FastAPI test client with temporary database."""
     # Create reference.db with tables

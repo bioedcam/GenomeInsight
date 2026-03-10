@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     # Shutdown: dispose all engines
     reset_registry()
-    logger.info("DBRegistry disposed – all engines closed")
+    logger.info("DBRegistry disposed - all engines closed")
 
 
 # ── App factory ───────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS – restrict to localhost dev origins
+    # CORS - restrict to localhost dev origins
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
     # API routes (must be included BEFORE static mount)
     app.include_router(api_router)
 
-    # Static files – SPA fallback (only if frontend has been built)
+    # Static files - SPA fallback (only if frontend has been built)
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if frontend_dist.is_dir():
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")

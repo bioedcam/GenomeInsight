@@ -71,7 +71,7 @@ async def job_progress_stream(
     terminal_states = {"complete", "failed", "cancelled"}
 
     while True:
-        status = get_job_progress(engine, job_id)
+        status = await asyncio.to_thread(get_job_progress, engine, job_id)
 
         if status is None:
             yield _format_sse("error", {"message": f"Job {job_id} not found"})
