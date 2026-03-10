@@ -40,38 +40,42 @@ TEST_VARIANTS = [
 ]
 
 
-@pytest.fixture
-def client_with_sample(tmp_data_dir: Path):
-    """FastAPI TestClient with a sample pre-loaded with TEST_VARIANTS.
+def _setup_sample_client(
+    tmp_data_dir: Path,
+    *,
+    sample_name: str,
+    db_filename: str,
+    file_hash: str,
+    variants_table: sa.Table,
+    variants_data: list[dict],
+):
+    """Shared helper: create TestClient with a sample pre-loaded into the given table.
 
     Yields (client, sample_id) tuple.
     """
     settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
 
-    # Create reference.db
     ref_path = settings.reference_db_path
     ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
     reference_metadata.create_all(ref_engine)
 
-    # Register a sample in reference.db
     with ref_engine.begin() as conn:
         result = conn.execute(
             samples.insert().values(
-                name="test_sample",
-                db_path="samples/sample_1.db",
+                name=sample_name,
+                db_path=f"samples/{db_filename}",
                 file_format="23andme_v5",
-                file_hash="testhash123",
+                file_hash=file_hash,
             )
         )
         sample_id = result.lastrowid
     ref_engine.dispose()
 
-    # Create per-sample DB with test variants
-    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    sample_db_path = tmp_data_dir / "samples" / db_filename
     sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
     create_sample_tables(sample_engine)
     with sample_engine.begin() as conn:
-        conn.execute(raw_variants.insert(), TEST_VARIANTS)
+        conn.execute(variants_table.insert(), variants_data)
     sample_engine.dispose()
 
     with (
@@ -95,6 +99,22 @@ def client_with_sample(tmp_data_dir: Path):
 
         registry.dispose_all()
         reset_registry()
+
+
+@pytest.fixture
+def client_with_sample(tmp_data_dir: Path):
+    """FastAPI TestClient with a sample pre-loaded with TEST_VARIANTS.
+
+    Yields (client, sample_id) tuple.
+    """
+    yield from _setup_sample_client(
+        tmp_data_dir,
+        sample_name="test_sample",
+        db_filename="sample_1.db",
+        file_hash="testhash123",
+        variants_table=raw_variants,
+        variants_data=TEST_VARIANTS,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -485,52 +505,14 @@ def client_with_annotated_sample(tmp_data_dir: Path):
 
     3 annotated variants (coverage != NULL) + 3 unannotated (coverage = NULL).
     """
-    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-
-    ref_path = settings.reference_db_path
-    ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
-    reference_metadata.create_all(ref_engine)
-
-    with ref_engine.begin() as conn:
-        result = conn.execute(
-            samples.insert().values(
-                name="annotated_sample",
-                db_path="samples/sample_2.db",
-                file_format="23andme_v5",
-                file_hash="annothash456",
-            )
-        )
-        sample_id = result.lastrowid
-    ref_engine.dispose()
-
-    sample_db_path = tmp_data_dir / "samples" / "sample_2.db"
-    sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
-    create_sample_tables(sample_engine)
-    with sample_engine.begin() as conn:
-        conn.execute(annotated_variants.insert(), ANNOTATED_TEST_VARIANTS)
-    sample_engine.dispose()
-
-    with (
-        patch("backend.main.get_settings", return_value=settings),
-        patch("backend.db.connection.get_settings", return_value=settings),
-        patch("backend.api.routes.variants.get_registry") as mock_reg,
-        patch("backend.api.routes.ingest.get_registry") as mock_reg2,
-        patch("backend.api.routes.samples.get_registry") as mock_reg3,
-    ):
-        reset_registry()
-        registry = DBRegistry(settings)
-        mock_reg.return_value = registry
-        mock_reg2.return_value = registry
-        mock_reg3.return_value = registry
-
-        from backend.main import create_app
-
-        app = create_app()
-        with TestClient(app) as tc:
-            yield tc, sample_id
-
-        registry.dispose_all()
-        reset_registry()
+    yield from _setup_sample_client(
+        tmp_data_dir,
+        sample_name="annotated_sample",
+        db_filename="sample_2.db",
+        file_hash="annothash456",
+        variants_table=annotated_variants,
+        variants_data=ANNOTATED_TEST_VARIANTS,
+    )
 
 
 class TestAnnotationCoverageFilter:
