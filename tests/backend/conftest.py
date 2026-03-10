@@ -23,6 +23,7 @@ from backend.db.tables import (
     cpic_alleles,
     cpic_diplotypes,
     cpic_guidelines,
+    dbsnp_merges,
     gene_phenotype,
     gwas_associations,
     raw_variants,
@@ -384,6 +385,24 @@ SEED_GWAS = [
     },
 ]
 
+SEED_DBSNP_MERGES = [
+    {
+        "old_rsid": "rs3219489",
+        "current_rsid": "rs1805007",
+        "build_id": 137,
+    },
+    {
+        "old_rsid": "rs12345",
+        "current_rsid": "rs67890",
+        "build_id": 144,
+    },
+    {
+        "old_rsid": "rs9999999",
+        "current_rsid": "rs429358",
+        "build_id": 151,
+    },
+]
+
 SEED_SAMPLE = {
     "name": "Test Sample",
     "db_path": "samples/sample_1.db",
@@ -407,6 +426,7 @@ def seeded_reference_engine(reference_engine: sa.Engine) -> sa.Engine:
         conn.execute(cpic_diplotypes.insert(), SEED_CPIC_DIPLOTYPES)
         conn.execute(cpic_guidelines.insert(), SEED_CPIC_GUIDELINES)
         conn.execute(gwas_associations.insert(), SEED_GWAS)
+        conn.execute(dbsnp_merges.insert(), SEED_DBSNP_MERGES)
         conn.execute(samples.insert(), [SEED_SAMPLE])
     return reference_engine
 

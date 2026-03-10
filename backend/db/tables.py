@@ -268,6 +268,16 @@ reannotation_prompts = sa.Table(
 
 sa.Index("idx_reannotation_sample", reannotation_prompts.c.sample_id)
 
+# ── dbSNP Merged rsids ────────────────────────────────────────────────
+
+dbsnp_merges = sa.Table(
+    "dbsnp_merges",
+    reference_metadata,
+    sa.Column("old_rsid", sa.Text, primary_key=True),
+    sa.Column("current_rsid", sa.Text, nullable=False, index=True),
+    sa.Column("build_id", sa.Integer, comment="dbSNP build where merge occurred"),
+)
+
 # ── GWAS Catalog ──────────────────────────────────────────────────────
 
 gwas_associations = sa.Table(
@@ -360,6 +370,18 @@ annotated_variants = sa.Table(
     sa.Column("phylop", sa.Float),
     sa.Column("mpc", sa.Float),
     sa.Column("primateai", sa.Float),
+    # dbSNP cross-reference
+    sa.Column("dbsnp_build", sa.Integer, comment="dbSNP build where rsid first appeared"),
+    sa.Column(
+        "dbsnp_rsid_current",
+        sa.Text,
+        comment="Current rsid if original was merged; NULL if already current",
+    ),
+    sa.Column(
+        "dbsnp_validation",
+        sa.Text,
+        comment="valid | merged | i_prefix | invalid",
+    ),
     # Evidence & conflict
     sa.Column("evidence_conflict", sa.Boolean, server_default=sa.text("0")),
     sa.Column("ensemble_pathogenic", sa.Boolean, server_default=sa.text("0")),
