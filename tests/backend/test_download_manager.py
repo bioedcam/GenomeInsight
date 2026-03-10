@@ -306,7 +306,6 @@ def test_resume_nonexistent_raises(manager: DownloadManager) -> None:
 
 def test_resume_complete_raises(
     manager: DownloadManager,
-    ref_engine: sa.Engine,
     http_server: HTTPServer,
 ) -> None:
     """Resuming an already-complete download raises DownloadError."""

@@ -230,6 +230,8 @@ class DownloadManager:
             # No valid partial file — start fresh
             offset = 0
 
+        current_offset = offset
+
         try:
             with httpx.Client(
                 follow_redirects=True,
@@ -292,12 +294,12 @@ class DownloadManager:
             error_msg = f"{type(exc).__name__}: {exc}"
             self._update_download_status(download_id, "failed")
             self._update_job(job_id, status="failed", progress_pct=0.0, error=error_msg)
-            logger.error("download_failed", download_id=download_id, url=url, error=error_msg)
+            logger.exception("download_failed", download_id=download_id, url=url, error=error_msg)
             return DownloadResult(
                 download_id=download_id,
                 job_id=job_id,
                 dest_path=dest_path,
-                total_bytes=current_offset if "current_offset" in dir() else offset,
+                total_bytes=current_offset,
                 error=error_msg,
             )
 
@@ -315,7 +317,7 @@ class DownloadManager:
             raise ChecksumMismatchError(error_msg)
 
         # Atomic rename on success
-        tmp_path.rename(dest_path)
+        tmp_path.replace(dest_path)
 
         # Mark complete
         self._update_download_status(download_id, "complete")
