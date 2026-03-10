@@ -48,6 +48,7 @@ export default function ChromosomeNav({
       <nav
         className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto"
         aria-label="Chromosome navigation"
+        role="toolbar"
       >
         <span className="text-xs text-muted-foreground mr-2 shrink-0">Chr</span>
         {CHROMOSOMES.map((chrom) => (
