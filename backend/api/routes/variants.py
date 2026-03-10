@@ -97,6 +97,13 @@ class VariantCount(BaseModel):
     filtered: bool = False
 
 
+class ChromosomeSummary(BaseModel):
+    """Per-chromosome variant count for the chromosome nav bar."""
+
+    chrom: str
+    count: int
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -327,3 +334,38 @@ def variant_count(
         total = conn.execute(query).scalar() or 0
 
     return VariantCount(total=total, filtered=bool(filter_clauses))
+
+
+@router.get("/chromosomes")
+def chromosome_counts(
+    sample_id: int = Query(..., description="Sample ID to get chromosome counts for"),
+    filter: str | None = Query(None, description="Filters as key:value,key:value"),
+) -> list[ChromosomeSummary]:
+    """Return per-chromosome variant counts in canonical order.
+
+    Used by the chromosome navigation bar to show which chromosomes have
+    data and their relative sizes.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    query = (
+        sa.select(table.c.chrom, sa.func.count().label("count"))
+        .select_from(table)
+        .group_by(table.c.chrom)
+    )
+
+    filter_clauses = _parse_filters(filter, table)
+    if filter_clauses:
+        query = query.where(sa.and_(*filter_clauses))
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    # Sort by canonical chromosome order and return
+    summaries = [
+        ChromosomeSummary(chrom=row.chrom, count=row.count)
+        for row in rows
+    ]
+    summaries.sort(key=lambda s: _chrom_sort_key(s.chrom))
+    return summaries

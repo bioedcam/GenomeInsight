@@ -43,3 +43,25 @@ export interface VariantCursor {
   chrom: string
   pos: number
 }
+
+/** Per-chromosome variant count for the chromosome nav bar (P1-15b). */
+export interface ChromosomeSummary {
+  chrom: string
+  count: number
+}
+
+/** Canonical chromosome list in display order. */
+export const CHROMOSOMES = [
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+  "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+  "21", "22", "X", "Y", "MT",
+] as const
+
+export type Chromosome = (typeof CHROMOSOMES)[number]
+
+/** Column preset profile (P1-15c). */
+export interface ColumnPreset {
+  name: string
+  columns: string[]
+  predefined: boolean
+}
