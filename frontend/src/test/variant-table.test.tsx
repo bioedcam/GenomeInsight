@@ -2,10 +2,40 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor } from "./test-utils"
 import userEvent from "@testing-library/user-event"
 import VariantTable from "@/components/variant-table/VariantTable"
-import type { VariantPage, VariantCount, ChromosomeSummary } from "@/types/variants"
+import type { VariantPage, VariantCount, ChromosomeSummary, ColumnPreset } from "@/types/variants"
 
 // Mock fetch globally
 const mockFetch = vi.fn()
+
+const defaultPresets: ColumnPreset[] = [
+  {
+    name: "Clinical",
+    columns: ["genotype", "gene_symbol", "consequence", "clinvar_significance", "clinvar_review_stars"],
+    predefined: true,
+  },
+  {
+    name: "Research",
+    columns: [
+      "genotype", "gene_symbol", "consequence", "clinvar_significance", "clinvar_review_stars",
+      "cadd_phred", "sift_score", "sift_pred", "polyphen2_hsvar_score", "polyphen2_hsvar_pred",
+      "revel", "ensemble_pathogenic",
+    ],
+    predefined: true,
+  },
+  {
+    name: "Frequency",
+    columns: ["genotype", "gene_symbol", "gnomad_af_global", "rare_flag"],
+    predefined: true,
+  },
+  {
+    name: "Scores",
+    columns: [
+      "gene_symbol", "consequence", "cadd_phred", "sift_score", "sift_pred",
+      "polyphen2_hsvar_score", "polyphen2_hsvar_pred", "revel",
+    ],
+    predefined: true,
+  },
+]
 
 function makeVariantPage(
   count: number,
@@ -59,8 +89,12 @@ function setupFetchMock(
   page: VariantPage,
   count: VariantCount,
   chromCounts: ChromosomeSummary[] = defaultChromCounts,
+  presets: ColumnPreset[] = defaultPresets,
 ) {
   mockFetch.mockImplementation(async (url: string) => {
+    if (url.includes("/api/column-presets")) {
+      return { ok: true, json: async () => ({ presets }) }
+    }
     if (url.includes("/api/variants/chromosomes")) {
       return { ok: true, json: async () => chromCounts }
     }
@@ -77,6 +111,8 @@ function setupFetchMock(
 beforeEach(() => {
   vi.stubGlobal("fetch", mockFetch)
   mockFetch.mockReset()
+  // Reset URL params
+  window.history.replaceState({}, "", window.location.pathname)
 })
 
 afterEach(() => {
@@ -209,8 +245,6 @@ describe("VariantTable", () => {
   })
 
   it("shows empty state with clear suggestions when no results match", async () => {
-    // Return variants that are all unannotated (annotation_coverage=null)
-    // With showUnannotated=false (default), they'll be filtered out client-side
     const page: VariantPage = {
       items: [
         {
@@ -376,5 +410,125 @@ describe("ChromosomeNav (P1-15b)", () => {
   it("does not render chromosome nav when no sample selected", () => {
     render(<VariantTable sampleId={null} />)
     expect(screen.queryByRole("toolbar", { name: "Chromosome navigation" })).not.toBeInTheDocument()
+  })
+})
+
+describe("ColumnPresets (P1-15c)", () => {
+  it("renders preset selector in toolbar", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Column presets" })).toBeInTheDocument()
+    })
+    // Default label
+    expect(screen.getByText("All Columns")).toBeInTheDocument()
+  })
+
+  it("opens dropdown with predefined presets", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Column presets" })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument()
+    })
+    expect(screen.getByRole("menuitem", { name: /Clinical/ })).toBeInTheDocument()
+    expect(screen.getByRole("menuitem", { name: /Research/ })).toBeInTheDocument()
+    expect(screen.getByRole("menuitem", { name: /Frequency/ })).toBeInTheDocument()
+    expect(screen.getByRole("menuitem", { name: /Scores/ })).toBeInTheDocument()
+  })
+
+  it("switching preset hides non-preset columns", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // CADD header should be visible initially (All Columns)
+    expect(screen.getByText("CADD")).toBeInTheDocument()
+
+    // Click preset button and select Clinical
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole("menuitem", { name: /Clinical/ }))
+
+    // CADD should be hidden (not in Clinical preset)
+    await waitFor(() => {
+      expect(screen.queryByText("CADD")).not.toBeInTheDocument()
+    })
+    // Gene should still be visible (in Clinical preset)
+    expect(screen.getByText("Gene")).toBeInTheDocument()
+    // rsID always visible
+    expect(screen.getByText("rsID")).toBeInTheDocument()
+  })
+
+  it("All Columns shows all columns after switching away and back", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Switch to Clinical (hides CADD)
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument())
+    await user.click(screen.getByRole("menuitem", { name: /Clinical/ }))
+
+    await waitFor(() => {
+      expect(screen.queryByText("CADD")).not.toBeInTheDocument()
+    })
+
+    // Switch back to All Columns
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument())
+    await user.click(screen.getByRole("menuitem", { name: /All Columns/ }))
+
+    await waitFor(() => {
+      expect(screen.getByText("CADD")).toBeInTheDocument()
+    })
+  })
+
+  it("updates URL param when preset is selected", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument())
+    await user.click(screen.getByRole("menuitem", { name: /Frequency/ }))
+
+    await waitFor(() => {
+      const params = new URLSearchParams(window.location.search)
+      expect(params.get("profile")).toBe("frequency")
+    })
   })
 })

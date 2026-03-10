@@ -1,6 +1,7 @@
-/** Variant table toolbar: search input + unannotated toggle (P1-15a). */
+/** Variant table toolbar: search + unannotated toggle + preset selector (P1-15a, P1-15c). */
 
 import { Search, Eye, EyeOff } from "lucide-react"
+import ColumnPresets from "./ColumnPresets"
 
 interface VariantToolbarProps {
   searchQuery: string
@@ -11,6 +12,8 @@ interface VariantToolbarProps {
   totalCount: number | undefined
   totalCountLoading: boolean
   isLoading: boolean
+  activePreset: string | null
+  onPresetChange: (presetName: string | null, columns: string[] | null) => void
 }
 
 export default function VariantToolbar({
@@ -22,6 +25,8 @@ export default function VariantToolbar({
   totalCount,
   totalCountLoading,
   isLoading,
+  activePreset,
+  onPresetChange,
 }: VariantToolbarProps) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-card">
@@ -60,6 +65,9 @@ export default function VariantToolbar({
           {unannotatedCount != null && ` (${unannotatedCount.toLocaleString()})`}
         </span>
       </button>
+
+      {/* Column preset selector (P1-15c) */}
+      <ColumnPresets activePreset={activePreset} onPresetChange={onPresetChange} />
 
       {/* Total count (async) */}
       <div className="ml-auto text-sm text-muted-foreground" aria-live="polite">

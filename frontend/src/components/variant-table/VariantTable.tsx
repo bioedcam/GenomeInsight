@@ -1,5 +1,6 @@
 /** Variant table core: TanStack Table + infinite scroll + useInfiniteQuery (P1-15a).
- *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b). */
+ *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b).
+ *  Column preset profiles (P1-15c). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -11,13 +12,29 @@ import {
 import { Loader2 } from "lucide-react"
 
 import { useVariants, useVariantsCount, useTotalVariantCount, useChromosomeCounts } from "@/api/variants"
+import { useColumnPresets } from "@/api/columnPresets"
 import type { VariantRow } from "@/types/variants"
 import { allColumns } from "./columns"
 import VariantToolbar from "./VariantToolbar"
 import ChromosomeNav from "./ChromosomeNav"
+import { ALWAYS_VISIBLE } from "./ColumnPresets"
 
 interface VariantTableProps {
   sampleId: number | null
+}
+
+/** Convert a preset's column list to TanStack Table VisibilityState. */
+function presetToVisibility(
+  presetColumns: string[] | null,
+  allColumnIds: string[],
+): VisibilityState {
+  if (!presetColumns) return {} // all visible
+  const visibility: VisibilityState = {}
+  for (const colId of allColumnIds) {
+    if (ALWAYS_VISIBLE.has(colId)) continue
+    visibility[colId] = presetColumns.includes(colId)
+  }
+  return visibility
 }
 
 export default function VariantTable({ sampleId }: VariantTableProps) {
@@ -26,9 +43,52 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [startChrom, setStartChrom] = useState<string | null>(null)
 
+  // Column preset state from URL param (P1-15c)
+  const [activePreset, setActivePreset] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get("profile") || null
+  })
+
+  // Fetch presets to resolve initial URL param
+  const { data: presets } = useColumnPresets()
+  const allColumnIds = useMemo(
+    () => allColumns.map((c) => c.id ?? (c as any).accessorKey as string).filter(Boolean),
+    [],
+  )
+
+  // Apply preset from URL param on initial load
+  const initialPresetApplied = useRef(false)
+  useEffect(() => {
+    if (initialPresetApplied.current || !presets || !activePreset) return
+    const match = presets.find((p) => p.name.toLowerCase() === activePreset.toLowerCase())
+    if (match) {
+      setActivePreset(match.name)
+      setColumnVisibility(presetToVisibility(match.columns, allColumnIds))
+    } else {
+      // Invalid preset in URL — reset
+      setActivePreset(null)
+    }
+    initialPresetApplied.current = true
+  }, [presets, activePreset, allColumnIds])
+
+  const handlePresetChange = useCallback(
+    (presetName: string | null, columns: string[] | null) => {
+      setActivePreset(presetName)
+      setColumnVisibility(presetToVisibility(columns, allColumnIds))
+
+      // Update URL param
+      const url = new URL(window.location.href)
+      if (presetName) {
+        url.searchParams.set("profile", presetName.toLowerCase())
+      } else {
+        url.searchParams.delete("profile")
+      }
+      window.history.replaceState({}, "", url.toString())
+    },
+    [allColumnIds],
+  )
+
   // Build filter string from search query.
-  // The API doesn't support rsid/gene search directly in filters yet,
-  // so we do client-side filtering and pass undefined to the API.
   const filter = undefined
 
   const {
@@ -67,7 +127,6 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const handleJumpToChrom = useCallback(
     (chrom: string) => {
       setStartChrom(chrom)
-      // Scroll the table container back to top
       tableContainerRef.current?.scrollTo({ top: 0, behavior: "instant" })
     },
     [],
@@ -169,6 +228,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         totalCount={countData?.total}
         totalCountLoading={countLoading}
         isLoading={status === "pending"}
+        activePreset={activePreset}
+        onPresetChange={handlePresetChange}
       />
 
       <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">

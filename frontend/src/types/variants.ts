@@ -58,3 +58,10 @@ export const CHROMOSOMES = [
 ] as const
 
 export type Chromosome = (typeof CHROMOSOMES)[number]
+
+/** Column preset profile (P1-15c). */
+export interface ColumnPreset {
+  name: string
+  columns: string[]
+  predefined: boolean
+}
