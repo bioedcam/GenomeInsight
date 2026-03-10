@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "genomeinsight"
+version = "0.1.0"
+description = "Personal genomics analysis platform for 23andMe raw data"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "bioedcam", email = "bioedca@gmail.com" },
+]
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "alembic",
+    "pydantic-settings",
+    "huey",
+    "httpx",
+    "structlog",
+    "bcrypt",
+    "pyliftover",
+    "biopython",
+    "numpy",
+    "plotly",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "httpx",
+]
+
+[project.urls]
+Homepage = "https://github.com/bioedcam/GenomeInsight"
+Repository = "https://github.com/bioedcam/GenomeInsight"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
