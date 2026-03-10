@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend lint format run run-api run-huey clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend lint format run run-api run-frontend run-huey build-frontend clean
 
 # Default Python and Node
 PYTHON ?= python3
@@ -31,8 +31,14 @@ run: run-api  ## Start the API server (default)
 run-api:  ## Start FastAPI dev server
 	uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 
+run-frontend:  ## Start Vite dev server
+	cd frontend && $(NPM) run dev
+
 run-huey:  ## Start Huey consumer
 	huey_consumer backend.tasks.huey_tasks.huey -w 1
+
+build-frontend:  ## Build frontend for production
+	cd frontend && $(NPM) run build
 
 # ──────────────────────────────────────────────
 # Test
