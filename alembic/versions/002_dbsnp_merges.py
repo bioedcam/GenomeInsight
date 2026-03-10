@@ -1,4 +1,7 @@
-"""Add dbsnp_merges table and dbSNP columns to annotated_variants.
+"""Add dbsnp_merges table to reference.db for merged rsid mappings.
+
+Note: dbSNP columns on annotated_variants (sample DBs) are created at
+runtime via create_sample_tables() from tables.py definitions.
 
 Revision ID: 002
 Revises: 001
@@ -34,4 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("idx_dbsnp_merges_current", table_name="dbsnp_merges")
     op.drop_table("dbsnp_merges")

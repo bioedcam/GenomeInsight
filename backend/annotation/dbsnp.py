@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# NCBI FTP URL for dbSNP RsMergeArch (GRCh37 / build 155)
+# NCBI FTP URL for dbSNP RsMergeArch (GRCh37p13 / build 151)
 RSMERGE_URL = (
     "https://ftp.ncbi.nlm.nih.gov/snp/organisms/"
     "human_9606_b151_GRCh37p13/database/organism_data/RsMergeArch.bcp.gz"
