@@ -2,14 +2,16 @@
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import create_engine
+
+from alembic import context
+from backend.db.tables import reference_metadata
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+target_metadata = reference_metadata
 
 
 def run_migrations_offline() -> None:
