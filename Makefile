@@ -38,7 +38,7 @@ run-huey:  ## Start Huey consumer
 # Test
 # ──────────────────────────────────────────────
 
-test: test-backend  ## Run all tests
+test: test-backend test-frontend  ## Run all tests
 
 test-backend:  ## Run backend tests
 	$(PYTHON) -m pytest tests/ -v

@@ -3,6 +3,7 @@
 Layered: defaults -> ~/.genomeinsight/config.toml -> environment variables.
 """
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -102,7 +103,7 @@ class Settings(BaseSettings):
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,  # noqa: ARG003
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Layer: init > env > TOML file > dotenv > defaults."""
         sources: list[PydanticBaseSettingsSource] = [
@@ -119,6 +120,7 @@ class Settings(BaseSettings):
         return tuple(sources)
 
 
+@lru_cache
 def get_settings() -> Settings:
     """Create and return application settings instance."""
     return Settings()

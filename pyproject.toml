@@ -35,7 +35,6 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "mypy",
-    "httpx",
 ]
 
 [project.urls]

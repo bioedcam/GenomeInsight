@@ -2,7 +2,17 @@
 
 from pathlib import Path
 
+import pytest
+
 from backend.config import Settings, get_settings
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache():
+    """Clear the get_settings lru_cache between tests."""
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_default_settings():
@@ -43,3 +53,10 @@ def test_env_override(monkeypatch):
     settings = Settings()
     assert settings.port == 9000
     assert settings.debug is True
+
+
+def test_get_settings_caching():
+    """get_settings should return the same instance on repeated calls."""
+    s1 = get_settings()
+    s2 = get_settings()
+    assert s1 is s2

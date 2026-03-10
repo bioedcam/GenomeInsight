@@ -16,6 +16,7 @@
         <string>8000</string>
     </array>
 
+    <!-- Replace __INSTALL_DIR__ with the actual GenomeInsight install path -->
     <key>WorkingDirectory</key>
     <string>__INSTALL_DIR__</string>
 
