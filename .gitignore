@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# SQLite databases (runtime data)
+*.db
+*.db-wal
+*.db-shm
+# Exception: test fixtures
+!tests/fixtures/*.db
+
+# Environment & secrets
+.env
+.env.*
+credentials.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# GenomeInsight runtime
+data/
+downloads/
+~/.genomeinsight/
+logs/
+
+# Coverage & test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Claude
+.claude/
