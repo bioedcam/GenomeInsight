@@ -400,7 +400,8 @@ def _load_csv(csv_path: Path, schema: list[tuple[str, str]]) -> list[dict]:
     rows: list[dict] = []
     with csv_path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
-        assert reader.fieldnames is not None, f"No header in {csv_path}"
+        if reader.fieldnames is None:
+            raise ValueError(f"No header in {csv_path}")
         csv_columns = [c for c in reader.fieldnames if c in schema_columns]
 
         for raw_row in reader:
@@ -426,6 +427,7 @@ def _human_size(nbytes: int) -> str:
 def build_reference_db(
     seed_dir: Path,
     output_dir: Path,
+    *,
     dry_run: bool,
 ) -> list[str]:
     """Build mini_reference.db with all reference tables.
@@ -466,8 +468,7 @@ def build_reference_db(
     if db_path.exists():
         db_path.unlink()
 
-    conn = sqlite3.connect(str(db_path))
-    try:
+    with sqlite3.connect(str(db_path)) as conn:
         # Enable WAL mode
         conn.execute("PRAGMA journal_mode=WAL")
 
@@ -497,10 +498,6 @@ def build_reference_db(
         for idx_sql in REFERENCE_INDEXES:
             conn.execute(idx_sql)
 
-        conn.commit()
-    finally:
-        conn.close()
-
     size = db_path.stat().st_size
     summary.insert(0, f"Created {db_path} ({_human_size(size)})")
     return summary
@@ -514,6 +511,7 @@ def build_standalone_db(
     indexes: list[str],
     seed_dir: Path,
     output_dir: Path,
+    *,
     dry_run: bool,
 ) -> list[str]:
     """Build a standalone single-table DB (VEP, gnomAD, dbNSFP).
@@ -541,8 +539,7 @@ def build_standalone_db(
     if db_path.exists():
         db_path.unlink()
 
-    conn = sqlite3.connect(str(db_path))
-    try:
+    with sqlite3.connect(str(db_path)) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(_create_table_sql(table_name, schema))
 
@@ -553,10 +550,6 @@ def build_standalone_db(
 
         for idx_sql in indexes:
             conn.execute(idx_sql)
-
-        conn.commit()
-    finally:
-        conn.close()
 
     size = db_path.stat().st_size
     summary.append(
@@ -610,7 +603,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # 1. Build mini_reference.db
     print("--- mini_reference.db ---")
-    for line in build_reference_db(seed_dir, output_dir, dry_run):
+    for line in build_reference_db(seed_dir, output_dir, dry_run=dry_run):
         print(line)
     print()
 
@@ -621,7 +614,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"--- {db_name} ---")
         for line in build_standalone_db(
             csv_name, db_name, table_name, schema, indexes,
-            seed_dir, output_dir, dry_run,
+            seed_dir, output_dir, dry_run=dry_run,
         ):
             print(line)
         print()

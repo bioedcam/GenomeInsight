@@ -18,6 +18,17 @@ SEED_DIR = FIXTURES_DIR / "seed_csvs"
 SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "regenerate_fixtures.py"
 
 
+def _run_script(tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """Run regenerate_fixtures.py and assert it succeeds."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"Script failed:\n{result.stderr}"
+    return result
+
+
 # ── Seed CSV existence ────────────────────────────────────────────────
 
 EXPECTED_CSVS = [
@@ -90,12 +101,7 @@ class TestRegenerateFixtures:
         assert len(db_files) == 0, f"Dry run should not create files, found: {db_files}"
 
     def test_generates_all_databases(self, tmp_path: Path) -> None:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, f"Script failed:\n{result.stderr}"
+        _run_script(tmp_path)
 
         expected_dbs = [
             "mini_reference.db",
@@ -107,18 +113,14 @@ class TestRegenerateFixtures:
             assert (tmp_path / db_name).exists(), f"Missing {db_name}"
 
     def test_mini_reference_schema(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_reference.db"))
-        tables = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
-            ).fetchall()
-        }
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_reference.db")) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
+                ).fetchall()
+            }
 
         required = {
             "clinvar_variants",
@@ -140,16 +142,12 @@ class TestRegenerateFixtures:
         assert required.issubset(tables), f"Missing tables: {required - tables}"
 
     def test_mini_reference_row_counts(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_reference.db"))
-        clinvar_count = conn.execute("SELECT count(*) FROM clinvar_variants").fetchone()[0]
-        gene_pheno_count = conn.execute("SELECT count(*) FROM gene_phenotype").fetchone()[0]
-        cpic_alleles_count = conn.execute("SELECT count(*) FROM cpic_alleles").fetchone()[0]
-        gwas_count = conn.execute("SELECT count(*) FROM gwas_associations").fetchone()[0]
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_reference.db")) as conn:
+            clinvar_count = conn.execute("SELECT count(*) FROM clinvar_variants").fetchone()[0]
+            gene_pheno_count = conn.execute("SELECT count(*) FROM gene_phenotype").fetchone()[0]
+            cpic_alleles_count = conn.execute("SELECT count(*) FROM cpic_alleles").fetchone()[0]
+            gwas_count = conn.execute("SELECT count(*) FROM gwas_associations").fetchone()[0]
 
         assert clinvar_count >= 50, f"Expected >=50 clinvar rows, got {clinvar_count}"
         assert gene_pheno_count >= 20, f"Expected >=20 gene_phenotype rows, got {gene_pheno_count}"
@@ -157,57 +155,37 @@ class TestRegenerateFixtures:
         assert gwas_count >= 30, f"Expected >=30 gwas rows, got {gwas_count}"
 
     def test_mini_vep_bundle_has_data(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_vep_bundle.db"))
-        count = conn.execute("SELECT count(*) FROM vep_annotations").fetchone()[0]
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_vep_bundle.db")) as conn:
+            count = conn.execute("SELECT count(*) FROM vep_annotations").fetchone()[0]
         assert count >= 50, f"Expected >=50 VEP rows, got {count}"
 
     def test_mini_gnomad_has_data(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_gnomad_af.db"))
-        count = conn.execute("SELECT count(*) FROM gnomad_af").fetchone()[0]
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_gnomad_af.db")) as conn:
+            count = conn.execute("SELECT count(*) FROM gnomad_af").fetchone()[0]
         assert count >= 50, f"Expected >=50 gnomAD rows, got {count}"
 
     def test_mini_dbnsfp_has_data(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_dbnsfp.db"))
-        count = conn.execute("SELECT count(*) FROM dbnsfp_scores").fetchone()[0]
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_dbnsfp.db")) as conn:
+            count = conn.execute("SELECT count(*) FROM dbnsfp_scores").fetchone()[0]
         assert count >= 30, f"Expected >=30 dbNSFP rows, got {count}"
 
     def test_wal_mode_enabled(self, tmp_path: Path) -> None:
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        for db_name in ["mini_reference.db", "mini_vep_bundle.db"]:
-            conn = sqlite3.connect(str(tmp_path / db_name))
-            mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
-            conn.close()
+        _run_script(tmp_path)
+        for db_name in ["mini_reference.db", "mini_vep_bundle.db", "mini_gnomad_af.db", "mini_dbnsfp.db"]:
+            with sqlite3.connect(str(tmp_path / db_name)) as conn:
+                mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
             assert mode == "wal", f"{db_name} should use WAL mode, got {mode}"
 
     def test_clinvar_data_integrity(self, tmp_path: Path) -> None:
         """Verify a known ClinVar entry is correctly loaded."""
-        subprocess.run(
-            [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-            capture_output=True,
-        )
-        conn = sqlite3.connect(str(tmp_path / "mini_reference.db"))
-        row = conn.execute(
-            "SELECT chrom, pos, significance, gene_symbol FROM clinvar_variants WHERE rsid = 'rs429358'"
-        ).fetchone()
-        conn.close()
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_reference.db")) as conn:
+            row = conn.execute(
+                "SELECT chrom, pos, significance, gene_symbol FROM clinvar_variants WHERE rsid = 'rs429358'"
+            ).fetchone()
         assert row is not None, "rs429358 not found in clinvar_variants"
         assert row[0] == "19"
         assert row[1] == 44908684
@@ -216,12 +194,11 @@ class TestRegenerateFixtures:
 
     def test_idempotent_regeneration(self, tmp_path: Path) -> None:
         """Running the script twice produces identical row counts."""
+        counts = []
         for _ in range(2):
-            subprocess.run(
-                [sys.executable, str(SCRIPT), "--output-dir", str(tmp_path)],
-                capture_output=True,
-            )
-        conn = sqlite3.connect(str(tmp_path / "mini_reference.db"))
-        count = conn.execute("SELECT count(*) FROM clinvar_variants").fetchone()[0]
-        conn.close()
-        assert count >= 50  # Should not double rows
+            _run_script(tmp_path)
+            with sqlite3.connect(str(tmp_path / "mini_reference.db")) as conn:
+                count = conn.execute("SELECT count(*) FROM clinvar_variants").fetchone()[0]
+            counts.append(count)
+        assert counts[0] >= 50, f"Expected >=50 rows, got {counts[0]}"
+        assert counts[0] == counts[1], f"Row count changed: {counts[0]} -> {counts[1]}"
