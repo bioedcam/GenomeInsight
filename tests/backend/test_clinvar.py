@@ -4,10 +4,13 @@ Covers:
 - VCF line parsing (individual records, edge cases)
 - Review status to star mapping
 - Full VCF file parsing (mini fixture)
+- Streaming iterator parsing
 - Bulk loading into SQLite via clinvar_variants table
+- Stream loading via load_clinvar_from_iter
 - Version tracking in database_versions
-- Download function (mocked HTTP)
+- Download function (mocked HTTP, error handling, partial cleanup)
 - End-to-end download_and_load_clinvar pipeline (mocked HTTP)
+- Malformed VCF data handling
 """
 
 from __future__ import annotations
@@ -16,17 +19,21 @@ import gzip
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 import sqlalchemy as sa
 
 from backend.annotation.clinvar import (
     REVIEW_STATUS_STARS,
+    SkipReason,
     _extract_gene_symbol,
     _normalize_chrom,
     _parse_info_field,
     _review_status_to_stars,
     download_and_load_clinvar,
     download_clinvar_vcf,
+    iter_clinvar_vcf,
+    load_clinvar_from_iter,
     load_clinvar_into_db,
     parse_clinvar_vcf,
     parse_clinvar_vcf_line,
@@ -120,7 +127,7 @@ class TestExtractGeneSymbol:
         assert _extract_gene_symbol("") is None
 
     def test_none_value(self):
-        assert _extract_gene_symbol(None) is None  # type: ignore[arg-type]
+        assert _extract_gene_symbol(None) is None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -137,7 +144,8 @@ class TestParseClinvarVcfLine:
             "CLNDN=Hereditary_breast_and_ovarian_cancer_syndrome;"
             "GENEINFO=BRCA1:672;CLNVCID=17661"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert skip is None
         assert rec is not None
         assert rec.rsid == "rs80357906"
         assert rec.chrom == "17"
@@ -158,7 +166,8 @@ class TestParseClinvarVcfLine:
             "CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;"
             "CLNDN=not_specified;GENEINFO=COMT:1312;CLNVCID=16312"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert skip is None
         assert rec is not None
         assert rec.rsid == "rs4680"
         assert rec.significance == "Benign"
@@ -172,30 +181,45 @@ class TestParseClinvarVcfLine:
             "CLNREVSTAT=practice_guideline;"
             "CLNDN=Sickle_cell_disease;GENEINFO=HBB:3043;CLNVCID=15333"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert skip is None
         assert rec is not None
         assert rec.review_stars == 4
 
-    def test_skips_no_rs(self):
-        """Lines without RS in INFO should return None."""
+    def test_skips_no_rs_with_reason(self):
+        """Lines without RS in INFO should return skip_reason=NO_RSID."""
         line = (
             "3\t12345\t100001\tC\tT\t.\t.\t"
             "CLNSIG=Pathogenic;CLNREVSTAT=no_assertion_criteria_provided;"
             "CLNDN=Some_disease;GENEINFO=FAKEGENE:99"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
         assert rec is None
+        assert skip == SkipReason.NO_RSID
 
-    def test_skips_invalid_chrom(self):
+    def test_skips_invalid_chrom_with_reason(self):
         line = (
             "Un\t12345\t100\tA\tG\t.\t.\t"
             "RS=999;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
         assert rec is None
+        assert skip == SkipReason.INVALID_CHROM
 
-    def test_skips_short_line(self):
-        assert parse_clinvar_vcf_line("too\tfew\tfields") is None
+    def test_skips_short_line_with_reason(self):
+        rec, skip = parse_clinvar_vcf_line("too\tfew\tfields")
+        assert rec is None
+        assert skip == SkipReason.MALFORMED
+
+    def test_skips_non_numeric_pos(self):
+        """Non-numeric POS should return skip_reason=MALFORMED."""
+        line = (
+            "1\tNOTANUM\t42\tA\tG\t.\t.\t"
+            "RS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
+        )
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert rec is None
+        assert skip == SkipReason.MALFORMED
 
     def test_clnacc_fallback(self):
         """When CLNVCID is absent, CLNACC is used for accession."""
@@ -204,7 +228,8 @@ class TestParseClinvarVcfLine:
             "RS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided;"
             "CLNACC=RCV000012345|RCV000012346"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert skip is None
         assert rec is not None
         assert rec.accession == "RCV000012345"
 
@@ -213,7 +238,7 @@ class TestParseClinvarVcfLine:
             "1\t100\t42\tA\tG,T\t.\t.\t"
             "RS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, _ = parse_clinvar_vcf_line(line)
         assert rec is not None
         assert rec.alt == "G"
 
@@ -224,7 +249,7 @@ class TestParseClinvarVcfLine:
             "CLNREVSTAT=criteria_provided,_single_submitter;"
             "CLNDN=Alzheimer_disease;GENEINFO=APOE:348"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, _ = parse_clinvar_vcf_line(line)
         assert rec is not None
         assert rec.chrom == "19"
 
@@ -235,9 +260,20 @@ class TestParseClinvarVcfLine:
             "RS=99;CLNSIG=Pathogenic/Likely_pathogenic;"
             "CLNREVSTAT=criteria_provided,_single_submitter"
         )
-        rec = parse_clinvar_vcf_line(line)
+        rec, _ = parse_clinvar_vcf_line(line)
         assert rec is not None
         assert rec.significance == "Pathogenic"
+
+    def test_gene_with_rs_substring_still_no_rsid(self):
+        """Gene name containing 'RS' substring should not trick skip counting."""
+        line = (
+            "1\t100\t42\tA\tG\t.\t.\t"
+            "CLNSIG=Benign;CLNREVSTAT=no_assertion_provided;"
+            "GENEINFO=MARS:4141"
+        )
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert rec is None
+        assert skip == SkipReason.NO_RSID
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -289,6 +325,59 @@ class TestParseClinvarVcf:
         rows, stats = parse_clinvar_vcf(MINI_CLINVAR_VCF, progress_callback=cb)
         # Mini fixture has only 12 lines — below 10k threshold
         assert stats.variants_loaded == 11
+
+
+class TestIterClinvarVcf:
+    def test_iter_yields_correct_count(self):
+        """Iterator should yield 11 rows from mini fixture."""
+        count = 0
+        stats = None
+        for _, stats in iter_clinvar_vcf(MINI_CLINVAR_VCF):
+            count += 1
+        assert count == 11
+        assert stats is not None
+        assert stats.variants_loaded == 11
+
+    def test_iter_matches_parse(self):
+        """Iterator output should match parse_clinvar_vcf output."""
+        rows_iter = [row for row, _ in iter_clinvar_vcf(MINI_CLINVAR_VCF)]
+        rows_parse, _ = parse_clinvar_vcf(MINI_CLINVAR_VCF)
+        assert rows_iter == rows_parse
+
+
+class TestMalformedVcfData:
+    def test_binary_garbage_line(self):
+        """Binary garbage should be handled gracefully."""
+        line = "1\t100\t42\tA\tG\t.\t.\t\x00\x01\x02"
+        rec, skip = parse_clinvar_vcf_line(line)
+        assert rec is None
+        assert skip == SkipReason.NO_RSID
+
+    def test_truncated_info_field(self):
+        """Truncated INFO should not crash."""
+        line = "1\t100\t42\tA\tG\t.\t.\tRS="
+        rec, skip = parse_clinvar_vcf_line(line)
+        # RS= with empty value → rs prefix added to empty string → rs
+        assert rec is None or rec.rsid == "rs"
+
+    def test_empty_line(self):
+        rec, skip = parse_clinvar_vcf_line("")
+        assert rec is None
+        assert skip == SkipReason.MALFORMED
+
+    def test_malformed_vcf_file(self, tmp_path: Path):
+        """A VCF with malformed lines should skip them gracefully."""
+        vcf = tmp_path / "bad.vcf"
+        vcf.write_text(
+            "##fileformat=VCFv4.1\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\tNOTNUM\t42\tA\tG\t.\t.\tRS=99;CLNSIG=Benign\n"
+            "1\t100\t42\tA\tG\t.\t.\tRS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided\n"
+        )
+        rows, stats = parse_clinvar_vcf(vcf)
+        assert stats.total_lines == 2
+        assert stats.variants_loaded == 1
+        assert stats.skipped_malformed == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -385,6 +474,34 @@ class TestLoadClinvarIntoDb:
         assert stats.variants_loaded == 0
 
 
+class TestLoadClinvarFromIter:
+    def test_stream_load(self, ref_engine: sa.Engine):
+        """Stream loading from iterator should match list-based loading."""
+        row_iter = iter_clinvar_vcf(MINI_CLINVAR_VCF)
+        stats = load_clinvar_from_iter(row_iter, ref_engine)
+
+        assert stats.variants_loaded == 11
+        with ref_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(clinvar_variants)
+            ).scalar()
+        assert count == 11
+
+    def test_stream_load_known_variant(self, ref_engine: sa.Engine):
+        """Stream-loaded data should be queryable by rsid."""
+        row_iter = iter_clinvar_vcf(MINI_CLINVAR_VCF)
+        load_clinvar_from_iter(row_iter, ref_engine)
+
+        with ref_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(clinvar_variants).where(
+                    clinvar_variants.c.rsid == "rs28897696"
+                )
+            ).first()
+        assert row is not None
+        assert row.significance == "Pathogenic"
+
+
 class TestRecordClinvarVersion:
     def test_insert_new_version(self, ref_engine: sa.Engine):
         record_clinvar_version(
@@ -433,23 +550,32 @@ class TestRecordClinvarVersion:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _make_mock_client(content: bytes, status_code: int = 200):
+    """Create a mocked httpx.Client with stream support."""
+    mock_response = MagicMock()
+    mock_response.headers = {"Content-Length": str(len(content))}
+    mock_response.iter_bytes.return_value = [content]
+    mock_response.num_bytes_downloaded = len(content)
+    mock_response.raise_for_status = MagicMock()
+    if status_code >= 400:
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error", request=MagicMock(), response=MagicMock(status_code=status_code)
+        )
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    mock_client = MagicMock()
+    mock_client.stream.return_value = mock_response
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    return mock_client
+
+
 class TestDownloadClinvarVcf:
     def test_download_writes_file(self, tmp_path: Path):
         """download_clinvar_vcf should write the file and return its path."""
         fake_content = b"##fileformat=VCFv4.1\nfake data\n"
-
-        mock_response = MagicMock()
-        mock_response.headers = {"Content-Length": str(len(fake_content))}
-        mock_response.iter_bytes.return_value = [fake_content]
-        mock_response.num_bytes_downloaded = len(fake_content)
-        mock_response.raise_for_status = MagicMock()
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        mock_client = MagicMock()
-        mock_client.stream.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client = _make_mock_client(fake_content)
 
         with patch("backend.annotation.clinvar.httpx.Client", return_value=mock_client):
             result = download_clinvar_vcf(tmp_path / "downloads")
@@ -458,28 +584,39 @@ class TestDownloadClinvarVcf:
         assert result.name == "clinvar_GRCh37.vcf.gz"
         assert result.read_bytes() == fake_content
 
+    def test_no_temp_file_on_success(self, tmp_path: Path):
+        """After successful download, no .tmp file should remain."""
+        mock_client = _make_mock_client(b"data")
+        dl_dir = tmp_path / "downloads"
+
+        with patch("backend.annotation.clinvar.httpx.Client", return_value=mock_client):
+            download_clinvar_vcf(dl_dir)
+
+        assert not (dl_dir / "clinvar_GRCh37.vcf.gz.tmp").exists()
+        assert (dl_dir / "clinvar_GRCh37.vcf.gz").exists()
+
     def test_download_progress_callback(self, tmp_path: Path):
         """Progress callback should be called during download."""
         fake_content = b"data"
         cb = MagicMock()
-
-        mock_response = MagicMock()
-        mock_response.headers = {"Content-Length": "4"}
-        mock_response.iter_bytes.return_value = [fake_content]
-        mock_response.num_bytes_downloaded = 4
-        mock_response.raise_for_status = MagicMock()
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        mock_client = MagicMock()
-        mock_client.stream.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client = _make_mock_client(fake_content)
 
         with patch("backend.annotation.clinvar.httpx.Client", return_value=mock_client):
             download_clinvar_vcf(tmp_path / "dl", progress_callback=cb)
 
         cb.assert_called_once_with(4, 4)
+
+    def test_http_error_cleans_up_temp(self, tmp_path: Path):
+        """HTTP error should not leave a partial .tmp file."""
+        mock_client = _make_mock_client(b"", status_code=404)
+        dl_dir = tmp_path / "downloads"
+
+        with patch("backend.annotation.clinvar.httpx.Client", return_value=mock_client):
+            with pytest.raises(httpx.HTTPStatusError):
+                download_clinvar_vcf(dl_dir)
+
+        assert not (dl_dir / "clinvar_GRCh37.vcf.gz.tmp").exists()
+        assert not (dl_dir / "clinvar_GRCh37.vcf.gz").exists()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -490,14 +627,12 @@ class TestDownloadClinvarVcf:
 class TestDownloadAndLoadClinvar:
     def test_full_pipeline(self, ref_engine: sa.Engine, tmp_path: Path):
         """Full pipeline: download (mocked) → parse → load → version."""
-        # Copy mini fixture to simulate a download
         dest_dir = tmp_path / "downloads"
         dest_dir.mkdir()
 
         with patch(
             "backend.annotation.clinvar.download_clinvar_vcf"
         ) as mock_dl:
-            # Make download_clinvar_vcf return the actual mini fixture
             mock_dl.return_value = MINI_CLINVAR_VCF
 
             stats = download_and_load_clinvar(ref_engine, dest_dir)

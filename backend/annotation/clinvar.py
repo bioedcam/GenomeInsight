@@ -15,21 +15,22 @@ from __future__ import annotations
 
 import gzip
 import hashlib
-import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 import sqlalchemy as sa
+import structlog
 
 from backend.db.tables import clinvar_variants, database_versions
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # NCBI FTP URL for ClinVar VCF (GRCh37/hg19)
 CLINVAR_VCF_URL = (
@@ -57,6 +58,14 @@ REVIEW_STATUS_STARS: dict[str, int] = {
 VALID_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT"}
 
 
+class SkipReason:
+    """Enum-like constants for why a VCF line was skipped."""
+
+    NO_RSID = "no_rsid"
+    INVALID_CHROM = "invalid_chrom"
+    MALFORMED = "malformed"
+
+
 @dataclass
 class LoadStats:
     """Statistics from a ClinVar VCF load operation."""
@@ -65,6 +74,7 @@ class LoadStats:
     variants_loaded: int = 0
     skipped_no_rsid: int = 0
     skipped_invalid_chrom: int = 0
+    skipped_malformed: int = 0
     file_date: str | None = None
     sha256: str | None = None
 
@@ -125,7 +135,7 @@ def _normalize_chrom(chrom: str) -> str | None:
     return None
 
 
-def _extract_gene_symbol(geneinfo: str) -> str | None:
+def _extract_gene_symbol(geneinfo: str | None) -> str | None:
     """Extract gene symbol from GENEINFO field (format: ``GENE:GENEID``)."""
     if not geneinfo:
         return None
@@ -135,21 +145,29 @@ def _extract_gene_symbol(geneinfo: str) -> str | None:
     return symbol if symbol else None
 
 
-def parse_clinvar_vcf_line(line: str) -> ClinVarRecord | None:
+def parse_clinvar_vcf_line(line: str) -> tuple[ClinVarRecord | None, str | None]:
     """Parse a single non-header VCF line into a ClinVarRecord.
 
-    Returns None if the line should be skipped (no RS id, invalid chrom, etc.).
+    Returns:
+        Tuple of (record, skip_reason). If record is None, skip_reason
+        indicates why the line was skipped.
     """
     parts = line.rstrip("\n\r").split("\t")
     if len(parts) < 8:
-        return None
+        return None, SkipReason.MALFORMED
 
     chrom_raw, pos_str, var_id, ref, alt, _qual, _filt, info_str = parts[:8]
 
     # Normalize chromosome
     chrom = _normalize_chrom(chrom_raw)
     if chrom is None:
-        return None
+        return None, SkipReason.INVALID_CHROM
+
+    # Validate position
+    try:
+        pos = int(pos_str)
+    except (ValueError, TypeError):
+        return None, SkipReason.MALFORMED
 
     # Parse INFO
     info = _parse_info_field(info_str)
@@ -157,7 +175,7 @@ def parse_clinvar_vcf_line(line: str) -> ClinVarRecord | None:
     # Extract rsid — require RS field
     rs_val = info.get("RS")
     if not rs_val:
-        return None
+        return None, SkipReason.NO_RSID
     rsid = f"rs{rs_val}"
 
     # Parse variation ID from the ID column
@@ -202,10 +220,10 @@ def parse_clinvar_vcf_line(line: str) -> ClinVarRecord | None:
     # (ClinVar VCF typically has one ALT per line)
     first_alt = alt.split(",")[0]
 
-    return ClinVarRecord(
+    record = ClinVarRecord(
         rsid=rsid,
         chrom=chrom,
-        pos=int(pos_str),
+        pos=pos,
         ref=ref,
         alt=first_alt,
         significance=significance,
@@ -215,6 +233,7 @@ def parse_clinvar_vcf_line(line: str) -> ClinVarRecord | None:
         gene_symbol=gene_symbol,
         variation_id=variation_id,
     )
+    return record, None
 
 
 def _extract_file_date(header_lines: list[str]) -> str | None:
@@ -225,23 +244,42 @@ def _extract_file_date(header_lines: list[str]) -> str | None:
     return None
 
 
-def parse_clinvar_vcf(
+def _record_to_dict(record: ClinVarRecord) -> dict:
+    """Convert a ClinVarRecord to a dict for database insertion."""
+    return {
+        "rsid": record.rsid,
+        "chrom": record.chrom,
+        "pos": record.pos,
+        "ref": record.ref,
+        "alt": record.alt,
+        "significance": record.significance,
+        "review_stars": record.review_stars,
+        "accession": record.accession,
+        "conditions": record.conditions,
+        "gene_symbol": record.gene_symbol,
+        "variation_id": record.variation_id,
+    }
+
+
+def iter_clinvar_vcf(
     vcf_path: Path,
     *,
     progress_callback: Callable[[int], None] | None = None,
-) -> tuple[list[dict], LoadStats]:
-    """Parse a ClinVar VCF file (plain or gzipped) and return rows + stats.
+) -> Iterator[tuple[dict, LoadStats]]:
+    """Iterate over ClinVar VCF rows lazily, yielding (row_dict, stats).
+
+    The final stats are accumulated across all yields. Callers should use
+    the stats from the last yielded item for final counts.
 
     Args:
         vcf_path: Path to the VCF or VCF.gz file.
         progress_callback: Optional callback called with the count of
             parsed lines at regular intervals.
 
-    Returns:
-        Tuple of (list of row dicts ready for insert, LoadStats).
+    Yields:
+        Tuple of (row dict ready for insert, running LoadStats).
     """
     stats = LoadStats()
-    rows: list[dict] = []
     header_lines: list[str] = []
 
     open_fn = gzip.open if vcf_path.suffix == ".gz" else open
@@ -251,40 +289,51 @@ def parse_clinvar_vcf(
                 header_lines.append(line.rstrip())
                 continue
             if line.startswith("#"):
-                # Column header line — skip
                 continue
 
             stats.total_lines += 1
 
-            record = parse_clinvar_vcf_line(line)
+            record, skip_reason = parse_clinvar_vcf_line(line)
             if record is None:
-                if "RS" not in line:
+                if skip_reason == SkipReason.NO_RSID:
                     stats.skipped_no_rsid += 1
-                else:
+                elif skip_reason == SkipReason.INVALID_CHROM:
                     stats.skipped_invalid_chrom += 1
+                else:
+                    stats.skipped_malformed += 1
                 continue
 
-            rows.append(
-                {
-                    "rsid": record.rsid,
-                    "chrom": record.chrom,
-                    "pos": record.pos,
-                    "ref": record.ref,
-                    "alt": record.alt,
-                    "significance": record.significance,
-                    "review_stars": record.review_stars,
-                    "accession": record.accession,
-                    "conditions": record.conditions,
-                    "gene_symbol": record.gene_symbol,
-                    "variation_id": record.variation_id,
-                }
-            )
+            stats.variants_loaded += 1
+            yield _record_to_dict(record), stats
 
             if progress_callback and stats.total_lines % 10_000 == 0:
                 progress_callback(stats.total_lines)
 
-    stats.variants_loaded = len(rows)
     stats.file_date = _extract_file_date(header_lines)
+
+
+def parse_clinvar_vcf(
+    vcf_path: Path,
+    *,
+    progress_callback: Callable[[int], None] | None = None,
+) -> tuple[list[dict], LoadStats]:
+    """Parse a ClinVar VCF file (plain or gzipped) and return rows + stats.
+
+    For small files / testing. For large files, prefer ``iter_clinvar_vcf``
+    with ``load_clinvar_from_iter`` to avoid loading all rows into memory.
+
+    Args:
+        vcf_path: Path to the VCF or VCF.gz file.
+        progress_callback: Optional callback called with the count of
+            parsed lines at regular intervals.
+
+    Returns:
+        Tuple of (list of row dicts ready for insert, LoadStats).
+    """
+    rows: list[dict] = []
+    stats = LoadStats()
+    for row, stats in iter_clinvar_vcf(vcf_path, progress_callback=progress_callback):
+        rows.append(row)
     return rows, stats
 
 
@@ -295,6 +344,25 @@ def _compute_sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _batched(iterator: Iterator[dict], size: int) -> Iterator[list[dict]]:
+    """Yield successive batches of ``size`` items from an iterator."""
+    while True:
+        batch = list(islice(iterator, size))
+        if not batch:
+            break
+        yield batch
+
+
+def _wal_checkpoint(engine: sa.Engine) -> None:
+    """Run WAL checkpoint if the engine is file-backed (not in-memory)."""
+    url = str(engine.url)
+    if url == "sqlite://" or ":memory:" in url:
+        return
+    with engine.connect() as conn:
+        conn.execute(sa.text("PRAGMA wal_checkpoint(TRUNCATE)"))
+        conn.commit()
 
 
 def load_clinvar_into_db(
@@ -327,10 +395,59 @@ def load_clinvar_into_db(
             batch = rows[i : i + BATCH_SIZE]
             conn.execute(clinvar_variants.insert(), batch)
 
-        logger.info(
-            "Loaded %d ClinVar variants into reference.db",
-            stats.variants_loaded,
-        )
+    # WAL checkpoint after bulk load (outside transaction)
+    _wal_checkpoint(engine)
+
+    logger.info(
+        "clinvar_loaded",
+        variants=stats.variants_loaded,
+    )
+
+    return stats
+
+
+def load_clinvar_from_iter(
+    row_iter: Iterator[tuple[dict, LoadStats]],
+    engine: sa.Engine,
+    *,
+    clear_existing: bool = True,
+) -> LoadStats:
+    """Stream-load ClinVar rows from an iterator into the database.
+
+    Memory-efficient: only holds one batch at a time, suitable for
+    the full ClinVar VCF (~1.5M variants).
+
+    Args:
+        row_iter: Iterator yielding (row_dict, running_stats) tuples,
+            as produced by ``iter_clinvar_vcf``.
+        engine: SQLAlchemy engine for reference.db.
+        clear_existing: Whether to DELETE all existing rows first.
+
+    Returns:
+        Final LoadStats.
+    """
+    stats = LoadStats()
+
+    # Strip stats from iterator to get plain row dicts
+    def rows_only() -> Iterator[dict]:
+        nonlocal stats
+        for row, stats in row_iter:
+            yield row
+
+    with engine.begin() as conn:
+        if clear_existing:
+            conn.execute(clinvar_variants.delete())
+
+        for batch in _batched(rows_only(), BATCH_SIZE):
+            conn.execute(clinvar_variants.insert(), batch)
+
+    # WAL checkpoint after bulk load (outside transaction)
+    _wal_checkpoint(engine)
+
+    logger.info(
+        "clinvar_loaded",
+        variants=stats.variants_loaded,
+    )
 
     return stats
 
@@ -388,6 +505,9 @@ def download_clinvar_vcf(
 ) -> Path:
     """Download the ClinVar VCF (GRCh37) from NCBI FTP.
 
+    Writes to a temporary file and renames on success to avoid
+    leaving partial files on failure.
+
     Args:
         dest_dir: Directory to save the downloaded file.
         url: Override URL (useful for testing).
@@ -400,30 +520,39 @@ def download_clinvar_vcf(
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / "clinvar_GRCh37.vcf.gz"
+    tmp_path = dest_dir / "clinvar_GRCh37.vcf.gz.tmp"
 
-    logger.info("Downloading ClinVar VCF from %s", url)
+    logger.info("clinvar_download_start", url=url)
 
-    with httpx.Client(
-        follow_redirects=True,
-        timeout=httpx.Timeout(timeout, connect=30.0),
-    ) as client:
-        with client.stream("GET", url) as response:
-            response.raise_for_status()
+    try:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=httpx.Timeout(timeout, connect=30.0),
+        ) as client:
+            with client.stream("GET", url) as response:
+                response.raise_for_status()
 
-            total_bytes: int | None = None
-            content_length = response.headers.get("Content-Length")
-            if content_length:
-                total_bytes = int(content_length)
+                total_bytes: int | None = None
+                content_length = response.headers.get("Content-Length")
+                if content_length:
+                    total_bytes = int(content_length)
 
-            with open(dest_path, "wb") as f:
-                for chunk in response.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
-                    if progress_callback:
-                        progress_callback(
-                            response.num_bytes_downloaded, total_bytes
-                        )
+                with open(tmp_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+                        if progress_callback:
+                            progress_callback(
+                                response.num_bytes_downloaded, total_bytes
+                            )
 
-    logger.info("Downloaded ClinVar VCF to %s", dest_path)
+        # Atomic rename on success
+        tmp_path.rename(dest_path)
+    except BaseException:
+        # Clean up partial temp file on any failure
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    logger.info("clinvar_download_complete", path=str(dest_path))
     return dest_path
 
 
@@ -437,6 +566,8 @@ def download_and_load_clinvar(
     timeout: float = 300.0,
 ) -> LoadStats:
     """Full pipeline: download ClinVar VCF, parse, and load into reference.db.
+
+    Uses streaming parse + batch insert to keep memory usage low.
 
     Args:
         engine: SQLAlchemy engine for reference.db.
@@ -460,12 +591,10 @@ def download_and_load_clinvar(
     # Compute checksum
     sha256 = _compute_sha256(vcf_path)
 
-    # Parse
-    rows, stats = parse_clinvar_vcf(vcf_path, progress_callback=parse_progress)
+    # Stream parse + load
+    row_iter = iter_clinvar_vcf(vcf_path, progress_callback=parse_progress)
+    stats = load_clinvar_from_iter(row_iter, engine)
     stats.sha256 = sha256
-
-    # Load
-    load_clinvar_into_db(rows, engine, stats=stats)
 
     # Record version
     version = stats.file_date or datetime.now(UTC).strftime("%Y%m%d")
