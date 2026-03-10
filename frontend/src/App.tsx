@@ -1,0 +1,40 @@
+import { Routes, Route } from 'react-router-dom'
+import AppLayout from '@/components/layout/AppLayout'
+import Dashboard from '@/pages/Dashboard'
+import VariantExplorer from '@/pages/VariantExplorer'
+import PharmacogenomicsView from '@/pages/PharmacogenomicsView'
+import NutrigenomicsView from '@/pages/NutrigenomicsView'
+import CancerView from '@/pages/CancerView'
+import CardiovascularView from '@/pages/CardiovascularView'
+import APOEView from '@/pages/APOEView'
+import CarrierStatusView from '@/pages/CarrierStatusView'
+import AncestryView from '@/pages/AncestryView'
+import ReportBuilder from '@/pages/ReportBuilder'
+import Settings from '@/pages/Settings'
+import SetupWizard from '@/pages/SetupWizard'
+import Login from '@/pages/Login'
+
+export default function App() {
+  return (
+    <Routes>
+      {/* Full-screen pages (no sidebar/nav) */}
+      <Route path="/setup" element={<SetupWizard />} />
+      <Route path="/login" element={<Login />} />
+
+      {/* Main app layout with sidebar */}
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/variants" element={<VariantExplorer />} />
+        <Route path="/pharmacogenomics" element={<PharmacogenomicsView />} />
+        <Route path="/nutrigenomics" element={<NutrigenomicsView />} />
+        <Route path="/cancer" element={<CancerView />} />
+        <Route path="/cardiovascular" element={<CardiovascularView />} />
+        <Route path="/apoe" element={<APOEView />} />
+        <Route path="/carrier-status" element={<CarrierStatusView />} />
+        <Route path="/ancestry" element={<AncestryView />} />
+        <Route path="/reports" element={<ReportBuilder />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+    </Routes>
+  )
+}
