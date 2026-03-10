@@ -1,0 +1,515 @@
+"""SQLAlchemy Core table definitions for GenomeInsight.
+
+All tables are defined as SQLAlchemy Core Table objects — no ORM.
+Two MetaData instances exist:
+
+- ``reference_metadata``: Tables in the shared reference.db
+  (Alembic-managed, one file for all users).
+- ``sample_metadata_obj``: Tables in per-sample databases
+  (created programmatically at runtime, one file per sample).
+
+Import individual tables or entire metadata objects as needed::
+
+    from backend.db.tables import clinvar_variants, raw_variants
+    from backend.db.tables import reference_metadata, sample_metadata_obj
+"""
+
+import sqlalchemy as sa
+
+# ═══════════════════════════════════════════════════════════════════════
+# Reference DB (reference.db) — Alembic-managed
+# ═══════════════════════════════════════════════════════════════════════
+
+reference_metadata = sa.MetaData()
+
+# ── Sample Registry ────────────────────────────────────────────────────
+
+samples = sa.Table(
+    "samples",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("name", sa.Text, nullable=False),
+    sa.Column("db_path", sa.Text, nullable=False, unique=True),
+    sa.Column("file_format", sa.Text),
+    sa.Column("file_hash", sa.Text),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime),
+)
+
+# ── Jobs (Huey ↔ FastAPI IPC) ─────────────────────────────────────────
+
+jobs = sa.Table(
+    "jobs",
+    reference_metadata,
+    sa.Column("job_id", sa.Text, primary_key=True),
+    sa.Column("sample_id", sa.Integer, nullable=True),
+    sa.Column(
+        "job_type",
+        sa.Text,
+        nullable=False,
+        comment="e.g. annotation, download, analysis",
+    ),
+    sa.Column(
+        "status",
+        sa.Text,
+        nullable=False,
+        server_default="pending",
+        comment="pending | running | complete | failed | cancelled",
+    ),
+    sa.Column("progress_pct", sa.Float, server_default="0"),
+    sa.Column("message", sa.Text, server_default=""),
+    sa.Column("error", sa.Text),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+# ── Database Versions ──────────────────────────────────────────────────
+
+database_versions = sa.Table(
+    "database_versions",
+    reference_metadata,
+    sa.Column("db_name", sa.Text, primary_key=True),
+    sa.Column("version", sa.Text, nullable=False),
+    sa.Column("file_path", sa.Text),
+    sa.Column("file_size_bytes", sa.Integer),
+    sa.Column("downloaded_at", sa.DateTime),
+    sa.Column("checksum_sha256", sa.Text),
+)
+
+# ── Update History ─────────────────────────────────────────────────────
+
+update_history = sa.Table(
+    "update_history",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("db_name", sa.Text, nullable=False),
+    sa.Column("previous_version", sa.Text),
+    sa.Column("new_version", sa.Text, nullable=False),
+    sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("variants_added", sa.Integer, server_default="0"),
+    sa.Column("variants_reclassified", sa.Integer, server_default="0"),
+    sa.Column("download_size_bytes", sa.Integer),
+    sa.Column("duration_seconds", sa.Integer),
+)
+
+# ── Download Checkpoints ───────────────────────────────────────────────
+
+downloads = sa.Table(
+    "downloads",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("url", sa.Text, nullable=False),
+    sa.Column("dest_path", sa.Text, nullable=False),
+    sa.Column("total_bytes", sa.Integer),
+    sa.Column("downloaded_bytes", sa.Integer, server_default="0"),
+    sa.Column("checksum_sha256", sa.Text),
+    sa.Column(
+        "status",
+        sa.Text,
+        server_default="pending",
+        comment="pending | downloading | complete | failed",
+    ),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime),
+)
+
+# ── ClinVar Variants ──────────────────────────────────────────────────
+
+clinvar_variants = sa.Table(
+    "clinvar_variants",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("rsid", sa.Text, index=True),
+    sa.Column("chrom", sa.Text, nullable=False),
+    sa.Column("pos", sa.Integer, nullable=False),
+    sa.Column("ref", sa.Text, nullable=False),
+    sa.Column("alt", sa.Text, nullable=False),
+    sa.Column("significance", sa.Text),
+    sa.Column("review_stars", sa.Integer),
+    sa.Column("accession", sa.Text),
+    sa.Column("conditions", sa.Text),
+    sa.Column("gene_symbol", sa.Text),
+    sa.Column("variation_id", sa.Integer),
+)
+
+sa.Index("idx_clinvar_chrom_pos", clinvar_variants.c.chrom, clinvar_variants.c.pos)
+
+# ── MONDO/HPO Gene-Phenotype ──────────────────────────────────────────
+
+gene_phenotype = sa.Table(
+    "gene_phenotype",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("gene_symbol", sa.Text, nullable=False, index=True),
+    sa.Column("disease_name", sa.Text, nullable=False),
+    sa.Column("disease_id", sa.Text, comment="MONDO or OMIM ID"),
+    sa.Column("hpo_terms", sa.Text, comment="JSON array of HPO term IDs"),
+    sa.Column(
+        "source",
+        sa.Text,
+        nullable=False,
+        comment="mondo_hpo | omim",
+    ),
+    sa.Column("inheritance", sa.Text),
+)
+
+# ── CPIC Allele Definitions ───────────────────────────────────────────
+
+cpic_alleles = sa.Table(
+    "cpic_alleles",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("gene", sa.Text, nullable=False, index=True),
+    sa.Column("allele_name", sa.Text, nullable=False, comment="e.g. *1, *2"),
+    sa.Column(
+        "defining_variants",
+        sa.Text,
+        comment="JSON array of {rsid, ref, alt} objects",
+    ),
+    sa.Column("function", sa.Text),
+    sa.Column("activity_score", sa.Float),
+)
+
+cpic_diplotypes = sa.Table(
+    "cpic_diplotypes",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("gene", sa.Text, nullable=False, index=True),
+    sa.Column("diplotype", sa.Text, nullable=False, comment="e.g. *1/*2"),
+    sa.Column("phenotype", sa.Text, nullable=False),
+    sa.Column("ehr_notation", sa.Text),
+    sa.Column("activity_score", sa.Float),
+)
+
+cpic_guidelines = sa.Table(
+    "cpic_guidelines",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("gene", sa.Text, nullable=False),
+    sa.Column("drug", sa.Text, nullable=False),
+    sa.Column("phenotype", sa.Text, nullable=False),
+    sa.Column("recommendation", sa.Text),
+    sa.Column("classification", sa.Text, comment="e.g. A, B, C, D"),
+    sa.Column("guideline_url", sa.Text),
+)
+
+sa.Index(
+    "idx_cpic_guidelines_gene_drug",
+    cpic_guidelines.c.gene,
+    cpic_guidelines.c.drug,
+)
+
+# ── Literature Cache ──────────────────────────────────────────────────
+
+literature_cache = sa.Table(
+    "literature_cache",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("pmid", sa.Text, nullable=False),
+    sa.Column("gene", sa.Text),
+    sa.Column("query", sa.Text),
+    sa.Column("title", sa.Text),
+    sa.Column("abstract", sa.Text),
+    sa.Column("authors", sa.Text, comment="JSON array"),
+    sa.Column("journal", sa.Text),
+    sa.Column("year", sa.Integer),
+    sa.Column("fetched_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+sa.Index(
+    "idx_literature_gene_pmid",
+    literature_cache.c.gene,
+    literature_cache.c.pmid,
+    unique=True,
+)
+
+# ── UniProt Cache ─────────────────────────────────────────────────────
+
+uniprot_cache = sa.Table(
+    "uniprot_cache",
+    reference_metadata,
+    sa.Column("accession", sa.Text, primary_key=True),
+    sa.Column("gene_symbol", sa.Text, index=True),
+    sa.Column("domains", sa.Text, comment="JSON array of domain annotations"),
+    sa.Column("features", sa.Text, comment="JSON array of protein features"),
+    sa.Column("sequence_length", sa.Integer),
+    sa.Column("fetched_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("ttl_days", sa.Integer, server_default="30"),
+)
+
+# ── Log Entries ────────────────────────────────────────────────────────
+
+log_entries = sa.Table(
+    "log_entries",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("timestamp", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("level", sa.Text, nullable=False),
+    sa.Column("logger", sa.Text),
+    sa.Column("message", sa.Text),
+    sa.Column("event_data", sa.Text, comment="JSON structured log data"),
+)
+
+sa.Index("idx_log_timestamp", log_entries.c.timestamp)
+
+# ── Re-annotation Prompt State ─────────────────────────────────────────
+
+reannotation_prompts = sa.Table(
+    "reannotation_prompts",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("sample_id", sa.Integer, nullable=False),
+    sa.Column("db_name", sa.Text, nullable=False),
+    sa.Column("db_version", sa.Text, nullable=False),
+    sa.Column("candidate_count", sa.Integer, server_default="0"),
+    sa.Column("dismissed", sa.Boolean, server_default=sa.text("0")),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+sa.Index("idx_reannotation_sample", reannotation_prompts.c.sample_id)
+
+# ── GWAS Catalog ──────────────────────────────────────────────────────
+
+gwas_associations = sa.Table(
+    "gwas_associations",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("rsid", sa.Text, nullable=False, index=True),
+    sa.Column("chrom", sa.Text),
+    sa.Column("pos", sa.Integer),
+    sa.Column("trait", sa.Text, nullable=False),
+    sa.Column("p_value", sa.Float),
+    sa.Column("odds_ratio", sa.Float),
+    sa.Column("beta", sa.Float),
+    sa.Column("risk_allele", sa.Text),
+    sa.Column("pubmed_id", sa.Text),
+    sa.Column("study", sa.Text),
+    sa.Column("sample_size", sa.Integer),
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sample DB (sample_{id}.db) — Created programmatically per sample
+# ═══════════════════════════════════════════════════════════════════════
+
+sample_metadata_obj = sa.MetaData()
+
+# ── Raw Variants (as parsed from 23andMe file) ────────────────────────
+
+raw_variants = sa.Table(
+    "raw_variants",
+    sample_metadata_obj,
+    sa.Column("rsid", sa.Text, primary_key=True),
+    sa.Column("chrom", sa.Text, nullable=False),
+    sa.Column("pos", sa.Integer, nullable=False),
+    sa.Column("genotype", sa.Text, nullable=False),
+)
+
+sa.Index("idx_raw_chrom_pos", raw_variants.c.chrom, raw_variants.c.pos)
+
+# ── Annotated Variants (single wide table) ────────────────────────────
+
+annotated_variants = sa.Table(
+    "annotated_variants",
+    sample_metadata_obj,
+    sa.Column("rsid", sa.Text, primary_key=True),
+    sa.Column("chrom", sa.Text, nullable=False),
+    sa.Column("pos", sa.Integer, nullable=False),
+    sa.Column("ref", sa.Text),
+    sa.Column("alt", sa.Text),
+    sa.Column("genotype", sa.Text),
+    sa.Column("zygosity", sa.Text),  # hom_ref, het, hom_alt
+    # VEP annotation (bitmask bit 0)
+    sa.Column("gene_symbol", sa.Text),
+    sa.Column("transcript_id", sa.Text),
+    sa.Column("consequence", sa.Text),  # SO term
+    sa.Column("hgvs_coding", sa.Text),
+    sa.Column("hgvs_protein", sa.Text),
+    sa.Column("strand", sa.Text),
+    sa.Column("exon_number", sa.Integer),
+    sa.Column("intron_number", sa.Integer),
+    sa.Column("mane_select", sa.Boolean, server_default=sa.text("0")),
+    # ClinVar (bitmask bit 1)
+    sa.Column("clinvar_significance", sa.Text),
+    sa.Column("clinvar_review_stars", sa.Integer),
+    sa.Column("clinvar_accession", sa.Text),
+    sa.Column("clinvar_conditions", sa.Text),
+    # gnomAD allele frequency (bitmask bit 2)
+    sa.Column("gnomad_af_global", sa.Float),
+    sa.Column("gnomad_af_afr", sa.Float),
+    sa.Column("gnomad_af_amr", sa.Float),
+    sa.Column("gnomad_af_eas", sa.Float),
+    sa.Column("gnomad_af_eur", sa.Float),
+    sa.Column("gnomad_af_fin", sa.Float),
+    sa.Column("gnomad_af_sas", sa.Float),
+    sa.Column("gnomad_homozygous_count", sa.Integer),
+    sa.Column("rare_flag", sa.Boolean, server_default=sa.text("0")),
+    sa.Column("ultra_rare_flag", sa.Boolean, server_default=sa.text("0")),
+    # dbNSFP in-silico scores (bitmask bit 3)
+    sa.Column("cadd_phred", sa.Float),
+    sa.Column("sift_score", sa.Float),
+    sa.Column("sift_pred", sa.Text),
+    sa.Column("polyphen2_hsvar_score", sa.Float),
+    sa.Column("polyphen2_hsvar_pred", sa.Text),
+    sa.Column("revel", sa.Float),
+    sa.Column("mutpred2", sa.Float),
+    sa.Column("vest4", sa.Float),
+    sa.Column("metasvm", sa.Float),
+    sa.Column("metalr", sa.Float),
+    sa.Column("gerp_rs", sa.Float),
+    sa.Column("phylop", sa.Float),
+    sa.Column("mpc", sa.Float),
+    sa.Column("primateai", sa.Float),
+    # Evidence & conflict
+    sa.Column("evidence_conflict", sa.Boolean, server_default=sa.text("0")),
+    sa.Column("ensemble_pathogenic", sa.Boolean, server_default=sa.text("0")),
+    # Annotation coverage bitmask (6-bit: VEP|ClinVar|gnomAD|dbNSFP|CPIC|GWAS)
+    sa.Column("annotation_coverage", sa.Integer),
+)
+
+sa.Index(
+    "idx_annot_chrom_pos",
+    annotated_variants.c.chrom,
+    annotated_variants.c.pos,
+)
+sa.Index("idx_annot_gene", annotated_variants.c.gene_symbol)
+sa.Index("idx_annot_clinvar_sig", annotated_variants.c.clinvar_significance)
+sa.Index("idx_annot_coverage", annotated_variants.c.annotation_coverage)
+
+# ── Findings (unified output from all analysis modules) ────────────────
+
+findings = sa.Table(
+    "findings",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("module", sa.Text, nullable=False),
+    sa.Column("category", sa.Text),
+    sa.Column("evidence_level", sa.Integer),  # 1-4 stars
+    sa.Column("gene_symbol", sa.Text),
+    sa.Column("rsid", sa.Text),
+    sa.Column("finding_text", sa.Text, nullable=False),
+    sa.Column("phenotype", sa.Text),
+    sa.Column("conditions", sa.Text),
+    sa.Column("zygosity", sa.Text),
+    sa.Column("clinvar_significance", sa.Text),
+    sa.Column("diplotype", sa.Text),
+    sa.Column("metabolizer_status", sa.Text),
+    sa.Column("drug", sa.Text),
+    sa.Column("haplogroup", sa.Text),
+    sa.Column("prs_score", sa.Float),
+    sa.Column("prs_percentile", sa.Float),
+    sa.Column("pathway", sa.Text),
+    sa.Column("pathway_level", sa.Text),  # Elevated / Moderate / Standard
+    sa.Column("svg_path", sa.Text),
+    sa.Column("pmid_citations", sa.Text),  # JSON array of PubMed IDs
+    sa.Column("detail_json", sa.Text),  # arbitrary module-specific data (JSON)
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+sa.Index("idx_findings_module", findings.c.module)
+sa.Index("idx_findings_evidence", findings.c.evidence_level)
+
+# ── QC Metrics ─────────────────────────────────────────────────────────
+
+qc_metrics = sa.Table(
+    "qc_metrics",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("call_rate", sa.Float),
+    sa.Column("heterozygosity_rate", sa.Float),
+    sa.Column("ti_tv_ratio", sa.Float),
+    sa.Column("total_variants", sa.Integer),
+    sa.Column("called_variants", sa.Integer),
+    sa.Column("nocall_variants", sa.Integer),
+    sa.Column("computed_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+# ── Sample Metadata ────────────────────────────────────────────────────
+
+sample_metadata_table = sa.Table(
+    "sample_metadata",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True),
+    sa.Column("name", sa.Text, nullable=False),
+    sa.Column("notes", sa.Text, server_default=""),
+    sa.Column("date_collected", sa.Date),
+    sa.Column("source", sa.Text, server_default=""),
+    sa.Column("file_format", sa.Text),
+    sa.Column("file_hash", sa.Text),
+    sa.Column("extra", sa.Text, server_default="{}"),  # JSON
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
+    sa.CheckConstraint("id = 1", name="single_row_metadata"),
+)
+
+# ── APOE Gate State ────────────────────────────────────────────────────
+
+apoe_gate = sa.Table(
+    "apoe_gate",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True),
+    sa.Column("acknowledged", sa.Boolean, server_default=sa.text("0")),
+    sa.Column("acknowledged_at", sa.DateTime),
+    sa.CheckConstraint("id = 1", name="single_row_apoe"),
+)
+
+# ── Tags ───────────────────────────────────────────────────────────────
+
+tags = sa.Table(
+    "tags",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("name", sa.Text, nullable=False, unique=True),
+    sa.Column("color", sa.Text, server_default="'#6B7280'"),
+    sa.Column("is_predefined", sa.Boolean, server_default=sa.text("0")),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+PREDEFINED_TAGS = [
+    "Review later",
+    "Discuss with clinician",
+    "False positive",
+    "Actionable",
+    "Benign override",
+]
+
+# ── Variant Tags (many-to-many) ────────────────────────────────────────
+
+variant_tags = sa.Table(
+    "variant_tags",
+    sample_metadata_obj,
+    sa.Column("rsid", sa.Text, nullable=False, primary_key=True),
+    sa.Column(
+        "tag_id",
+        sa.Integer,
+        sa.ForeignKey("tags.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    ),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+# ── Haplogroup Assignments ─────────────────────────────────────────────
+
+haplogroup_assignments = sa.Table(
+    "haplogroup_assignments",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("type", sa.Text, nullable=False),  # 'mt' or 'Y'
+    sa.Column("haplogroup", sa.Text, nullable=False),
+    sa.Column("confidence", sa.Float),
+    sa.Column("defining_snps_present", sa.Integer),
+    sa.Column("defining_snps_total", sa.Integer),
+    sa.Column("assigned_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+# ── Watched Variants (VUS tracking) ───────────────────────────────────
+
+watched_variants = sa.Table(
+    "watched_variants",
+    sample_metadata_obj,
+    sa.Column("rsid", sa.Text, primary_key=True),
+    sa.Column("watched_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("clinvar_significance_at_watch", sa.Text),
+    sa.Column("notes", sa.Text, server_default=""),
+)
