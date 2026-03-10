@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend lint format run run-api run-frontend run-huey build-frontend clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run run-api run-frontend run-huey build-frontend clean
 
 # Default Python and Node
 PYTHON ?= python3
@@ -44,7 +44,7 @@ build-frontend:  ## Build frontend for production
 # Test
 # ──────────────────────────────────────────────
 
-test: test-backend test-frontend  ## Run all tests
+test: test-backend test-frontend  ## Run all tests (excluding E2E)
 
 test-backend:  ## Run backend tests
 	$(PYTHON) -m pytest tests/ -v
@@ -55,6 +55,9 @@ test-frontend:  ## Run frontend tests
 	else \
 		echo "frontend not set up — skipping"; \
 	fi
+
+test-e2e:  ## Run Playwright E2E tests
+	npx playwright test
 
 # ──────────────────────────────────────────────
 # Code quality
