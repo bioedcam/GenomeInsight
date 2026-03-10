@@ -1,7 +1,9 @@
-"""Tests for variant table API endpoints (P1-14).
+"""Tests for variant table API endpoints (P1-14, P1-15d).
 
 T1-14: GET /api/variants returns cursor-paginated results.
        GET /api/variants/count returns total count.
+T1-15d: Async total count returns correct value with annotation_coverage
+        filtering; first page loads without waiting for count.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from fastapi.testclient import TestClient
 from backend.config import Settings
 from backend.db.connection import DBRegistry, reset_registry
 from backend.db.sample_schema import create_sample_tables
-from backend.db.tables import raw_variants, reference_metadata, samples
+from backend.db.tables import annotated_variants, raw_variants, reference_metadata, samples
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 V5_FILE = FIXTURES / "sample_23andme_v5.txt"
@@ -38,38 +40,42 @@ TEST_VARIANTS = [
 ]
 
 
-@pytest.fixture
-def client_with_sample(tmp_data_dir: Path):
-    """FastAPI TestClient with a sample pre-loaded with TEST_VARIANTS.
+def _setup_sample_client(
+    tmp_data_dir: Path,
+    *,
+    sample_name: str,
+    db_filename: str,
+    file_hash: str,
+    variants_table: sa.Table,
+    variants_data: list[dict],
+):
+    """Shared helper: create TestClient with a sample pre-loaded into the given table.
 
     Yields (client, sample_id) tuple.
     """
     settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
 
-    # Create reference.db
     ref_path = settings.reference_db_path
     ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
     reference_metadata.create_all(ref_engine)
 
-    # Register a sample in reference.db
     with ref_engine.begin() as conn:
         result = conn.execute(
             samples.insert().values(
-                name="test_sample",
-                db_path="samples/sample_1.db",
+                name=sample_name,
+                db_path=f"samples/{db_filename}",
                 file_format="23andme_v5",
-                file_hash="testhash123",
+                file_hash=file_hash,
             )
         )
         sample_id = result.lastrowid
     ref_engine.dispose()
 
-    # Create per-sample DB with test variants
-    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    sample_db_path = tmp_data_dir / "samples" / db_filename
     sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
     create_sample_tables(sample_engine)
     with sample_engine.begin() as conn:
-        conn.execute(raw_variants.insert(), TEST_VARIANTS)
+        conn.execute(variants_table.insert(), variants_data)
     sample_engine.dispose()
 
     with (
@@ -93,6 +99,22 @@ def client_with_sample(tmp_data_dir: Path):
 
         registry.dispose_all()
         reset_registry()
+
+
+@pytest.fixture
+def client_with_sample(tmp_data_dir: Path):
+    """FastAPI TestClient with a sample pre-loaded with TEST_VARIANTS.
+
+    Yields (client, sample_id) tuple.
+    """
+    yield from _setup_sample_client(
+        tmp_data_dir,
+        sample_name="test_sample",
+        db_filename="sample_1.db",
+        file_hash="testhash123",
+        variants_table=raw_variants,
+        variants_data=TEST_VARIANTS,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -448,3 +470,127 @@ class TestChromosomeCounts:
         client, _ = client_with_sample
         response = client.get("/api/variants/chromosomes")
         assert response.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1-15d: Async total count with annotation_coverage filtering
+# ═══════════════════════════════════════════════════════════════════════
+
+# Mix of annotated (coverage != NULL) and unannotated (coverage = NULL) variants.
+ANNOTATED_TEST_VARIANTS = [
+    {"rsid": "rs100", "chrom": "1", "pos": 50000, "genotype": "AA",
+     "gene_symbol": "BRCA1", "consequence": "missense_variant",
+     "annotation_coverage": 0b000111},
+    {"rsid": "rs101", "chrom": "1", "pos": 100000, "genotype": "AG",
+     "gene_symbol": "TP53", "consequence": "synonymous_variant",
+     "annotation_coverage": 0b000011},
+    {"rsid": "rs102", "chrom": "1", "pos": 200000, "genotype": "GG",
+     "gene_symbol": None, "consequence": None,
+     "annotation_coverage": None},  # unannotated
+    {"rsid": "rs200", "chrom": "2", "pos": 10000, "genotype": "CC",
+     "gene_symbol": "APOE", "consequence": "missense_variant",
+     "annotation_coverage": 0b111111},
+    {"rsid": "rs201", "chrom": "2", "pos": 20000, "genotype": "CT",
+     "gene_symbol": None, "consequence": None,
+     "annotation_coverage": None},  # unannotated
+    {"rsid": "rs1000", "chrom": "10", "pos": 50000, "genotype": "AA",
+     "gene_symbol": None, "consequence": None,
+     "annotation_coverage": None},  # unannotated
+]
+
+
+@pytest.fixture
+def client_with_annotated_sample(tmp_data_dir: Path):
+    """FastAPI TestClient with a sample using annotated_variants table.
+
+    3 annotated variants (coverage != NULL) + 3 unannotated (coverage = NULL).
+    """
+    yield from _setup_sample_client(
+        tmp_data_dir,
+        sample_name="annotated_sample",
+        db_filename="sample_2.db",
+        file_hash="annothash456",
+        variants_table=annotated_variants,
+        variants_data=ANNOTATED_TEST_VARIANTS,
+    )
+
+
+class TestAnnotationCoverageFilter:
+    """P1-15d: annotation_coverage:notnull/null filtering on count and list endpoints."""
+
+    def test_count_all_variants(self, client_with_annotated_sample):
+        """Unfiltered count returns all variants (annotated + unannotated)."""
+        client, sid = client_with_annotated_sample
+        response = client.get(f"/api/variants/count?sample_id={sid}")
+        data = response.json()
+        assert data["total"] == 6
+        assert data["filtered"] is False
+
+    def test_count_annotated_only(self, client_with_annotated_sample):
+        """annotation_coverage:notnull filters to annotated variants only."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants/count?sample_id={sid}&filter=annotation_coverage:notnull"
+        )
+        data = response.json()
+        assert data["total"] == 3
+        assert data["filtered"] is True
+
+    def test_count_unannotated_only(self, client_with_annotated_sample):
+        """annotation_coverage:null filters to unannotated variants only."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants/count?sample_id={sid}&filter=annotation_coverage:null"
+        )
+        data = response.json()
+        assert data["total"] == 3
+        assert data["filtered"] is True
+
+    def test_list_annotated_only(self, client_with_annotated_sample):
+        """List endpoint respects annotation_coverage:notnull filter."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants?sample_id={sid}&filter=annotation_coverage:notnull"
+        )
+        data = response.json()
+        assert len(data["items"]) == 3
+        assert all(
+            item["annotation_coverage"] is not None for item in data["items"]
+        )
+
+    def test_list_unannotated_only(self, client_with_annotated_sample):
+        """List endpoint respects annotation_coverage:null filter."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants?sample_id={sid}&filter=annotation_coverage:null"
+        )
+        data = response.json()
+        assert len(data["items"]) == 3
+        assert all(
+            item["annotation_coverage"] is None for item in data["items"]
+        )
+
+    def test_combined_filter_chrom_and_coverage(self, client_with_annotated_sample):
+        """annotation_coverage filter combines with other filters."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants/count?sample_id={sid}"
+            "&filter=chrom:1,annotation_coverage:notnull"
+        )
+        data = response.json()
+        # chrom 1 has rs100 (annotated), rs101 (annotated), rs102 (unannotated)
+        assert data["total"] == 2
+        assert data["filtered"] is True
+
+    def test_chromosome_counts_with_coverage_filter(self, client_with_annotated_sample):
+        """Chromosome counts endpoint respects annotation_coverage filter."""
+        client, sid = client_with_annotated_sample
+        response = client.get(
+            f"/api/variants/chromosomes?sample_id={sid}"
+            "&filter=annotation_coverage:notnull"
+        )
+        data = response.json()
+        count_map = {item["chrom"]: item["count"] for item in data}
+        assert count_map["1"] == 2  # rs100, rs101
+        assert count_map["2"] == 1  # rs200
+        assert "10" not in count_map  # rs1000 is unannotated

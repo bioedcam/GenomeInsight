@@ -149,6 +149,51 @@ describe("VariantTable", () => {
     })
   })
 
+  it("fires count query with annotation_coverage:notnull filter by default (P1-15d)", async () => {
+    const page = makeVariantPage(3)
+    setupFetchMock(page, makeCountResponse(3))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("3 variants")).toBeInTheDocument()
+    })
+
+    // Verify the count endpoint was called with annotation_coverage:notnull
+    const countCalls = mockFetch.mock.calls
+      .map((c) => c[0] as string)
+      .filter((url) => url.includes("/api/variants/count"))
+    expect(countCalls.length).toBeGreaterThan(0)
+    expect(countCalls[0]).toContain("annotation_coverage%3Anotnull")
+  })
+
+  it("fires count query without annotation_coverage filter when showing unannotated (P1-15d)", async () => {
+    const page = makeVariantPage(3)
+    setupFetchMock(page, makeCountResponse(3))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Toggle unannotated on
+    const toggle = screen.getByRole("button", { name: /show unannotated/i })
+    await user.click(toggle)
+
+    // After toggling, a new count call should fire without annotation_coverage filter
+    await waitFor(() => {
+      const countCalls = mockFetch.mock.calls
+        .map((c) => c[0] as string)
+        .filter((url) => url.includes("/api/variants/count"))
+      const callsWithoutFilter = countCalls.filter(
+        (url) => !url.includes("annotation_coverage"),
+      )
+      expect(callsWithoutFilter.length).toBeGreaterThan(0)
+    })
+  })
+
   it("displays conflict flag for conflicting variants", async () => {
     const page = makeVariantPage(2)
     setupFetchMock(page, makeCountResponse(2))

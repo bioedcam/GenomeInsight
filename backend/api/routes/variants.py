@@ -1,10 +1,11 @@
-"""Variant table API endpoints (P1-14).
+"""Variant table API endpoints (P1-14, P1-15d).
 
 Cursor-based keyset pagination on (chrom, pos) for raw_variants and
 annotated_variants tables in per-sample databases.
 
 GET  /api/variants          — Paginated variant list
 GET  /api/variants/count    — Total count (async, separate query)
+GET  /api/variants/chromosomes — Per-chromosome counts
 """
 
 from __future__ import annotations
@@ -46,7 +47,12 @@ _ANNOTATED_FILTER_COLS = frozenset({
     "evidence_conflict",
     "ensemble_pathogenic",
     "zygosity",
+    "annotation_coverage",
 })
+
+# Columns that support special IS NULL / IS NOT NULL filtering.
+# Filter values: "notnull" → IS NOT NULL, "null" → IS NULL.
+_NULLABLE_FILTER_COLS = frozenset({"annotation_coverage"})
 
 
 # ── Response models ──────────────────────────────────────────────────
@@ -179,8 +185,14 @@ def _parse_filters(
             continue
 
         col = getattr(table.c, key)
+        # Nullable columns: accept notnull/null for IS NOT NULL / IS NULL
+        if key in _NULLABLE_FILTER_COLS and value.lower() in ("notnull", "null"):
+            if value.lower() == "notnull":
+                clauses.append(col.isnot(None))
+            else:
+                clauses.append(col.is_(None))
         # Boolean columns: accept 0/1/true/false
-        if key in ("rare_flag", "ultra_rare_flag", "evidence_conflict", "ensemble_pathogenic"):
+        elif key in ("rare_flag", "ultra_rare_flag", "evidence_conflict", "ensemble_pathogenic"):
             bool_val = value.lower() in ("1", "true", "yes")
             clauses.append(col == bool_val)
         else:
