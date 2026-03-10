@@ -57,5 +57,10 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
 # Claude
 .claude/
