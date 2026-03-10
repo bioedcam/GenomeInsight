@@ -1,14 +1,22 @@
-"""ClinVar VCF downloader and SQLite loader.
+"""ClinVar VCF downloader, SQLite loader, and annotation lookup.
 
 Downloads the ClinVar VCF (GRCh37) from NCBI FTP, parses variant records,
 and bulk-loads them into the ``clinvar_variants`` table in reference.db.
 
+Also provides annotation lookup: given a sample's raw variants, matches
+them against clinvar_variants by rsid (primary) and (chrom, pos) fallback,
+then writes ClinVar columns into the annotated_variants table.
+
 Usage::
 
     from backend.annotation.clinvar import download_clinvar_vcf, load_clinvar_vcf
+    from backend.annotation.clinvar import annotate_sample_clinvar
 
     vcf_path = download_clinvar_vcf(dest_dir)
     stats = load_clinvar_vcf(vcf_path, engine)
+
+    # Annotation lookup
+    result = annotate_sample_clinvar(sample_engine, reference_engine)
 """
 
 from __future__ import annotations
@@ -25,7 +33,7 @@ import httpx
 import sqlalchemy as sa
 import structlog
 
-from backend.db.tables import clinvar_variants, database_versions
+from backend.db.tables import annotated_variants, clinvar_variants, database_versions, raw_variants
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -607,3 +615,297 @@ def download_and_load_clinvar(
     )
 
     return stats
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ClinVar Annotation Lookup (P1-11)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Annotation coverage bitmask: bit 1 = ClinVar (value 2)
+CLINVAR_BITMASK = 0b000010  # bit 1 = 2
+
+
+@dataclass
+class ClinVarAnnotation:
+    """ClinVar annotation data for a single variant."""
+
+    rsid: str
+    clinvar_significance: str | None
+    clinvar_review_stars: int
+    clinvar_accession: str | None
+    clinvar_conditions: str | None
+    matched_by: str  # "rsid" or "chrom_pos"
+
+
+@dataclass
+class AnnotationResult:
+    """Statistics from a ClinVar annotation lookup run."""
+
+    total_variants: int = 0
+    matched_by_rsid: int = 0
+    matched_by_position: int = 0
+    not_matched: int = 0
+    rows_written: int = 0
+
+    @property
+    def total_matched(self) -> int:
+        return self.matched_by_rsid + self.matched_by_position
+
+
+def lookup_clinvar_by_rsids(
+    rsids: list[str],
+    reference_engine: sa.Engine,
+) -> dict[str, ClinVarAnnotation]:
+    """Look up ClinVar annotations for a batch of rsids.
+
+    When multiple ClinVar records share the same rsid (e.g. multi-allelic
+    or multi-condition), the record with the highest review_stars is
+    returned. Ties broken by significance (Pathogenic > others).
+
+    Args:
+        rsids: List of rsid strings (e.g. ["rs429358", "rs7412"]).
+        reference_engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        Dict mapping rsid → ClinVarAnnotation for matched variants.
+    """
+    if not rsids:
+        return {}
+
+    results: dict[str, ClinVarAnnotation] = {}
+
+    # Process in batches to avoid SQLite variable limit (default 999)
+    for i in range(0, len(rsids), 500):
+        batch = rsids[i : i + 500]
+
+        stmt = (
+            sa.select(
+                clinvar_variants.c.rsid,
+                clinvar_variants.c.significance,
+                clinvar_variants.c.review_stars,
+                clinvar_variants.c.accession,
+                clinvar_variants.c.conditions,
+            )
+            .where(clinvar_variants.c.rsid.in_(batch))
+            .order_by(
+                clinvar_variants.c.rsid,
+                clinvar_variants.c.review_stars.desc(),
+            )
+        )
+
+        with reference_engine.connect() as conn:
+            rows = conn.execute(stmt).fetchall()
+
+        for row in rows:
+            rsid = row.rsid
+            # Keep only the first (highest review_stars) per rsid
+            if rsid not in results:
+                results[rsid] = ClinVarAnnotation(
+                    rsid=rsid,
+                    clinvar_significance=row.significance,
+                    clinvar_review_stars=row.review_stars or 0,
+                    clinvar_accession=row.accession,
+                    clinvar_conditions=row.conditions,
+                    matched_by="rsid",
+                )
+
+    return results
+
+
+def lookup_clinvar_by_positions(
+    positions: list[tuple[str, int, str]],
+    reference_engine: sa.Engine,
+) -> dict[str, ClinVarAnnotation]:
+    """Look up ClinVar annotations by (chrom, pos) for unmatched variants.
+
+    This is the fallback strategy when rsid matching fails (e.g. the
+    variant has an i-prefixed rsid or the ClinVar record uses a
+    different rsid for the same position).
+
+    Args:
+        positions: List of (chrom, pos, rsid) tuples. The rsid is the
+            sample variant's rsid, used as the key in the result dict.
+        reference_engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        Dict mapping sample rsid → ClinVarAnnotation for position-matched variants.
+    """
+    if not positions:
+        return {}
+
+    results: dict[str, ClinVarAnnotation] = {}
+
+    # Process in batches
+    for i in range(0, len(positions), 250):
+        batch = positions[i : i + 250]
+
+        # Build OR conditions for (chrom, pos) pairs
+        conditions = [
+            sa.and_(
+                clinvar_variants.c.chrom == chrom,
+                clinvar_variants.c.pos == pos,
+            )
+            for chrom, pos, _ in batch
+        ]
+
+        stmt = (
+            sa.select(
+                clinvar_variants.c.chrom,
+                clinvar_variants.c.pos,
+                clinvar_variants.c.significance,
+                clinvar_variants.c.review_stars,
+                clinvar_variants.c.accession,
+                clinvar_variants.c.conditions,
+            )
+            .where(sa.or_(*conditions))
+            .order_by(
+                clinvar_variants.c.chrom,
+                clinvar_variants.c.pos,
+                clinvar_variants.c.review_stars.desc(),
+            )
+        )
+
+        with reference_engine.connect() as conn:
+            rows = conn.execute(stmt).fetchall()
+
+        # Build a lookup by (chrom, pos) → best ClinVar row
+        pos_lookup: dict[tuple[str, int], sa.Row] = {}
+        for row in rows:
+            key = (row.chrom, row.pos)
+            if key not in pos_lookup:
+                pos_lookup[key] = row
+
+        # Map back to sample rsids
+        for chrom, pos, sample_rsid in batch:
+            key = (chrom, pos)
+            if key in pos_lookup and sample_rsid not in results:
+                row = pos_lookup[key]
+                results[sample_rsid] = ClinVarAnnotation(
+                    rsid=sample_rsid,
+                    clinvar_significance=row.significance,
+                    clinvar_review_stars=row.review_stars or 0,
+                    clinvar_accession=row.accession,
+                    clinvar_conditions=row.conditions,
+                    matched_by="chrom_pos",
+                )
+
+    return results
+
+
+def annotate_sample_clinvar(
+    sample_engine: sa.Engine,
+    reference_engine: sa.Engine,
+) -> AnnotationResult:
+    """Annotate a sample's variants with ClinVar data.
+
+    Reads all raw_variants from the sample database, matches them
+    against clinvar_variants in reference.db (rsid first, then
+    chrom/pos fallback), and upserts results into annotated_variants
+    with bitmask bit 1 set.
+
+    Args:
+        sample_engine: SQLAlchemy engine for the per-sample database.
+        reference_engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        AnnotationResult with match statistics.
+    """
+    result = AnnotationResult()
+
+    # 1. Read all raw variants from the sample
+    with sample_engine.connect() as conn:
+        raw_rows = conn.execute(
+            sa.select(
+                raw_variants.c.rsid,
+                raw_variants.c.chrom,
+                raw_variants.c.pos,
+                raw_variants.c.genotype,
+            )
+        ).fetchall()
+
+    result.total_variants = len(raw_rows)
+    if not raw_rows:
+        return result
+
+    # Build lookup structures
+    all_rsids = [r.rsid for r in raw_rows]
+    raw_by_rsid = {r.rsid: r for r in raw_rows}
+
+    # 2. Primary match: by rsid
+    rsid_matches = lookup_clinvar_by_rsids(all_rsids, reference_engine)
+    result.matched_by_rsid = len(rsid_matches)
+
+    # 3. Fallback: by (chrom, pos) for unmatched variants
+    unmatched_positions = [
+        (r.chrom, r.pos, r.rsid)
+        for r in raw_rows
+        if r.rsid not in rsid_matches
+    ]
+    pos_matches = lookup_clinvar_by_positions(unmatched_positions, reference_engine)
+    result.matched_by_position = len(pos_matches)
+
+    # 4. Merge all matches
+    all_matches: dict[str, ClinVarAnnotation] = {**rsid_matches, **pos_matches}
+    result.not_matched = result.total_variants - result.total_matched
+
+    # 5. Upsert into annotated_variants
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    rows_to_upsert = []
+    for rsid, annot in all_matches.items():
+        raw = raw_by_rsid[rsid]
+        rows_to_upsert.append(
+            {
+                "rsid": rsid,
+                "chrom": raw.chrom,
+                "pos": raw.pos,
+                "genotype": raw.genotype,
+                "clinvar_significance": annot.clinvar_significance,
+                "clinvar_review_stars": annot.clinvar_review_stars,
+                "clinvar_accession": annot.clinvar_accession,
+                "clinvar_conditions": annot.clinvar_conditions,
+                "annotation_coverage": CLINVAR_BITMASK,
+            }
+        )
+
+    if rows_to_upsert:
+        with sample_engine.begin() as conn:
+            for batch_start in range(0, len(rows_to_upsert), BATCH_SIZE):
+                batch = rows_to_upsert[batch_start : batch_start + BATCH_SIZE]
+
+                stmt = sqlite_insert(annotated_variants).values(batch)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["rsid"],
+                    set_={
+                        "clinvar_significance": stmt.excluded.clinvar_significance,
+                        "clinvar_review_stars": stmt.excluded.clinvar_review_stars,
+                        "clinvar_accession": stmt.excluded.clinvar_accession,
+                        "clinvar_conditions": stmt.excluded.clinvar_conditions,
+                        # OR the ClinVar bit into existing coverage
+                        "annotation_coverage": sa.case(
+                            (
+                                annotated_variants.c.annotation_coverage.is_(None),
+                                stmt.excluded.annotation_coverage,
+                            ),
+                            else_=annotated_variants.c.annotation_coverage.op("|")(
+                                CLINVAR_BITMASK
+                            ),
+                        ),
+                    },
+                )
+                conn.execute(stmt)
+
+        result.rows_written = len(rows_to_upsert)
+
+    # WAL checkpoint after annotation
+    _wal_checkpoint(sample_engine)
+
+    logger.info(
+        "clinvar_annotation_complete",
+        total=result.total_variants,
+        rsid_matches=result.matched_by_rsid,
+        pos_matches=result.matched_by_position,
+        unmatched=result.not_matched,
+    )
+
+    return result
