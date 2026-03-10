@@ -9,6 +9,7 @@
  */
 
 import { Upload, FlaskConical, SearchX, ShieldAlert, Dna } from "lucide-react"
+import { FILTER_SUGGESTIONS } from "./filterSuggestions"
 
 // ── Shared wrapper ──────────────────────────────────────────────────
 
@@ -90,11 +91,6 @@ export function PreAnnotationEmpty({
 }
 
 // ── 3. No filter match empty state ──────────────────────────────────
-
-const FILTER_SUGGESTIONS = [
-  { label: "Pathogenic only", filter: "clinvar_significance:Pathogenic" },
-  { label: "Rare variants", filter: "rare_flag:1" },
-] as const
 
 export function NoMatchEmpty({
   searchQuery,

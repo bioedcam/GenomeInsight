@@ -2,6 +2,7 @@
 
 import { Search, Eye, EyeOff, X } from "lucide-react"
 import ColumnPresets from "./ColumnPresets"
+import { filterLabel } from "./filterSuggestions"
 
 interface VariantToolbarProps {
   searchQuery: string
@@ -16,15 +17,6 @@ interface VariantToolbarProps {
   onPresetChange: (presetName: string | null, columns: string[] | null) => void
   activeFilter?: string
   onClearFilter?: () => void
-}
-
-/** Human-readable label for a filter string like "clinvar_significance:Pathogenic". */
-function filterLabel(filter: string): string {
-  const labels: Record<string, string> = {
-    "clinvar_significance:Pathogenic": "Pathogenic only",
-    "rare_flag:1": "Rare variants",
-  }
-  return labels[filter] ?? filter
 }
 
 export default function VariantToolbar({
