@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Dna, Sun, Moon, Monitor, Search } from 'lucide-react'
+import SampleSwitcher from './SampleSwitcher'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -47,10 +48,8 @@ export default function TopNav() {
 
       <div className="flex-1" />
 
-      {/* Sample selector placeholder */}
-      <div className="text-sm text-muted-foreground hidden sm:block">
-        No sample loaded
-      </div>
+      {/* Sample switcher (P1-16) */}
+      <SampleSwitcher />
 
       {/* Command palette trigger placeholder */}
       <button
