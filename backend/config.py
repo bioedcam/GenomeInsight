@@ -113,9 +113,7 @@ class Settings(BaseSettings):
         if TomlConfigSettingsSource is not None:
             toml_path = DEFAULT_DATA_DIR / "config.toml"
             if toml_path.exists():
-                sources.append(
-                    TomlConfigSettingsSource(settings_cls, toml_file=toml_path)
-                )
+                sources.append(TomlConfigSettingsSource(settings_cls, toml_file=toml_path))
         sources.append(dotenv_settings)
         return tuple(sources)
 
