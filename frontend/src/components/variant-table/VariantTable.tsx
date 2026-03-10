@@ -1,6 +1,7 @@
 /** Variant table core: TanStack Table + infinite scroll + useInfiniteQuery (P1-15a).
  *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b).
- *  Column preset profiles (P1-15c). */
+ *  Column preset profiles (P1-15c).
+ *  Contextual empty states (P1-15e). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -18,6 +19,12 @@ import { allColumns } from "./columns"
 import VariantToolbar from "./VariantToolbar"
 import ChromosomeNav from "./ChromosomeNav"
 import { ALWAYS_VISIBLE } from "./ColumnPresets"
+import {
+  PreUploadEmpty,
+  PreAnnotationEmpty,
+  NoMatchEmpty,
+  ErrorEmpty,
+} from "./EmptyStates"
 
 interface VariantTableProps {
   sampleId: number | null
@@ -42,6 +49,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [showUnannotated, setShowUnannotated] = useState(false)
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [startChrom, setStartChrom] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined)
 
   // Column preset state from URL param (P1-15c)
   const [activePreset, setActivePreset] = useState<string | null>(() => {
@@ -90,8 +98,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     [allColumnIds],
   )
 
-  // Build filter string from search query.
-  const filter = undefined
+  // Server-side filter string (set by quick-apply suggestions in P1-15e).
+  const filter = activeFilter
 
   const {
     data,
@@ -189,27 +197,23 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     return () => observer.disconnect()
   }, [handleIntersect])
 
-  // Empty states
+  // Detect pre-annotation state (P1-15e): sample has raw variants but none annotated.
+  // When showUnannotated is off (default), annotated count = 0 but total > 0.
+  const isPreAnnotation = useMemo(() => {
+    if (showUnannotated || searchQuery || activeFilter) return false
+    if (totalVariants == null || totalVariants === 0) return false
+    // countData is filtered by annotation_coverage:notnull — if 0, no annotated variants
+    if (countData && countData.total === 0) return true
+    return false
+  }, [showUnannotated, searchQuery, activeFilter, totalVariants, countData])
+
+  // Empty states (P1-15e)
   if (sampleId == null) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg text-muted-foreground">Upload a file to get started</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Go to the Dashboard to upload a 23andMe raw data file.
-        </p>
-      </div>
-    )
+    return <PreUploadEmpty />
   }
 
   if (status === "error") {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg text-destructive">Error loading variants</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {error?.message ?? "An unexpected error occurred."}
-        </p>
-      </div>
-    )
+    return <ErrorEmpty message={error?.message ?? "An unexpected error occurred."} />
   }
 
   return (
@@ -232,6 +236,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         isLoading={status === "pending"}
         activePreset={activePreset}
         onPresetChange={handlePresetChange}
+        activeFilter={activeFilter}
+        onClearFilter={() => setActiveFilter(undefined)}
       />
 
       <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
@@ -263,28 +269,24 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
               </tr>
             ) : allRows.length === 0 ? (
               <tr>
-                <td colSpan={table.getAllColumns().length} className="text-center py-12">
-                  <p className="text-muted-foreground">No variants match your filters</p>
-                  <div className="flex gap-2 justify-center mt-3">
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="px-3 py-1 text-xs rounded-md border border-input bg-background hover:bg-accent text-foreground"
-                      >
-                        Clear search
-                      </button>
-                    )}
-                    {!showUnannotated && (
-                      <button
-                        type="button"
-                        onClick={() => setShowUnannotated(true)}
-                        className="px-3 py-1 text-xs rounded-md border border-input bg-background hover:bg-accent text-foreground"
-                      >
-                        Show unannotated
-                      </button>
-                    )}
-                  </div>
+                <td colSpan={table.getAllColumns().length}>
+                  {isPreAnnotation ? (
+                    <PreAnnotationEmpty
+                      totalVariants={totalVariants ?? 0}
+                      onShowUnannotated={() => setShowUnannotated(true)}
+                    />
+                  ) : (
+                    <NoMatchEmpty
+                      searchQuery={searchQuery}
+                      hasActiveFilter={!!activeFilter}
+                      onClearSearch={() => setSearchQuery("")}
+                      onClearFilters={() => setActiveFilter(undefined)}
+                      onApplyFilter={(f) => {
+                        setActiveFilter(f)
+                        setShowUnannotated(true)
+                      }}
+                    />
+                  )}
                 </td>
               </tr>
             ) : (

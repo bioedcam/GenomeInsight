@@ -1,7 +1,8 @@
-/** Variant table toolbar: search + unannotated toggle + preset selector (P1-15a, P1-15c). */
+/** Variant table toolbar: search + unannotated toggle + preset selector + filter badge (P1-15a, P1-15c, P1-15e). */
 
-import { Search, Eye, EyeOff } from "lucide-react"
+import { Search, Eye, EyeOff, X } from "lucide-react"
 import ColumnPresets from "./ColumnPresets"
+import { filterLabel } from "./filterSuggestions"
 
 interface VariantToolbarProps {
   searchQuery: string
@@ -14,6 +15,8 @@ interface VariantToolbarProps {
   isLoading: boolean
   activePreset: string | null
   onPresetChange: (presetName: string | null, columns: string[] | null) => void
+  activeFilter?: string
+  onClearFilter?: () => void
 }
 
 export default function VariantToolbar({
@@ -27,6 +30,8 @@ export default function VariantToolbar({
   isLoading,
   activePreset,
   onPresetChange,
+  activeFilter,
+  onClearFilter,
 }: VariantToolbarProps) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-card">
@@ -65,6 +70,19 @@ export default function VariantToolbar({
           {unannotatedCount != null && ` (${unannotatedCount.toLocaleString()})`}
         </span>
       </button>
+
+      {/* Active filter badge (P1-15e) */}
+      {activeFilter && onClearFilter && (
+        <button
+          type="button"
+          onClick={onClearFilter}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          aria-label={`Clear filter: ${filterLabel(activeFilter)}`}
+        >
+          {filterLabel(activeFilter)}
+          <X className="h-3 w-3" />
+        </button>
+      )}
 
       {/* Column preset selector (P1-15c) */}
       <ColumnPresets activePreset={activePreset} onPresetChange={onPresetChange} />
