@@ -1,4 +1,4 @@
-/** React Query hooks for the variant table API (P1-15a, P1-15b). */
+/** React Query hooks for the variant table API (P1-15a, P1-15b, P1-15d). */
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import type {
@@ -131,17 +131,19 @@ export function useChromosomeCounts(sampleId: number | null) {
   })
 }
 
-function buildEffectiveFilter(filter?: string, _showUnannotated?: boolean): string | undefined {
-  // TODO(P1-15a): When API supports IS NOT NULL filters, add annotation_coverage filter here.
-  // Currently unannotated filtering is done client-side in VariantTable.
-  return filter || undefined
+function buildEffectiveFilter(filter?: string, showUnannotated?: boolean): string | undefined {
+  const parts: string[] = []
+  if (filter) parts.push(filter)
+  // When unannotated variants are hidden, ask the server to count only annotated rows.
+  if (!showUnannotated) {
+    parts.push("annotation_coverage:notnull")
+  }
+  return parts.length > 0 ? parts.join(",") : undefined
 }
 
 /**
- * Total variant count for the sample.
+ * Total variant count for the sample (unfiltered).
  * Used to display count in the unannotated toggle label.
- * TODO: When API supports annotation_coverage IS NULL filter,
- * implement actual unannotated-only count.
  */
 export function useTotalVariantCount(sampleId: number | null) {
   return useQuery({
