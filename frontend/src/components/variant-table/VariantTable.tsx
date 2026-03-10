@@ -51,6 +51,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
 
   // Fetch presets to resolve initial URL param
   const { data: presets } = useColumnPresets()
+  // TanStack Table accessor columns store their ID in `accessorKey` rather than `id`.
+  // The union type doesn't expose accessorKey directly, so we cast through `any`.
   const allColumnIds = useMemo(
     () => allColumns.map((c) => c.id ?? (c as any).accessorKey as string).filter(Boolean),
     [],
