@@ -264,7 +264,6 @@ def _reject_non_23andme(lines: list[str]) -> None:
 
 def _detect_version_from_header(
     comment_lines: list[str],
-    has_column_header: bool,
 ) -> FormatVersion:
     """Determine the 23andMe format version from collected comment lines."""
     lower_comments = " ".join(comment_lines).lower()
@@ -317,7 +316,7 @@ def detect_format(file_or_path: str | Path | TextIO) -> FormatVersion:
     if not has_column_header:
         _reject_non_23andme(lines)
 
-    return _detect_version_from_header(comment_lines, has_column_header)
+    return _detect_version_from_header(comment_lines)
 
 
 def parse_23andme(file_or_path: str | Path | TextIO) -> ParseResult:
@@ -328,6 +327,9 @@ def parse_23andme(file_or_path: str | Path | TextIO) -> ParseResult:
 
     Raises
     ------
+    ValueError
+        If *file_or_path* is a non-seekable TextIO stream (wrap in
+        ``io.StringIO(stream.read())`` first).
     UnsupportedFormatError
         If the file is not a 23andMe raw-data file.
     UnrecognizedVersionError
@@ -337,6 +339,14 @@ def parse_23andme(file_or_path: str | Path | TextIO) -> ParseResult:
         If a data line has an invalid structure (wrong column count,
         bad chromosome, non-numeric position, etc.).
     """
+    # Reject non-seekable streams to prevent silent data loss.
+    if not isinstance(file_or_path, (str, Path)):
+        if not (hasattr(file_or_path, "seekable") and file_or_path.seekable()):
+            raise ValueError(
+                "TextIO streams must be seekable. Wrap non-seekable streams "
+                "in io.StringIO(stream.read()) before calling parse_23andme."
+            )
+
     # -- Detect version first (rewinds / re-opens as needed) ---------------
     version = detect_format(file_or_path)
 

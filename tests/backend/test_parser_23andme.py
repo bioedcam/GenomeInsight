@@ -6,7 +6,6 @@ Covers test IDs: T1-01, T1-01a, T1-01b, T1-01c, T1-02, T1-03, T1-04, T1-05.
 from __future__ import annotations
 
 import io
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -151,12 +150,11 @@ class TestNon23andMeDetection:
         with pytest.raises(UnsupportedFormatError, match="comma-separated"):
             parse_23andme(CSV_FILE)
 
-    def test_rejects_binary_with_message(self) -> None:
-        with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
-            f.write(b"\x00\x01\x02\xff" * 100)
-            f.flush()
-            with pytest.raises(UnsupportedFormatError, match="binary"):
-                parse_23andme(f.name)
+    def test_rejects_binary_with_message(self, tmp_path: Path) -> None:
+        bin_file = tmp_path / "test.bin"
+        bin_file.write_bytes(b"\x00\x01\x02\xff" * 100)
+        with pytest.raises(UnsupportedFormatError, match="binary"):
+            parse_23andme(bin_file)
 
     def test_rejects_unknown_format_with_message(self) -> None:
         content = "some random text\nwithout any structure\nat all\n"
