@@ -1,11 +1,11 @@
 import { useSearchParams } from "react-router-dom"
 import FileUpload from "@/components/upload/FileUpload"
 import { useSamples } from "@/api/samples"
+import { formatFileFormat, parseSampleId } from "@/lib/format"
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const rawId = searchParams.get("sample_id")
-  const activeSampleId = rawId ? Number(rawId) : null
+  const activeSampleId = parseSampleId(searchParams.get("sample_id"))
 
   const { data: samples } = useSamples()
   const activeSample = samples?.find((s) => s.id === activeSampleId)
@@ -19,11 +19,7 @@ export default function Dashboard() {
           <div className="rounded-lg border bg-card p-4">
             <h2 className="text-lg font-semibold">{activeSample.name}</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {activeSample.file_format
-                ? activeSample.file_format
-                    .replace("23andme_", "23andMe ")
-                    .toUpperCase()
-                : "Unknown format"}
+              {formatFileFormat(activeSample.file_format)}
               {activeSample.created_at && (
                 <>
                   {" · Uploaded "}

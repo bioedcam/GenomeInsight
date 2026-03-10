@@ -8,12 +8,12 @@ import { useState, useRef, useEffect } from "react"
 import { useSearchParams } from "react-router-dom"
 import { ChevronDown, FlaskConical, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatFileFormat, parseSampleId } from "@/lib/format"
 import { useSamples } from "@/api/samples"
 
 export default function SampleSwitcher() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const rawId = searchParams.get("sample_id")
-  const activeSampleId = rawId ? Number(rawId) : null
+  const activeSampleId = parseSampleId(searchParams.get("sample_id"))
 
   const { data: samples, isLoading } = useSamples()
   const [open, setOpen] = useState(false)
@@ -121,9 +121,7 @@ export default function SampleSwitcher() {
               <div className="flex-1 min-w-0">
                 <div className="truncate font-medium">{sample.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {sample.file_format
-                    ? sample.file_format.replace("23andme_", "23andMe ").toUpperCase()
-                    : "Unknown format"}
+                  {formatFileFormat(sample.file_format)}
                   {sample.created_at && (
                     <>
                       {" · "}

@@ -4,10 +4,11 @@ import { useState, useRef, useCallback } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatFileFormat } from "@/lib/format"
 import { useIngestFile } from "@/api/samples"
 import type { IngestResult } from "@/types/samples"
 
-type UploadState = "idle" | "dragging" | "uploading" | "parsing" | "complete" | "error"
+type UploadState = "idle" | "dragging" | "uploading" | "complete" | "error"
 
 export default function FileUpload() {
   const [state, setState] = useState<UploadState>("idle")
@@ -27,8 +28,6 @@ export default function FileUpload() {
       setState("uploading")
 
       try {
-        // Brief uploading state, then parsing
-        setState("parsing")
         const res = await ingestMutation.mutateAsync(file)
         setResult(res)
         setState("complete")
@@ -36,14 +35,17 @@ export default function FileUpload() {
         // Update URL with the new sample_id so other components pick it up
         setSearchParams({ sample_id: String(res.sample_id) })
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Upload failed"
-        // Try to parse FastAPI error detail
-        try {
-          const parsed = JSON.parse(message)
-          setError(parsed.detail || message)
-        } catch {
-          setError(message)
+        const raw = err instanceof Error ? err.message : "Upload failed"
+        // FastAPI errors come as JSON with a detail field
+        if (raw.trimStart().startsWith("{")) {
+          try {
+            const parsed = JSON.parse(raw)
+            setError(parsed.detail || raw)
+          } catch {
+            setError(raw)
+          }
+        } else {
+          setError(raw)
         }
         setState("error")
       }
@@ -128,8 +130,8 @@ export default function FileUpload() {
     )
   }
 
-  // Uploading / parsing — show progress
-  if (state === "uploading" || state === "parsing") {
+  // Uploading — show progress
+  if (state === "uploading") {
     return (
       <div className="border rounded-lg p-6 text-center">
         <Loader2 className="h-8 w-8 mx-auto mb-3 text-primary animate-spin" />
@@ -138,12 +140,12 @@ export default function FileUpload() {
           {fileName}
         </p>
         <p className="text-xs text-muted-foreground mt-2">
-          {state === "uploading" ? "Uploading..." : "Parsing variants..."}
+          Uploading and parsing variants...
         </p>
         <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden max-w-xs mx-auto">
           <div
             className="h-full bg-primary rounded-full transition-all duration-500 animate-pulse"
-            style={{ width: state === "uploading" ? "30%" : "70%" }}
+            style={{ width: "50%" }}
           />
         </div>
       </div>
@@ -165,7 +167,7 @@ export default function FileUpload() {
               {result.variant_count.toLocaleString()} variants parsed
               {result.nocall_count > 0 && ` · ${result.nocall_count.toLocaleString()} no-calls`}
               {" · "}
-              {result.file_format.replace("23andme_", "23andMe ").toUpperCase()}
+              {formatFileFormat(result.file_format)}
             </p>
             <div className="flex gap-2 mt-3">
               <button

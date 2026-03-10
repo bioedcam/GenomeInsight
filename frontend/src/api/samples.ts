@@ -9,7 +9,7 @@ export function useSamples() {
     queryFn: async (): Promise<Sample[]> => {
       const res = await fetch("/api/samples")
       if (!res.ok) throw new Error("Failed to fetch samples")
-      return res.json()
+      return await res.json()
     },
     staleTime: 0,
   })
@@ -21,7 +21,7 @@ export function useSample(sampleId: number | null) {
     queryFn: async (): Promise<Sample> => {
       const res = await fetch(`/api/samples/${sampleId}`)
       if (!res.ok) throw new Error("Failed to fetch sample")
-      return res.json()
+      return await res.json()
     },
     enabled: sampleId != null,
   })
@@ -41,7 +41,7 @@ export function useIngestFile() {
         const text = await res.text().catch(() => "")
         throw new Error(text || `Upload failed: ${res.status}`)
       }
-      return res.json()
+      return await res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["samples"] })

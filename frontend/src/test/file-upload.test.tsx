@@ -51,11 +51,6 @@ describe("FileUpload", () => {
       dataTransfer: { files: [file] },
     })
 
-    // Should show parsing state
-    await waitFor(() => {
-      expect(screen.getByText(/parsing variants/i)).toBeInTheDocument()
-    })
-
     // Should show success
     await waitFor(() => {
       expect(screen.getByText(/600,000 variants parsed/i)).toBeInTheDocument()
