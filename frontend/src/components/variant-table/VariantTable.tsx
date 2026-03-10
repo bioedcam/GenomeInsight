@@ -1,4 +1,5 @@
-/** Variant table core: TanStack Table + infinite scroll + useInfiniteQuery (P1-15a). */
+/** Variant table core: TanStack Table + infinite scroll + useInfiniteQuery (P1-15a).
+ *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -9,10 +10,11 @@ import {
 } from "@tanstack/react-table"
 import { Loader2 } from "lucide-react"
 
-import { useVariants, useVariantsCount, useTotalVariantCount } from "@/api/variants"
+import { useVariants, useVariantsCount, useTotalVariantCount, useChromosomeCounts } from "@/api/variants"
 import type { VariantRow } from "@/types/variants"
 import { allColumns } from "./columns"
 import VariantToolbar from "./VariantToolbar"
+import ChromosomeNav from "./ChromosomeNav"
 
 interface VariantTableProps {
   sampleId: number | null
@@ -22,6 +24,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [showUnannotated, setShowUnannotated] = useState(false)
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [startChrom, setStartChrom] = useState<string | null>(null)
 
   // Build filter string from search query.
   // The API doesn't support rsid/gene search directly in filters yet,
@@ -36,7 +39,11 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     isFetchingNextPage,
     status,
     error,
-  } = useVariants({ sampleId, filter, showUnannotated })
+  } = useVariants({ sampleId, filter, showUnannotated, startChrom })
+
+  // Chromosome counts for the nav bar (P1-15b)
+  const { data: chromCounts, isLoading: chromCountsLoading } =
+    useChromosomeCounts(sampleId)
 
   const { data: countData, isLoading: countLoading } = useVariantsCount({
     sampleId,
@@ -45,6 +52,26 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   })
 
   const { data: totalVariants } = useTotalVariantCount(sampleId)
+
+  // Derive current chromosome from the first visible row (P1-15b)
+  const activeChrom = useMemo(() => {
+    if (!data?.pages?.length) return null
+    const firstPage = data.pages[0]
+    if (!firstPage?.items?.length) return null
+    return firstPage.items[0].chrom
+  }, [data?.pages])
+
+  // Jump to a chromosome: reset infinite query by changing startChrom
+  const tableContainerRef = useRef<HTMLElement>(null)
+
+  const handleJumpToChrom = useCallback(
+    (chrom: string) => {
+      setStartChrom(chrom)
+      // Scroll the table container back to top
+      tableContainerRef.current?.scrollTo({ top: 0, behavior: "instant" })
+    },
+    [],
+  )
 
   // Flatten pages into a single array
   const allRows = useMemo(() => {
@@ -126,6 +153,13 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
 
   return (
     <div className="flex flex-col h-full">
+      <ChromosomeNav
+        chromosomeCounts={chromCounts}
+        isLoading={chromCountsLoading}
+        activeChrom={activeChrom}
+        onJumpToChrom={handleJumpToChrom}
+      />
+
       <VariantToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -137,7 +171,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         isLoading={status === "pending"}
       />
 
-      <section className="flex-1 overflow-auto" aria-label="Variant table">
+      <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-card border-b border-border">
             {table.getHeaderGroups().map((headerGroup) => (

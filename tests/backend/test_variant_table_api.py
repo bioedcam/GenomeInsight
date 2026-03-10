@@ -383,3 +383,68 @@ class TestLimitValidation:
         data = response.json()
         assert len(data["items"]) == 1
         assert data["has_more"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/variants/chromosomes (P1-15b)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestChromosomeCounts:
+    """GET /api/variants/chromosomes returns per-chromosome variant counts."""
+
+    def test_returns_200(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/chromosomes?sample_id={sid}")
+        assert response.status_code == 200
+
+    def test_returns_all_chromosomes_with_data(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/chromosomes?sample_id={sid}")
+        data = response.json()
+        chroms = {item["chrom"] for item in data}
+        # TEST_VARIANTS has: 1, 2, 10, 15, 19, 22, X, MT
+        expected = {"1", "2", "10", "15", "19", "22", "X", "MT"}
+        assert chroms == expected
+
+    def test_returns_correct_counts(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/chromosomes?sample_id={sid}")
+        data = response.json()
+        count_map = {item["chrom"]: item["count"] for item in data}
+        assert count_map["1"] == 3  # rs100, rs101, rs102
+        assert count_map["2"] == 2  # rs200, rs201
+        assert count_map["10"] == 1
+        assert count_map["X"] == 1
+        assert count_map["MT"] == 1
+
+    def test_canonical_order(self, client_with_sample):
+        """Chromosomes should be returned in canonical sort order."""
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/chromosomes?sample_id={sid}")
+        data = response.json()
+        chroms = [item["chrom"] for item in data]
+        assert chroms == ["1", "2", "10", "15", "19", "22", "X", "MT"]
+
+    def test_with_filter(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(
+            f"/api/variants/chromosomes?sample_id={sid}&filter=genotype:AA"
+        )
+        data = response.json()
+        count_map = {item["chrom"]: item["count"] for item in data}
+        # AA genotype: rs100 (chr1), rs1000 (chr10), rsX001 (chrX)
+        assert count_map["1"] == 1
+        assert count_map["10"] == 1
+        assert count_map["X"] == 1
+        assert "2" not in count_map  # no AA on chr2
+
+    def test_nonexistent_sample_returns_404(self, client_with_sample):
+        client, _ = client_with_sample
+        response = client.get("/api/variants/chromosomes?sample_id=999")
+        assert response.status_code == 404
+
+    def test_missing_sample_id_returns_422(self, client_with_sample):
+        client, _ = client_with_sample
+        response = client.get("/api/variants/chromosomes")
+        assert response.status_code == 422

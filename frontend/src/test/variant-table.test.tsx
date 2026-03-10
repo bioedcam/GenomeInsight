@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor } from "./test-utils"
 import userEvent from "@testing-library/user-event"
 import VariantTable from "@/components/variant-table/VariantTable"
-import type { VariantPage, VariantCount } from "@/types/variants"
+import type { VariantPage, VariantCount, ChromosomeSummary } from "@/types/variants"
 
 // Mock fetch globally
 const mockFetch = vi.fn()
@@ -48,8 +48,22 @@ function makeCountResponse(total: number): VariantCount {
   return { total, filtered: false }
 }
 
-function setupFetchMock(page: VariantPage, count: VariantCount) {
+const defaultChromCounts: ChromosomeSummary[] = [
+  { chrom: "1", count: 50000 },
+  { chrom: "2", count: 45000 },
+  { chrom: "3", count: 35000 },
+  { chrom: "X", count: 10000 },
+]
+
+function setupFetchMock(
+  page: VariantPage,
+  count: VariantCount,
+  chromCounts: ChromosomeSummary[] = defaultChromCounts,
+) {
   mockFetch.mockImplementation(async (url: string) => {
+    if (url.includes("/api/variants/chromosomes")) {
+      return { ok: true, json: async () => chromCounts }
+    }
     if (url.includes("/api/variants/count")) {
       return { ok: true, json: async () => count }
     }
@@ -114,6 +128,7 @@ describe("VariantTable", () => {
     mockFetch.mockImplementation(async () => ({
       ok: false,
       status: 500,
+      text: async () => "Internal Server Error",
     }))
 
     render(<VariantTable sampleId={1} />)
@@ -184,7 +199,8 @@ describe("VariantTable", () => {
     await waitFor(() => {
       expect(screen.getByText("rsID")).toBeInTheDocument()
     })
-    expect(screen.getByText("Chr")).toBeInTheDocument()
+    // "Chr" appears in both the chromosome nav label and the table header
+    expect(screen.getAllByText("Chr").length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText("Position")).toBeInTheDocument()
     expect(screen.getByText("Genotype")).toBeInTheDocument()
     expect(screen.getByText("Gene")).toBeInTheDocument()
@@ -275,5 +291,90 @@ describe("VariantToolbar", () => {
         screen.getByRole("textbox", { name: "Search variants by rsid or gene" }),
       ).toBeInTheDocument()
     })
+  })
+})
+
+describe("ChromosomeNav (P1-15b)", () => {
+  it("renders chromosome navigation bar", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("toolbar", { name: "Chromosome navigation" })).toBeInTheDocument()
+    })
+  })
+
+  it("shows chromosome buttons with variant counts in title", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      const chr1Button = screen.getByRole("button", { name: /^jump to chromosome 1,/i })
+      expect(chr1Button).toBeInTheDocument()
+      expect(chr1Button).toHaveAttribute("title", "Chromosome 1: 50,000 variants")
+    })
+  })
+
+  it("disables chromosomes with no data", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      // Chromosome 4 is not in our mock data, should be disabled
+      const chr4Button = screen.getByRole("button", { name: /^jump to chromosome 4$/i })
+      expect(chr4Button).toBeDisabled()
+    })
+  })
+
+  it("highlights the active chromosome", async () => {
+    const page = makeVariantPage(2) // all items on chrom "1"
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      const chr1Button = screen.getByRole("button", { name: /^jump to chromosome 1,/i })
+      expect(chr1Button).toHaveAttribute("aria-current", "location")
+    })
+  })
+
+  it("triggers chromosome jump on click", async () => {
+    const page = makeVariantPage(3)
+    setupFetchMock(page, makeCountResponse(3))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Click chromosome X to jump
+    const chrXButton = screen.getByRole("button", { name: /^jump to chromosome x,/i })
+    await user.click(chrXButton)
+
+    // After clicking, the fetch should have been called with cursor params for chr X
+    await waitFor(() => {
+      const calls = mockFetch.mock.calls.map((c) => c[0] as string)
+      const variantCalls = calls.filter(
+        (url) => url.includes("/api/variants?") && !url.includes("count") && !url.includes("chromosomes"),
+      )
+      // Should have a call with cursor_chrom=X&cursor_pos=0
+      const jumpCall = variantCalls.find(
+        (url) => url.includes("cursor_chrom=X") && url.includes("cursor_pos=0"),
+      )
+      expect(jumpCall).toBeDefined()
+    })
+  })
+
+  it("does not render chromosome nav when no sample selected", () => {
+    render(<VariantTable sampleId={null} />)
+    expect(screen.queryByRole("toolbar", { name: "Chromosome navigation" })).not.toBeInTheDocument()
   })
 })
