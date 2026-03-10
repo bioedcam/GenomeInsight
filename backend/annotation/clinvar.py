@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 import httpx
 import sqlalchemy as sa
 import structlog
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.db.tables import annotated_variants, clinvar_variants, database_versions, raw_variants
 
@@ -675,39 +676,39 @@ def lookup_clinvar_by_rsids(
     results: dict[str, ClinVarAnnotation] = {}
 
     # Process in batches to avoid SQLite variable limit (default 999)
-    for i in range(0, len(rsids), 500):
-        batch = rsids[i : i + 500]
+    with reference_engine.connect() as conn:
+        for i in range(0, len(rsids), 500):
+            batch = rsids[i : i + 500]
 
-        stmt = (
-            sa.select(
-                clinvar_variants.c.rsid,
-                clinvar_variants.c.significance,
-                clinvar_variants.c.review_stars,
-                clinvar_variants.c.accession,
-                clinvar_variants.c.conditions,
+            stmt = (
+                sa.select(
+                    clinvar_variants.c.rsid,
+                    clinvar_variants.c.significance,
+                    clinvar_variants.c.review_stars,
+                    clinvar_variants.c.accession,
+                    clinvar_variants.c.conditions,
+                )
+                .where(clinvar_variants.c.rsid.in_(batch))
+                .order_by(
+                    clinvar_variants.c.rsid,
+                    clinvar_variants.c.review_stars.desc(),
+                )
             )
-            .where(clinvar_variants.c.rsid.in_(batch))
-            .order_by(
-                clinvar_variants.c.rsid,
-                clinvar_variants.c.review_stars.desc(),
-            )
-        )
 
-        with reference_engine.connect() as conn:
             rows = conn.execute(stmt).fetchall()
 
-        for row in rows:
-            rsid = row.rsid
-            # Keep only the first (highest review_stars) per rsid
-            if rsid not in results:
-                results[rsid] = ClinVarAnnotation(
-                    rsid=rsid,
-                    clinvar_significance=row.significance,
-                    clinvar_review_stars=row.review_stars or 0,
-                    clinvar_accession=row.accession,
-                    clinvar_conditions=row.conditions,
-                    matched_by="rsid",
-                )
+            for row in rows:
+                rsid = row.rsid
+                # Keep only the first (highest review_stars) per rsid
+                if rsid not in results:
+                    results[rsid] = ClinVarAnnotation(
+                        rsid=rsid,
+                        clinvar_significance=row.significance,
+                        clinvar_review_stars=row.review_stars or 0,
+                        clinvar_accession=row.accession,
+                        clinvar_conditions=row.conditions,
+                        matched_by="rsid",
+                    )
 
     return results
 
@@ -736,58 +737,58 @@ def lookup_clinvar_by_positions(
     results: dict[str, ClinVarAnnotation] = {}
 
     # Process in batches
-    for i in range(0, len(positions), 250):
-        batch = positions[i : i + 250]
+    with reference_engine.connect() as conn:
+        for i in range(0, len(positions), 250):
+            batch = positions[i : i + 250]
 
-        # Build OR conditions for (chrom, pos) pairs
-        conditions = [
-            sa.and_(
-                clinvar_variants.c.chrom == chrom,
-                clinvar_variants.c.pos == pos,
-            )
-            for chrom, pos, _ in batch
-        ]
+            # Build OR conditions for (chrom, pos) pairs
+            conditions = [
+                sa.and_(
+                    clinvar_variants.c.chrom == chrom,
+                    clinvar_variants.c.pos == pos,
+                )
+                for chrom, pos, _ in batch
+            ]
 
-        stmt = (
-            sa.select(
-                clinvar_variants.c.chrom,
-                clinvar_variants.c.pos,
-                clinvar_variants.c.significance,
-                clinvar_variants.c.review_stars,
-                clinvar_variants.c.accession,
-                clinvar_variants.c.conditions,
+            stmt = (
+                sa.select(
+                    clinvar_variants.c.chrom,
+                    clinvar_variants.c.pos,
+                    clinvar_variants.c.significance,
+                    clinvar_variants.c.review_stars,
+                    clinvar_variants.c.accession,
+                    clinvar_variants.c.conditions,
+                )
+                .where(sa.or_(*conditions))
+                .order_by(
+                    clinvar_variants.c.chrom,
+                    clinvar_variants.c.pos,
+                    clinvar_variants.c.review_stars.desc(),
+                )
             )
-            .where(sa.or_(*conditions))
-            .order_by(
-                clinvar_variants.c.chrom,
-                clinvar_variants.c.pos,
-                clinvar_variants.c.review_stars.desc(),
-            )
-        )
 
-        with reference_engine.connect() as conn:
             rows = conn.execute(stmt).fetchall()
 
-        # Build a lookup by (chrom, pos) → best ClinVar row
-        pos_lookup: dict[tuple[str, int], sa.Row] = {}
-        for row in rows:
-            key = (row.chrom, row.pos)
-            if key not in pos_lookup:
-                pos_lookup[key] = row
+            # Build a lookup by (chrom, pos) → best ClinVar row
+            pos_lookup: dict[tuple[str, int], sa.Row] = {}
+            for row in rows:
+                key = (row.chrom, row.pos)
+                if key not in pos_lookup:
+                    pos_lookup[key] = row
 
-        # Map back to sample rsids
-        for chrom, pos, sample_rsid in batch:
-            key = (chrom, pos)
-            if key in pos_lookup and sample_rsid not in results:
-                row = pos_lookup[key]
-                results[sample_rsid] = ClinVarAnnotation(
-                    rsid=sample_rsid,
-                    clinvar_significance=row.significance,
-                    clinvar_review_stars=row.review_stars or 0,
-                    clinvar_accession=row.accession,
-                    clinvar_conditions=row.conditions,
-                    matched_by="chrom_pos",
-                )
+            # Map back to sample rsids
+            for chrom, pos, sample_rsid in batch:
+                key = (chrom, pos)
+                if key in pos_lookup and sample_rsid not in results:
+                    row = pos_lookup[key]
+                    results[sample_rsid] = ClinVarAnnotation(
+                        rsid=sample_rsid,
+                        clinvar_significance=row.significance,
+                        clinvar_review_stars=row.review_stars or 0,
+                        clinvar_accession=row.accession,
+                        clinvar_conditions=row.conditions,
+                        matched_by="chrom_pos",
+                    )
 
     return results
 
@@ -849,8 +850,6 @@ def annotate_sample_clinvar(
     result.not_matched = result.total_variants - result.total_matched
 
     # 5. Upsert into annotated_variants
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     rows_to_upsert = []
     for rsid, annot in all_matches.items():
         raw = raw_by_rsid[rsid]

@@ -388,13 +388,20 @@ class TestAnnotateSampleClinvar:
         # Same counts both times
         assert result1.rows_written == result2.rows_written
 
-        # No duplicate rows
+        # No duplicate rows and bitmask stable
         with sample_with_variants.connect() as conn:
             count = conn.execute(
                 sa.select(sa.func.count()).select_from(annotated_variants)
             ).scalar()
+            row = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs429358"
+                )
+            ).first()
 
         assert count == result1.rows_written
+        assert row is not None
+        assert row.annotation_coverage == CLINVAR_BITMASK
 
     def test_unmatched_variants_not_in_annotated(
         self,
