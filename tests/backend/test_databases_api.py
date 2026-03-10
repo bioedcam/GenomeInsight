@@ -318,6 +318,8 @@ class TestTriggerDownload:
                 phase=db.phase,
             )
 
+        required_count = sum(1 for db in test_dbs.values() if db.required)
+
         with patch.dict(DATABASES, test_dbs, clear=True):
             resp = db_client.post(
                 "/api/databases/download",
@@ -326,7 +328,6 @@ class TestTriggerDownload:
 
         assert resp.status_code == 202
         data = resp.json()
-        required_count = sum(1 for db in DATABASES.values() if db.required)
         assert len(data["downloads"]) == required_count
 
     def test_download_creates_session(

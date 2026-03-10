@@ -9,6 +9,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -20,10 +21,11 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from backend.api.sse import _format_sse, get_job_progress
-from backend.config import get_settings
+from backend.config import Settings, get_settings
 from backend.db.connection import get_registry
 from backend.db.database_registry import (
     DATABASES,
+    DatabaseInfo,
     get_all_databases,
     get_database,
     get_database_status,
@@ -237,6 +239,7 @@ async def download_progress(session_id: str) -> StreamingResponse:
                         "message": "Job not found",
                         "error": None,
                     })
+                    all_terminal = False
                 else:
                     db_statuses.append({
                         "db_name": db_name,
@@ -298,10 +301,10 @@ def _create_job_record(engine: sa.Engine, job_id: str, db_name: str) -> None:
 def _run_download(
     *,
     dm: DownloadManager,
-    db_info: Any,
+    db_info: DatabaseInfo,
     job_id: str,
     engine: sa.Engine,
-    settings: Any,
+    settings: Settings,
 ) -> None:
     """Execute a single database download in a background thread.
 
@@ -332,7 +335,7 @@ def _run_download(
         final_dest = db_info.dest_path(settings)
         if result.dest_path != final_dest:
             final_dest.parent.mkdir(parents=True, exist_ok=True)
-            result.dest_path.replace(final_dest)
+            shutil.move(str(result.dest_path), str(final_dest))
 
         _update_job(
             engine, job_id,
