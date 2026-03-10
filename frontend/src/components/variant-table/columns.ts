@@ -78,7 +78,8 @@ export const allColumns = [
     cell: (info) => {
       const stars = info.getValue()
       if (stars == null) return ""
-      return "\u2605".repeat(stars) + "\u2606".repeat(Math.max(0, 4 - stars))
+      const clamped = Math.max(0, Math.min(4, stars))
+      return "\u2605".repeat(clamped) + "\u2606".repeat(4 - clamped)
     },
   }),
   col.accessor("gnomad_af_global", {

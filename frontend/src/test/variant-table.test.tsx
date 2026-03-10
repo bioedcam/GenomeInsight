@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor } from "./test-utils"
 import userEvent from "@testing-library/user-event"
 import VariantTable from "@/components/variant-table/VariantTable"
@@ -6,7 +6,6 @@ import type { VariantPage, VariantCount } from "@/types/variants"
 
 // Mock fetch globally
 const mockFetch = vi.fn()
-globalThis.fetch = mockFetch
 
 function makeVariantPage(
   count: number,
@@ -62,7 +61,12 @@ function setupFetchMock(page: VariantPage, count: VariantCount) {
 }
 
 beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch)
   mockFetch.mockReset()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe("VariantTable", () => {

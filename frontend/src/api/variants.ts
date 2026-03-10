@@ -30,7 +30,8 @@ async function fetchVariantPage(
   }
   const res = await fetch(`/api/variants?${params}`)
   if (!res.ok) {
-    throw new Error(`Variant fetch failed: ${res.status}`)
+    const text = await res.text().catch(() => "")
+    throw new Error(`Variant fetch failed: ${res.status}${text ? ` - ${text}` : ""}`)
   }
   return res.json()
 }
@@ -45,7 +46,8 @@ async function fetchVariantCount(
   }
   const res = await fetch(`/api/variants/count?${params}`)
   if (!res.ok) {
-    throw new Error(`Variant count failed: ${res.status}`)
+    const text = await res.text().catch(() => "")
+    throw new Error(`Variant count failed: ${res.status}${text ? ` - ${text}` : ""}`)
   }
   return res.json()
 }
@@ -95,23 +97,21 @@ export function useVariantsCount({ sampleId, filter, showUnannotated }: VariantQ
   })
 }
 
-function buildEffectiveFilter(filter?: string, showUnannotated?: boolean): string | undefined {
-  // If showing all variants (including unannotated), use filter as-is
-  if (showUnannotated) {
-    return filter || undefined
-  }
-  // Default: hide unannotated. No server-side IS NOT NULL filter available yet,
-  // so we handle this client-side by filtering out rows with annotation_coverage === null
+function buildEffectiveFilter(filter?: string, _showUnannotated?: boolean): string | undefined {
+  // TODO(P1-15a): When API supports IS NOT NULL filters, add annotation_coverage filter here.
+  // Currently unannotated filtering is done client-side in VariantTable.
   return filter || undefined
 }
 
 /**
- * Count of unannotated variants for the toggle label.
- * Queries for total count without annotation filter, minus count with annotation.
+ * Total variant count for the sample.
+ * Used to display count in the unannotated toggle label.
+ * TODO: When API supports annotation_coverage IS NULL filter,
+ * implement actual unannotated-only count.
  */
-export function useUnannotatedCount(sampleId: number | null) {
+export function useTotalVariantCount(sampleId: number | null) {
   return useQuery({
-    queryKey: ["variants-unannotated-count", sampleId],
+    queryKey: ["variants-total-count", sampleId],
     queryFn: async () => {
       if (!sampleId) return 0
       const total = await fetchVariantCount(sampleId)

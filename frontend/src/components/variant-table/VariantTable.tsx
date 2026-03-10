@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-table"
 import { Loader2 } from "lucide-react"
 
-import { useVariants, useVariantsCount, useUnannotatedCount } from "@/api/variants"
+import { useVariants, useVariantsCount, useTotalVariantCount } from "@/api/variants"
 import type { VariantRow } from "@/types/variants"
 import { allColumns } from "./columns"
 import VariantToolbar from "./VariantToolbar"
@@ -44,7 +44,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     showUnannotated,
   })
 
-  const { data: unannotatedTotal } = useUnannotatedCount(sampleId)
+  const { data: totalVariants } = useTotalVariantCount(sampleId)
 
   // Flatten pages into a single array
   const allRows = useMemo(() => {
@@ -131,13 +131,13 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         onSearchChange={setSearchQuery}
         showUnannotated={showUnannotated}
         onToggleUnannotated={() => setShowUnannotated((prev) => !prev)}
-        unannotatedCount={unannotatedTotal}
+        unannotatedCount={totalVariants}
         totalCount={countData?.total}
         totalCountLoading={countLoading}
         isLoading={status === "pending"}
       />
 
-      <div className="flex-1 overflow-auto" role="region" aria-label="Variant table">
+      <section className="flex-1 overflow-auto" aria-label="Variant table">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-card border-b border-border">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -223,7 +223,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
             <p className="text-xs text-muted-foreground">All variants loaded</p>
           )}
         </div>
-      </div>
+      </section>
     </div>
   )
 }

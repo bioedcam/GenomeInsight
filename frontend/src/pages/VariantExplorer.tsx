@@ -3,9 +3,9 @@ import VariantTable from "@/components/variant-table/VariantTable"
 
 export default function VariantExplorer() {
   const [searchParams] = useSearchParams()
-  const sampleId = searchParams.get("sample_id")
-    ? Number(searchParams.get("sample_id"))
-    : null
+  const rawId = searchParams.get("sample_id")
+  const parsed = rawId ? Number(rawId) : NaN
+  const sampleId = Number.isFinite(parsed) ? parsed : null
 
   return (
     <div className="flex flex-col h-[calc(100vh-40px)]">
