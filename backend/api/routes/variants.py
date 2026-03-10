@@ -130,10 +130,10 @@ def _chrom_sort_key(chrom: str) -> int:
 def _select_table(sample_engine: sa.Engine) -> sa.Table:
     """Choose annotated_variants if populated, else raw_variants."""
     with sample_engine.connect() as conn:
-        count = conn.execute(
-            sa.select(sa.func.count()).select_from(annotated_variants)
-        ).scalar()
-    if count and count > 0:
+        has_rows = conn.execute(
+            sa.select(sa.literal(1)).select_from(annotated_variants).limit(1)
+        ).fetchone()
+    if has_rows is not None:
         return annotated_variants
     return raw_variants
 
@@ -182,6 +182,14 @@ def _parse_filters(
     return clauses
 
 
+def _chrom_order_expr(table: sa.Table) -> sa.Case:
+    """Build CASE expression mapping chrom text to canonical sort integer."""
+    return sa.case(
+        *[(table.c.chrom == k, v) for k, v in CHROM_ORDER.items()],
+        else_=99,
+    )
+
+
 def _build_cursor_clause(
     table: sa.Table,
     cursor_chrom: str | None,
@@ -202,26 +210,17 @@ def _build_cursor_clause(
         return None
 
     cursor_order = _chrom_sort_key(cursor_chrom)
-
-    # Build a CASE expression to map chrom text to sort integer
-    chrom_order_expr = sa.case(
-        *[(table.c.chrom == k, v) for k, v in CHROM_ORDER.items()],
-        else_=99,
-    )
+    expr = _chrom_order_expr(table)
 
     return sa.or_(
-        chrom_order_expr > cursor_order,
-        sa.and_(chrom_order_expr == cursor_order, table.c.pos > cursor_pos),
+        expr > cursor_order,
+        sa.and_(expr == cursor_order, table.c.pos > cursor_pos),
     )
 
 
 def _build_order_by(table: sa.Table) -> list:
     """Build ORDER BY clause: chrom (canonical order), then pos."""
-    chrom_order_expr = sa.case(
-        *[(table.c.chrom == k, v) for k, v in CHROM_ORDER.items()],
-        else_=99,
-    )
-    return [chrom_order_expr.asc(), table.c.pos.asc()]
+    return [_chrom_order_expr(table).asc(), table.c.pos.asc()]
 
 
 def _row_to_variant(row: sa.Row, table: sa.Table) -> VariantRow:
@@ -250,7 +249,7 @@ def _row_to_variant(row: sa.Row, table: sa.Table) -> VariantRow:
 
 
 @router.get("")
-async def list_variants(
+def list_variants(
     sample_id: int = Query(..., description="Sample ID to query variants for"),
     cursor_chrom: str | None = Query(None, description="Cursor chromosome"),
     cursor_pos: int | None = Query(None, description="Cursor position"),
@@ -260,7 +259,7 @@ async def list_variants(
     """Return a page of variants using cursor-based keyset pagination.
 
     Pagination is on ``(chrom, pos)`` using canonical chromosome order
-    (1–22, X, Y, MT). Performance is O(1) at any depth — no OFFSET.
+    (1-22, X, Y, MT). Performance is O(1) at any depth - no OFFSET.
     """
     sample_engine = _get_sample_engine(sample_id)
     table = _select_table(sample_engine)
@@ -306,7 +305,7 @@ async def list_variants(
 
 
 @router.get("/count")
-async def variant_count(
+def variant_count(
     sample_id: int = Query(..., description="Sample ID to count variants for"),
     filter: str | None = Query(None, description="Filters as key:value,key:value"),
 ) -> VariantCount:
