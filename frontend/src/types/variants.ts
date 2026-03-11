@@ -59,6 +59,27 @@ export const CHROMOSOMES = [
 
 export type Chromosome = (typeof CHROMOSOMES)[number]
 
+/** Per-chromosome QC breakdown (P1-21). */
+export interface ChromosomeQCStats {
+  chrom: string
+  total: number
+  het_count: number
+  hom_count: number
+  nocall_count: number
+}
+
+/** Aggregate QC statistics for a sample (P1-21). */
+export interface QCStats {
+  total_variants: number
+  called_variants: number
+  nocall_variants: number
+  het_count: number
+  hom_count: number
+  call_rate: number
+  heterozygosity_rate: number
+  per_chromosome: ChromosomeQCStats[]
+}
+
 /** Column preset profile (P1-15c). */
 export interface ColumnPreset {
   name: string

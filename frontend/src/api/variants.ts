@@ -6,6 +6,7 @@ import type {
   VariantCount,
   VariantCursor,
   ChromosomeSummary,
+  QCStats,
 } from "@/types/variants"
 
 const PAGE_SIZE = 100
@@ -139,6 +140,27 @@ function buildEffectiveFilter(filter?: string, showUnannotated?: boolean): strin
     parts.push("annotation_coverage:notnull")
   }
   return parts.length > 0 ? parts.join(",") : undefined
+}
+
+/**
+ * QC statistics for a sample (P1-21).
+ * Returns per-chromosome het/hom/nocall breakdowns + aggregate stats.
+ */
+export function useQCStats(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["variants-qc-stats", sampleId],
+    queryFn: async (): Promise<QCStats> => {
+      const params = new URLSearchParams({ sample_id: String(sampleId!) })
+      const res = await fetch(`/api/variants/qc-stats?${params}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`QC stats failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: Infinity,
+  })
 }
 
 /**
