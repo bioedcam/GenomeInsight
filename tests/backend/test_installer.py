@@ -121,6 +121,10 @@ class TestRenderSystemdUnit:
         # Should include the Python interpreter's bin directory
         python_dir = str(Path(installer._find_python()).parent)
         assert python_dir in rendered
+        # %h should be expanded to actual home dir
+        assert "%h" not in rendered
+        home_dir = str(Path.home())
+        assert f"{home_dir}/.local/bin" in rendered
 
 
 # ── Health check ───────────────────────────────────────────

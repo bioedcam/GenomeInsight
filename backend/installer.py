@@ -193,13 +193,14 @@ def _has_systemd() -> bool:
 def _render_systemd_unit(template_path: Path, install_dir: Path) -> str:
     """Render a systemd unit template with the actual install directory."""
     content = template_path.read_text()
+    home_dir = str(Path.home())
     # Replace %h/GenomeInsight with the actual install dir
     content = content.replace("%h/GenomeInsight", str(install_dir))
-    # Ensure PATH includes common Python install locations
+    # Ensure PATH includes common Python install locations with expanded home
     python_bin_dir = str(Path(_find_python()).parent)
     content = content.replace(
         "Environment=PATH=%h/.local/bin:/usr/bin",
-        f"Environment=PATH={python_bin_dir}:%h/.local/bin:/usr/local/bin:/usr/bin",
+        f"Environment=PATH={python_bin_dir}:{home_dir}/.local/bin:/usr/local/bin:/usr/bin",
     )
     return content
 

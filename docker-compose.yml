@@ -1,8 +1,7 @@
-version: "3.8"
-
 services:
   api:
     build: .
+    image: genomeinsight:latest
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -14,7 +13,7 @@ services:
     restart: unless-stopped
 
   huey:
-    build: .
+    image: genomeinsight:latest
     volumes:
       - genomeinsight-data:/data
     environment:
