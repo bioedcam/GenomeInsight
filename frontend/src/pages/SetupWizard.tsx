@@ -5,6 +5,7 @@
  * P1-19c: Step 3 (storage path + disk space).
  * P1-19e: Step 4 (external service credentials).
  * P1-19f: Step 5 (download databases).
+ * P1-19g: Step 6 (upload sample + redirect to dashboard).
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -15,11 +16,11 @@ import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import CredentialsStep from '@/components/setup/CredentialsStep'
 import DatabasesStep from '@/components/setup/DatabasesStep'
 import StorageStep from '@/components/setup/StorageStep'
+import UploadStep from '@/components/setup/UploadStep'
 import WizardStepper, { type WizardStep } from '@/components/setup/WizardStepper'
-import { cn } from '@/lib/utils'
 import { Dna } from 'lucide-react'
 
-/** All wizard steps — stubs will be replaced as P1-19b–g are implemented. */
+/** All wizard steps (P1-19a through P1-19g). */
 const WIZARD_STEPS: WizardStep[] = [
   { id: 'disclaimer', label: 'Welcome' },
   { id: 'backup', label: 'Import' },
@@ -123,49 +124,10 @@ export default function SetupWizard() {
           <DatabasesStep onNext={handleNext} onBack={handleBack} />
         )}
 
-        {currentStep > 4 && currentStep < WIZARD_STEPS.length && (
-          <StepPlaceholder
-            step={WIZARD_STEPS[currentStep]}
-            stepNumber={currentStep}
-            onBack={handleBack}
-          />
+        {currentStep === 5 && (
+          <UploadStep onBack={handleBack} />
         )}
       </main>
-    </div>
-  )
-}
-
-/** Placeholder for wizard steps not yet implemented. */
-function StepPlaceholder({
-  step,
-  stepNumber,
-  onBack,
-}: {
-  step: WizardStep
-  stepNumber: number
-  onBack: () => void
-}) {
-  return (
-    <div className="space-y-6 text-center">
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 p-12">
-        <p className="text-lg font-medium text-foreground">
-          Step {stepNumber + 1}: {step.label}
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This step will be implemented in a future task.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onBack}
-        className={cn(
-          'rounded-lg border border-border px-5 py-2.5 text-sm font-medium',
-          'text-foreground hover:bg-accent transition-colors',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-        )}
-      >
-        Back
-      </button>
     </div>
   )
 }

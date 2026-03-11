@@ -113,3 +113,13 @@ export interface DownloadProgressData {
   session_id: string
   databases: DatabaseProgressEvent[]
 }
+
+// ── P1-19g: Upload sample file ──────────────────────────────────
+
+export interface IngestResult {
+  sample_id: number
+  job_id: string
+  variant_count: number
+  nocall_count: number
+  file_format: string
+}

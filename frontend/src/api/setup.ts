@@ -8,6 +8,7 @@ import type {
   DetectExistingResult,
   DisclaimerData,
   ImportBackupResult,
+  IngestResult,
   SaveCredentialsResult,
   SetStoragePathResult,
   SetupStatus,
@@ -229,5 +230,32 @@ export function useDatabaseList() {
 export function useTriggerDownload() {
   return useMutation({
     mutationFn: postTriggerDownload,
+  })
+}
+
+// ── P1-19g: Upload sample file ──────────────────────────────────
+
+async function postIngestFile(file: File): Promise<IngestResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/ingest', {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail || `Upload failed: ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function useIngestFile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: postIngestFile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
+    },
   })
 }
