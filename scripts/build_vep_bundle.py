@@ -399,7 +399,7 @@ def parse_vep_vcf(
 
                 # Determine which ALT allele this CSQ entry is for
                 csq_allele = csq.get("Allele", "")
-                alt = csq_allele if csq_allele else (alts[0] if alts else "")
+                alt = csq_allele if csq_allele else (alts[0] if alts else ref)
 
                 consequence = csq.get("Consequence", "")
                 severity = consequence_severity(consequence)
@@ -789,7 +789,7 @@ Examples:
             "ensembl_version": args.ensembl_version,
         }
         args.write_stats.parent.mkdir(parents=True, exist_ok=True)
-        with open(args.write_stats, "w") as f:
+        with open(args.write_stats, "w", encoding="utf-8") as f:
             json.dump(stats_dict, f, indent=2)
         print(f"Stats written to: {args.write_stats}")
 
