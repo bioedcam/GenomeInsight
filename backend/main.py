@@ -19,6 +19,7 @@ from backend.api.routes.setup import router as setup_router
 from backend.api.routes.variants import router as variants_router
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
+from backend.db.tables import reference_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,14 @@ VERSION = "0.1.0"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle for the FastAPI app."""
-    # Startup: initialize the DB registry (creates reference engine, etc.)
-    get_registry()
+    # Startup: ensure data directory exists before DB initialization
+    settings = get_settings()
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    (settings.data_dir / "samples").mkdir(exist_ok=True)
+    # Initialize the DB registry (creates reference engine, etc.)
+    registry = get_registry()
+    # Ensure reference tables exist (safe on existing DBs via checkfirst)
+    reference_metadata.create_all(registry.reference_engine, checkfirst=True)
     logger.info("DBRegistry initialised (reference.db engine ready)")
     yield
     # Shutdown: dispose all engines
