@@ -3,9 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   AcceptDisclaimerResult,
+  CredentialsData,
   DetectExistingResult,
   DisclaimerData,
   ImportBackupResult,
+  SaveCredentialsResult,
   SetStoragePathResult,
   SetupStatus,
   StorageInfoResult,
@@ -140,6 +142,48 @@ export function useSetStoragePath() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: STORAGE_INFO_KEY })
       queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
+    },
+  })
+}
+
+// ── P1-19e: External service credentials ────────────────────────
+
+const CREDENTIALS_KEY = ['setup', 'credentials'] as const
+
+async function fetchCredentials(): Promise<CredentialsData> {
+  const res = await fetch('/api/setup/credentials')
+  if (!res.ok) throw new Error(`Credentials fetch failed: ${res.status}`)
+  return res.json()
+}
+
+async function postSaveCredentials(data: CredentialsData): Promise<SaveCredentialsResult> {
+  const res = await fetch('/api/setup/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail || `Save credentials failed: ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function useCredentials() {
+  return useQuery({
+    queryKey: CREDENTIALS_KEY,
+    queryFn: fetchCredentials,
+    staleTime: 0,
+  })
+}
+
+export function useSaveCredentials() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: postSaveCredentials,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CREDENTIALS_KEY })
     },
   })
 }

@@ -55,3 +55,16 @@ export interface SetStoragePathResult {
   status: 'ok' | 'warning' | 'blocked'
   message: string
 }
+
+// ── P1-19e: External service credentials ────────────────────────
+
+export interface CredentialsData {
+  pubmed_email: string
+  ncbi_api_key: string
+  omim_api_key: string
+}
+
+export interface SaveCredentialsResult {
+  success: boolean
+  message: string
+}
