@@ -221,6 +221,7 @@ export default function UploadStep({ onBack }: UploadStepProps) {
           onChange={handleInputChange}
           className="hidden"
           aria-hidden="true"
+          tabIndex={-1}
         />
       </div>
 
