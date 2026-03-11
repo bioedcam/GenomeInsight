@@ -1,45 +1,81 @@
-import { useSearchParams } from "react-router-dom"
-import FileUpload from "@/components/upload/FileUpload"
-import { useSamples } from "@/api/samples"
-import { formatFileFormat, parseSampleId } from "@/lib/format"
+/** Dashboard — main landing page with status bar, module cards, findings, and QC (P1-20).
+ *
+ * Layout: status bar (40px) → module cards grid → high-confidence findings → collapsible QC.
+ * When no sample is active, shows upload prompt.
+ */
+
+import { useSearchParams } from 'react-router-dom'
+import FileUpload from '@/components/upload/FileUpload'
+import StatusBar from '@/components/dashboard/StatusBar'
+import ModuleCardsGrid from '@/components/dashboard/ModuleCardsGrid'
+import FindingsPreview from '@/components/dashboard/FindingsPreview'
+import QualityControl from '@/components/dashboard/QualityControl'
+import { useSamples } from '@/api/samples'
+import { useTotalVariantCount } from '@/api/variants'
+import { parseSampleId } from '@/lib/format'
+import { Upload } from 'lucide-react'
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const activeSampleId = parseSampleId(searchParams.get("sample_id"))
+  const activeSampleId = parseSampleId(searchParams.get('sample_id'))
 
-  const { data: samples } = useSamples()
+  const { data: samples, isLoading } = useSamples()
   const activeSample = samples?.find((s) => s.id === activeSampleId)
 
-  return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+  const { data: variantCount } = useTotalVariantCount(activeSampleId)
 
-      {activeSample ? (
-        <div className="mt-4">
-          <div className="rounded-lg border bg-card p-4">
-            <h2 className="text-lg font-semibold">{activeSample.name}</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {formatFileFormat(activeSample.file_format)}
-              {activeSample.created_at && (
-                <>
-                  {" · Uploaded "}
-                  {new Date(activeSample.created_at).toLocaleDateString()}
-                </>
-              )}
-            </p>
+  // ── Loading state: avoid flash of upload prompt ───────────
+
+  if (isLoading && activeSampleId) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  // ── No active sample: show upload prompt ──────────────────
+
+  if (!activeSample) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <div className="mt-8 flex flex-col items-center text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+            <Upload className="h-7 w-7 text-primary" />
           </div>
-          <p className="text-muted-foreground mt-4 text-sm">
-            Sample overview and analysis summary will appear here.
+          <h2 className="mt-4 text-lg font-semibold text-foreground">
+            Get Started
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md">
+            Upload a 23andMe raw data file to begin exploring your genome.
           </p>
+          <div className="mt-6 w-full max-w-md">
+            <FileUpload />
+          </div>
         </div>
-      ) : (
-        <div className="mt-6">
-          <p className="text-muted-foreground mb-4">
-            Upload a 23andMe raw data file to get started.
-          </p>
-          <FileUpload />
-        </div>
-      )}
+      </div>
+    )
+  }
+
+  // ── Active sample: full dashboard layout ──────────────────
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {/* Status bar */}
+      <StatusBar
+        sample={activeSample}
+        variantCount={variantCount ?? null}
+      />
+
+      {/* Module cards grid */}
+      <ModuleCardsGrid />
+
+      {/* High-confidence findings */}
+      <FindingsPreview />
+
+      {/* Collapsible QC */}
+      <QualityControl variantCount={variantCount ?? null} />
     </div>
   )
 }

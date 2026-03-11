@@ -12,3 +12,8 @@ export function parseSampleId(raw: string | null): number | null {
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
+
+/** Format a number with locale-appropriate separators (e.g. 623841 → "623,841"). */
+export function formatNumber(n: number): string {
+  return n.toLocaleString()
+}
