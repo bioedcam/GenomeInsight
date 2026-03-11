@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from './test-utils'
 import SetupWizard from '@/pages/SetupWizard'
+import CredentialsStep from '@/components/setup/CredentialsStep'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import StorageStep from '@/components/setup/StorageStep'
@@ -581,5 +582,246 @@ describe('StorageStep', () => {
       expect(screen.getByText('Path writable')).toBeInTheDocument()
     })
     expect(screen.getByText('No')).toBeInTheDocument()
+  })
+})
+
+// ─── CredentialsStep tests ────────────────────────────────────────
+
+function mockCredentials(overrides: Record<string, unknown> = {}) {
+  return {
+    pubmed_email: '',
+    ncbi_api_key: '',
+    omim_api_key: '',
+    ...overrides,
+  }
+}
+
+describe('CredentialsStep', () => {
+  it('renders external services heading', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('External Services')).toBeInTheDocument()
+    })
+  })
+
+  it('shows loading state initially', () => {
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByText(/loading credentials/i)).toBeInTheDocument()
+  })
+
+  it('shows PubMed email as required', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Required')).toBeInTheDocument()
+    })
+    expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+  })
+
+  it('shows NCBI API key as optional', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('NCBI API Key')).toBeInTheDocument()
+    })
+    expect(screen.getAllByText('Optional')).toHaveLength(2)
+  })
+
+  it('shows OMIM API key as optional', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('OMIM API Key')).toBeInTheDocument()
+    })
+  })
+
+  it('disables continue when email is empty', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).toBeDisabled()
+  })
+
+  it('enables continue when valid email is entered', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const emailInput = screen.getByLabelText('PubMed email address')
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).not.toBeDisabled()
+  })
+
+  it('shows validation error for invalid email', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const emailInput = screen.getByLabelText('PubMed email address')
+    fireEvent.change(emailInput, { target: { value: 'invalid-email' } })
+
+    expect(screen.getByText('Please enter a valid email address.')).toBeInTheDocument()
+  })
+
+  it('pre-fills fields from existing config', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockCredentials({
+            pubmed_email: 'existing@test.com',
+            ncbi_api_key: 'abc123',
+            omim_api_key: 'xyz789',
+          }),
+        ),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('PubMed email address')).toHaveValue('existing@test.com')
+    })
+    expect(screen.getByLabelText('NCBI API key')).toHaveValue('abc123')
+    expect(screen.getByLabelText('OMIM API key')).toHaveValue('xyz789')
+  })
+
+  it('calls onBack when Back button is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    const onBack = vi.fn()
+    render(<CredentialsStep onNext={vi.fn()} onBack={onBack} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('calls onNext after successful save', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockCredentials()),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ success: true, message: 'Credentials saved successfully.' }),
+      })
+
+    const onNext = vi.fn()
+    render(<CredentialsStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const emailInput = screen.getByLabelText('PubMed email address')
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await waitFor(() => {
+      expect(onNext).toHaveBeenCalledOnce()
+    })
+  })
+
+  it('shows error on save failure', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockCredentials()),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ detail: 'Config write failed' }),
+      })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const emailInput = screen.getByLabelText('PubMed email address')
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Config write failed')).toBeInTheDocument()
+    })
+  })
+
+  it('has external links with noopener noreferrer', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockCredentials()),
+    })
+
+    render(<CredentialsStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PubMed / NCBI Email')).toBeInTheDocument()
+    })
+
+    const links = document.querySelectorAll('a[target="_blank"]')
+    links.forEach((link) => {
+      expect(link.getAttribute('rel')).toContain('noopener')
+      expect(link.getAttribute('rel')).toContain('noreferrer')
+    })
   })
 })

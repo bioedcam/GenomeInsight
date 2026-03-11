@@ -1,4 +1,4 @@
-"""Tests for the setup wizard API (P1-19a, P1-19b).
+"""Tests for the setup wizard API (P1-19a, P1-19b, P1-19e).
 
 Covers:
 - GET /api/setup/status — first-launch detection
@@ -778,3 +778,150 @@ class TestSetStoragePath:
         )
         assert resp1.status_code == 200
         assert resp2.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1-19e: GET /api/setup/credentials
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGetCredentials:
+    """Tests for the credentials retrieval endpoint."""
+
+    def test_returns_empty_credentials_by_default(
+        self, setup_client: TestClient
+    ) -> None:
+        """Fresh install should return empty credential strings."""
+        resp = setup_client.get("/api/setup/credentials")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pubmed_email"] == ""
+        assert data["ncbi_api_key"] == ""
+        assert data["omim_api_key"] == ""
+
+    def test_returns_all_credential_fields(
+        self, setup_client: TestClient
+    ) -> None:
+        """Response should contain all three credential fields."""
+        resp = setup_client.get("/api/setup/credentials")
+        data = resp.json()
+        assert "pubmed_email" in data
+        assert "ncbi_api_key" in data
+        assert "omim_api_key" in data
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1-19e: POST /api/setup/credentials
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSaveCredentials:
+    """Tests for the credentials save endpoint."""
+
+    def test_save_credentials(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Should successfully save credentials to config.toml."""
+        resp = setup_client.post(
+            "/api/setup/credentials",
+            json={
+                "pubmed_email": "test@example.com",
+                "ncbi_api_key": "abc123",
+                "omim_api_key": "xyz789",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "saved" in data["message"].lower()
+
+        # Verify config.toml was written
+        config_path = tmp_data_dir / "config.toml"
+        assert config_path.exists()
+        content = config_path.read_text()
+        assert 'pubmed_email = "test@example.com"' in content
+        assert 'pubmed_api_key = "abc123"' in content
+        assert 'omim_api_key = "xyz789"' in content
+
+    def test_save_only_email(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Should save with only the required email."""
+        resp = setup_client.post(
+            "/api/setup/credentials",
+            json={"pubmed_email": "user@domain.com"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+
+        config_path = tmp_data_dir / "config.toml"
+        content = config_path.read_text()
+        assert 'pubmed_email = "user@domain.com"' in content
+
+    def test_save_preserves_existing_config(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Should preserve existing config entries when saving credentials."""
+        config_path = tmp_data_dir / "config.toml"
+        config_path.write_text(
+            '[genomeinsight]\ntheme = "dark"\ndata_dir = "/some/path"\n'
+        )
+
+        resp = setup_client.post(
+            "/api/setup/credentials",
+            json={"pubmed_email": "preserve@test.com"},
+        )
+        assert resp.status_code == 200
+
+        content = config_path.read_text()
+        assert 'theme = "dark"' in content
+        assert 'data_dir = "/some/path"' in content
+        assert 'pubmed_email = "preserve@test.com"' in content
+
+    def test_save_overwrites_existing_credentials(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Should overwrite previously saved credentials."""
+        # Save first set
+        setup_client.post(
+            "/api/setup/credentials",
+            json={
+                "pubmed_email": "first@test.com",
+                "ncbi_api_key": "key1",
+                "omim_api_key": "omim1",
+            },
+        )
+
+        # Save second set
+        setup_client.post(
+            "/api/setup/credentials",
+            json={
+                "pubmed_email": "second@test.com",
+                "ncbi_api_key": "key2",
+                "omim_api_key": "",
+            },
+        )
+
+        config_path = tmp_data_dir / "config.toml"
+        content = config_path.read_text()
+        assert 'pubmed_email = "second@test.com"' in content
+        assert 'pubmed_api_key = "key2"' in content
+        assert 'omim_api_key = ""' in content
+
+    def test_save_creates_data_dir_if_missing(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Should create data_dir if it doesn't exist yet."""
+        import shutil
+
+        # Remove the data dir (setup_client creates it, so remove it after)
+        shutil.rmtree(tmp_data_dir, ignore_errors=True)
+
+        resp = setup_client.post(
+            "/api/setup/credentials",
+            json={"pubmed_email": "newdir@test.com"},
+        )
+        assert resp.status_code == 200
+        assert tmp_data_dir.exists()
+        assert (tmp_data_dir / "config.toml").exists()

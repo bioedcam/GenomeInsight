@@ -1,4 +1,4 @@
-"""Setup wizard API routes (P1-19a, P1-19b, P1-19c).
+"""Setup wizard API routes (P1-19a, P1-19b, P1-19c, P1-19e).
 
 Endpoints:
     GET  /api/setup/status             — Check first-launch state and disclaimer acceptance
@@ -8,6 +8,8 @@ Endpoints:
     POST /api/setup/import-backup      — Import from .tar.gz backup archive
     GET  /api/setup/storage-info       — Get current storage path and disk space info
     POST /api/setup/set-storage-path   — Set the storage path and persist to config.toml
+    GET  /api/setup/credentials        — Get current external service credentials
+    POST /api/setup/credentials        — Save external service credentials to config.toml
 """
 
 from __future__ import annotations
@@ -567,32 +569,39 @@ async def set_storage_path(body: SetStoragePathRequest) -> SetStoragePathRespons
     )
 
 
-def _write_config_toml(config_path: Path, *, data_dir: str) -> None:
-    """Write or update config.toml with the data_dir setting.
+def _write_config_toml(
+    config_path: Path,
+    content: dict[str, dict[str, object]] | None = None,
+    *,
+    data_dir: str | None = None,
+) -> None:
+    """Write or update config.toml.
 
+    If ``content`` is provided, writes the full dict directly.
+    If only ``data_dir`` is provided, reads existing config and updates data_dir.
     Preserves existing config entries if the file already exists.
     """
-    existing_content: dict[str, dict[str, object]] = {}
-    if config_path.exists():
-        try:
-            import tomllib
+    if content is None:
+        content = {}
+        if config_path.exists():
+            try:
+                import tomllib
 
-            existing_content = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            logger.warning(
-                "config_toml_parse_failed",
-                path=str(config_path),
-                error=str(exc),
-            )
-
-    # Update the genomeinsight section
-    section = existing_content.get("genomeinsight", {})
-    section["data_dir"] = data_dir
-    existing_content["genomeinsight"] = section
+                content = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning(
+                    "config_toml_parse_failed",
+                    path=str(config_path),
+                    error=str(exc),
+                )
+        if data_dir is not None:
+            section = content.get("genomeinsight", {})
+            section["data_dir"] = data_dir
+            content["genomeinsight"] = section
 
     # Write TOML manually (tomllib is read-only, avoid tomli_w dependency)
     lines: list[str] = []
-    for table_name, table_values in existing_content.items():
+    for table_name, table_values in content.items():
         lines.append(f"[{table_name}]")
         if isinstance(table_values, dict):
             for key, value in table_values.items():
@@ -607,3 +616,91 @@ def _write_config_toml(config_path: Path, *, data_dir: str) -> None:
         lines.append("")
 
     config_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+# ── P1-19e: External service credentials ─────────────────────────
+
+
+class CredentialsResponse(BaseModel):
+    """Current external service credentials."""
+
+    pubmed_email: str
+    ncbi_api_key: str
+    omim_api_key: str
+
+
+class SaveCredentialsRequest(BaseModel):
+    """Request to save external service credentials."""
+
+    pubmed_email: str
+    ncbi_api_key: str = ""
+    omim_api_key: str = ""
+
+
+class SaveCredentialsResponse(BaseModel):
+    """Result of saving credentials."""
+
+    success: bool
+    message: str
+
+
+@router.get("/credentials", response_model=CredentialsResponse)
+async def get_credentials() -> CredentialsResponse:
+    """Get current external service credentials from config."""
+    settings = get_settings()
+    return CredentialsResponse(
+        pubmed_email=settings.pubmed_email,
+        ncbi_api_key=settings.pubmed_api_key,
+        omim_api_key=settings.omim_api_key,
+    )
+
+
+@router.post("/credentials", response_model=SaveCredentialsResponse)
+async def save_credentials(body: SaveCredentialsRequest) -> SaveCredentialsResponse:
+    """Save external service credentials to config.toml.
+
+    PubMed email is required by NCBI Terms of Service for Entrez API usage.
+    NCBI API key is optional but raises the rate limit from 3 to 10 req/sec.
+    OMIM API key is optional — enables gene-phenotype enrichment beyond MONDO/HPO.
+    """
+    settings = get_settings()
+    config_path = settings.data_dir / "config.toml"
+
+    # Ensure data dir exists
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Read existing config
+    existing_content: dict[str, dict[str, object]] = {}
+    if config_path.exists():
+        try:
+            import tomllib
+
+            existing_content = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(
+                "config_toml_parse_failed",
+                path=str(config_path),
+                error=str(exc),
+            )
+
+    # Update genomeinsight section with credentials
+    section = existing_content.get("genomeinsight", {})
+    section["pubmed_email"] = body.pubmed_email
+    section["pubmed_api_key"] = body.ncbi_api_key
+    section["omim_api_key"] = body.omim_api_key
+    existing_content["genomeinsight"] = section
+
+    # Write config using the existing helper
+    _write_config_toml(config_path, existing_content)
+
+    logger.info(
+        "credentials_saved",
+        has_pubmed_email=bool(body.pubmed_email),
+        has_ncbi_api_key=bool(body.ncbi_api_key),
+        has_omim_api_key=bool(body.omim_api_key),
+    )
+
+    return SaveCredentialsResponse(
+        success=True,
+        message="Credentials saved successfully.",
+    )
