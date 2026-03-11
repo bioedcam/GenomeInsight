@@ -1,10 +1,17 @@
 /** API hooks for the setup wizard. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AcceptDisclaimerResult, DisclaimerData, SetupStatus } from '@/types/setup'
+import type {
+  AcceptDisclaimerResult,
+  DetectExistingResult,
+  DisclaimerData,
+  ImportBackupResult,
+  SetupStatus,
+} from '@/types/setup'
 
 const SETUP_STATUS_KEY = ['setup', 'status'] as const
 const DISCLAIMER_KEY = ['setup', 'disclaimer'] as const
+const DETECT_EXISTING_KEY = ['setup', 'detect-existing'] as const
 
 async function fetchSetupStatus(): Promise<SetupStatus> {
   const res = await fetch('/api/setup/status')
@@ -46,6 +53,48 @@ export function useAcceptDisclaimer() {
     mutationFn: postAcceptDisclaimer,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
+    },
+  })
+}
+
+// ── P1-19b: Import from backup ──────────────────────────────────
+
+async function fetchDetectExisting(): Promise<DetectExistingResult> {
+  const res = await fetch('/api/setup/detect-existing')
+  if (!res.ok) throw new Error(`Detect existing failed: ${res.status}`)
+  return res.json()
+}
+
+async function postImportBackup(file: File): Promise<ImportBackupResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/setup/import-backup', {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail || `Import failed: ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function useDetectExisting() {
+  return useQuery({
+    queryKey: DETECT_EXISTING_KEY,
+    queryFn: fetchDetectExisting,
+    staleTime: 0,
+  })
+}
+
+export function useImportBackup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: postImportBackup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
+      queryClient.invalidateQueries({ queryKey: DETECT_EXISTING_KEY })
     },
   })
 }
