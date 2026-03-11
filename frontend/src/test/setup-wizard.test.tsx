@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from './test-utils'
 import SetupWizard from '@/pages/SetupWizard'
 import CredentialsStep from '@/components/setup/CredentialsStep'
+import DatabasesStep from '@/components/setup/DatabasesStep'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import StorageStep from '@/components/setup/StorageStep'
@@ -822,6 +823,411 @@ describe('CredentialsStep', () => {
     links.forEach((link) => {
       expect(link.getAttribute('rel')).toContain('noopener')
       expect(link.getAttribute('rel')).toContain('noreferrer')
+    })
+  })
+})
+
+// ─── DatabasesStep tests ────────────────────────────────────────
+
+function mockDatabaseList(overrides: Record<string, unknown> = {}) {
+  return {
+    databases: [
+      {
+        name: 'clinvar',
+        display_name: 'ClinVar',
+        description: 'Clinical variant interpretations from NCBI ClinVar',
+        filename: 'clinvar.db',
+        expected_size_bytes: 250_000_000,
+        required: true,
+        phase: 1,
+        downloaded: false,
+        file_size_bytes: null,
+      },
+      {
+        name: 'vep_bundle',
+        display_name: 'VEP Bundle',
+        description: 'Pre-computed variant effect predictions',
+        filename: 'vep_bundle.db',
+        expected_size_bytes: 500_000_000,
+        required: true,
+        phase: 2,
+        downloaded: false,
+        file_size_bytes: null,
+      },
+      {
+        name: 'ancestry_pca',
+        display_name: 'Ancestry PCA Bundle',
+        description: 'Pre-computed PCA loadings',
+        filename: 'ancestry_pca.db',
+        expected_size_bytes: 50_000_000,
+        required: false,
+        phase: 3,
+        downloaded: false,
+        file_size_bytes: null,
+      },
+    ],
+    total_size_bytes: 800_000_000,
+    downloaded_count: 0,
+    total_count: 3,
+    ...overrides,
+  }
+}
+
+describe('DatabasesStep', () => {
+  it('renders reference databases heading', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Reference Databases')).toBeInTheDocument()
+    })
+  })
+
+  it('shows loading state initially', () => {
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByText(/loading database information/i)).toBeInTheDocument()
+  })
+
+  it('shows error state on fetch failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to load database information/i)).toBeInTheDocument()
+    })
+  })
+
+  it('lists all databases with their names', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('ClinVar')).toBeInTheDocument()
+    })
+    expect(screen.getByText('VEP Bundle')).toBeInTheDocument()
+    expect(screen.getByText('Ancestry PCA Bundle')).toBeInTheDocument()
+  })
+
+  it('shows required badge for required databases', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('ClinVar')).toBeInTheDocument()
+    })
+
+    const requiredBadges = screen.getAllByText('Required')
+    expect(requiredBadges.length).toBe(2) // ClinVar + VEP Bundle
+  })
+
+  it('shows optional badge for optional databases', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Ancestry PCA Bundle')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Optional')).toBeInTheDocument()
+  })
+
+  it('shows total size and download count', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/800\.0 MB/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/0 of 3 downloaded/)).toBeInTheDocument()
+  })
+
+  it('shows Download All button when databases need downloading', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download All')).toBeInTheDocument()
+    })
+  })
+
+  it('disables Continue when required databases are not downloaded', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Reference Databases')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).toBeDisabled()
+  })
+
+  it('enables Continue when all required databases are downloaded', async () => {
+    const allDownloaded = mockDatabaseList({
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variant interpretations',
+          filename: 'clinvar.db',
+          expected_size_bytes: 250_000_000,
+          required: true,
+          phase: 1,
+          downloaded: true,
+          file_size_bytes: 248_000_000,
+        },
+        {
+          name: 'vep_bundle',
+          display_name: 'VEP Bundle',
+          description: 'Pre-computed variant effect predictions',
+          filename: 'vep_bundle.db',
+          expected_size_bytes: 500_000_000,
+          required: true,
+          phase: 2,
+          downloaded: true,
+          file_size_bytes: 495_000_000,
+        },
+        {
+          name: 'ancestry_pca',
+          display_name: 'Ancestry PCA Bundle',
+          description: 'PCA loadings',
+          filename: 'ancestry_pca.db',
+          expected_size_bytes: 50_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+        },
+      ],
+      downloaded_count: 2,
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(allDownloaded),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Reference Databases')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).not.toBeDisabled()
+  })
+
+  it('shows Downloaded status for completed databases', async () => {
+    const withDownloaded = mockDatabaseList({
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variant interpretations',
+          filename: 'clinvar.db',
+          expected_size_bytes: 250_000_000,
+          required: true,
+          phase: 1,
+          downloaded: true,
+          file_size_bytes: 248_000_000,
+        },
+      ],
+      downloaded_count: 1,
+      total_count: 1,
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(withDownloaded),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Downloaded \(248\.0 MB\)/)).toBeInTheDocument()
+    })
+  })
+
+  it('calls onBack when Back button is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    const onBack = vi.fn()
+    render(<DatabasesStep onNext={vi.fn()} onBack={onBack} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Reference Databases')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('hides Download All when no databases need downloading', async () => {
+    const allDone = mockDatabaseList({
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variant interpretations',
+          filename: 'clinvar.db',
+          expected_size_bytes: 250_000_000,
+          required: true,
+          phase: 1,
+          downloaded: true,
+          file_size_bytes: 248_000_000,
+        },
+      ],
+      downloaded_count: 1,
+      total_count: 1,
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(allDone),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('ClinVar')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Download All')).not.toBeInTheDocument()
+  })
+
+  it('shows database descriptions', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Clinical variant interpretations from NCBI ClinVar'),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('shows database sizes in human-readable format', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseList()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('250.0 MB')).toBeInTheDocument()
+    })
+    expect(screen.getByText('500.0 MB')).toBeInTheDocument()
+    expect(screen.getByText('50.0 MB')).toBeInTheDocument()
+  })
+
+  it('triggers download on Download All click', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockDatabaseList()),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            session_id: 'dbdl-test123',
+            downloads: [
+              { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc' },
+              { db_name: 'vep_bundle', job_id: 'dbdl-vep-def' },
+              { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi' },
+            ],
+          }),
+      })
+
+    // Mock EventSource
+    const mockEventSource = {
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+    }
+    vi.stubGlobal(
+      'EventSource',
+      vi.fn(() => mockEventSource),
+    )
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download All')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Download All'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Downloading...')).toBeInTheDocument()
+    })
+
+    vi.unstubAllGlobals()
+  })
+
+  it('shows download error when trigger fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockDatabaseList()),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () =>
+          Promise.resolve({ detail: 'Download service unavailable' }),
+      })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download All')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Download All'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Download service unavailable')).toBeInTheDocument()
     })
   })
 })

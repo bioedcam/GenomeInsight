@@ -4,6 +4,7 @@
  * P1-19b: Step 2 (import from backup).
  * P1-19c: Step 3 (storage path + disk space).
  * P1-19e: Step 4 (external service credentials).
+ * P1-19f: Step 5 (download databases).
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -12,6 +13,7 @@ import { useSetupStatus } from '@/api/setup'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import CredentialsStep from '@/components/setup/CredentialsStep'
+import DatabasesStep from '@/components/setup/DatabasesStep'
 import StorageStep from '@/components/setup/StorageStep'
 import WizardStepper, { type WizardStep } from '@/components/setup/WizardStepper'
 import { cn } from '@/lib/utils'
@@ -117,7 +119,11 @@ export default function SetupWizard() {
           <CredentialsStep onNext={handleNext} onBack={handleBack} />
         )}
 
-        {currentStep > 3 && currentStep < WIZARD_STEPS.length && (
+        {currentStep === 4 && (
+          <DatabasesStep onNext={handleNext} onBack={handleBack} />
+        )}
+
+        {currentStep > 4 && currentStep < WIZARD_STEPS.length && (
           <StepPlaceholder
             step={WIZARD_STEPS[currentStep]}
             stepNumber={currentStep}

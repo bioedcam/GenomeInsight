@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   AcceptDisclaimerResult,
   CredentialsData,
+  DatabaseListResult,
   DetectExistingResult,
   DisclaimerData,
   ImportBackupResult,
@@ -11,6 +12,7 @@ import type {
   SetStoragePathResult,
   SetupStatus,
   StorageInfoResult,
+  TriggerDownloadResult,
 } from '@/types/setup'
 
 const SETUP_STATUS_KEY = ['setup', 'status'] as const
@@ -185,5 +187,45 @@ export function useSaveCredentials() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CREDENTIALS_KEY })
     },
+  })
+}
+
+// ── P1-19f: Download databases ──────────────────────────────────
+
+export const DATABASE_LIST_KEY = ['setup', 'databases'] as const
+
+async function fetchDatabaseList(): Promise<DatabaseListResult> {
+  const res = await fetch('/api/databases')
+  if (!res.ok) throw new Error(`Database list failed: ${res.status}`)
+  return res.json()
+}
+
+async function postTriggerDownload(
+  databases?: string[],
+): Promise<TriggerDownloadResult> {
+  const res = await fetch('/api/databases/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ databases: databases ?? null }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail || `Download trigger failed: ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function useDatabaseList() {
+  return useQuery({
+    queryKey: DATABASE_LIST_KEY,
+    queryFn: fetchDatabaseList,
+    staleTime: 0,
+  })
+}
+
+export function useTriggerDownload() {
+  return useMutation({
+    mutationFn: postTriggerDownload,
   })
 }

@@ -68,3 +68,48 @@ export interface SaveCredentialsResult {
   success: boolean
   message: string
 }
+
+// ── P1-19f: Download databases ──────────────────────────────────
+
+export interface DatabaseStatus {
+  name: string
+  display_name: string
+  description: string
+  filename: string
+  expected_size_bytes: number
+  required: boolean
+  phase: number
+  downloaded: boolean
+  file_size_bytes: number | null
+}
+
+export interface DatabaseListResult {
+  databases: DatabaseStatus[]
+  total_size_bytes: number
+  downloaded_count: number
+  total_count: number
+}
+
+export interface DownloadJobInfo {
+  db_name: string
+  job_id: string
+}
+
+export interface TriggerDownloadResult {
+  session_id: string
+  downloads: DownloadJobInfo[]
+}
+
+export interface DatabaseProgressEvent {
+  db_name: string
+  job_id: string
+  status: 'pending' | 'running' | 'complete' | 'failed' | 'unknown'
+  progress_pct: number
+  message: string
+  error: string | null
+}
+
+export interface DownloadProgressData {
+  session_id: string
+  databases: DatabaseProgressEvent[]
+}
