@@ -224,6 +224,8 @@ export function useDatabaseList() {
   })
 }
 
+// Note: Query invalidation is handled by DatabasesStep after SSE progress
+// completes, rather than on mutation success, to reflect actual download state.
 export function useTriggerDownload() {
   return useMutation({
     mutationFn: postTriggerDownload,

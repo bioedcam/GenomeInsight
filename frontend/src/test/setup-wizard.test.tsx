@@ -1180,15 +1180,18 @@ describe('DatabasesStep', () => {
           }),
       })
 
-    // Mock EventSource
-    const mockEventSource = {
-      addEventListener: vi.fn(),
-      close: vi.fn(),
+    // Mock EventSource with event simulation
+    let progressHandler: ((event: MessageEvent) => void) | null = null
+    const closeFn = vi.fn()
+    class MockEventSource {
+      addEventListener(event: string, handler: (event: MessageEvent) => void) {
+        if (event === 'progress') progressHandler = handler
+      }
+      close() {
+        closeFn()
+      }
     }
-    vi.stubGlobal(
-      'EventSource',
-      vi.fn(() => mockEventSource),
-    )
+    vi.stubGlobal('EventSource', MockEventSource)
 
     render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
 
@@ -1200,6 +1203,26 @@ describe('DatabasesStep', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Downloading...')).toBeInTheDocument()
+    })
+
+    // Simulate SSE progress completing all downloads
+    expect(progressHandler).not.toBeNull()
+    progressHandler!(
+      new MessageEvent('progress', {
+        data: JSON.stringify({
+          session_id: 'dbdl-test123',
+          databases: [
+            { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+            { db_name: 'vep_bundle', job_id: 'dbdl-vep-def', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+            { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+          ],
+        }),
+      }),
+    )
+
+    // After completion, EventSource should be closed
+    await waitFor(() => {
+      expect(closeFn).toHaveBeenCalled()
     })
 
     vi.unstubAllGlobals()
