@@ -6,6 +6,7 @@ import DatabasesStep from '@/components/setup/DatabasesStep'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import StorageStep from '@/components/setup/StorageStep'
+import UploadStep from '@/components/setup/UploadStep'
 import WizardStepper from '@/components/setup/WizardStepper'
 
 const mockFetch = vi.fn()
@@ -1252,5 +1253,230 @@ describe('DatabasesStep', () => {
     await waitFor(() => {
       expect(screen.getByText('Download service unavailable')).toBeInTheDocument()
     })
+  })
+})
+
+// ─── UploadStep tests ─────────────────────────────────────────────
+
+describe('UploadStep', () => {
+  it('renders upload sample heading', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+    expect(screen.getByText('Upload Sample')).toBeInTheDocument()
+  })
+
+  it('shows drop zone with instructions', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+    expect(
+      screen.getByText('Drop a 23andMe raw data file here'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('or click to browse (.txt, .csv, .tsv)'),
+    ).toBeInTheDocument()
+  })
+
+  it('has accessible drop zone', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+    const dropZone = screen.getByRole('button', {
+      name: /select 23andme raw data file/i,
+    })
+    expect(dropZone).toBeInTheDocument()
+    expect(dropZone).toHaveAttribute('tabindex', '0')
+  })
+
+  it('shows skip button to go to dashboard', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+    expect(
+      screen.getByText(/skip — go to dashboard/i),
+    ).toBeInTheDocument()
+  })
+
+  it('calls onBack when Back button is clicked', () => {
+    const onBack = vi.fn()
+    render(<UploadStep onBack={onBack} />)
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('shows file name after selection', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    expect(screen.getByText('genome_data.txt')).toBeInTheDocument()
+  })
+
+  it('shows Upload & Parse button after file selection', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    expect(screen.getByText('Upload & Parse')).toBeInTheDocument()
+  })
+
+  it('shows error for invalid file extension', () => {
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test'], 'image.png', { type: 'image/png' })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    expect(
+      screen.getByText(
+        'Please select a 23andMe raw data file (.txt, .csv, or .tsv)',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows success state after upload', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          sample_id: 1,
+          job_id: 'test-job-123',
+          variant_count: 600123,
+          nocall_count: 1234,
+          file_format: '23andme_v5',
+        }),
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    // Select file
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    // Click upload
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Sample Uploaded')).toBeInTheDocument()
+    })
+
+    // Should show variant stats
+    expect(screen.getByText('600,123')).toBeInTheDocument()
+    expect(screen.getByText('1,234')).toBeInTheDocument()
+    expect(screen.getByText('23andme_v5')).toBeInTheDocument()
+  })
+
+  it('shows Go to Dashboard after successful upload', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          sample_id: 1,
+          job_id: 'test-job-123',
+          variant_count: 600123,
+          nocall_count: 1234,
+          file_format: '23andme_v5',
+        }),
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Go to Dashboard')).toBeInTheDocument()
+    })
+  })
+
+  it('shows error state on upload failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      json: () =>
+        Promise.resolve({
+          detail: 'Not a valid 23andMe file',
+        }),
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['bad content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Not a valid 23andMe file'),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('shows parsing state while uploading', async () => {
+    mockFetch.mockReturnValueOnce(new Promise(() => {})) // Never resolves
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Parsing file...')).toBeInTheDocument()
+    })
+  })
+
+  it('disables Back button while uploading', async () => {
+    mockFetch.mockReturnValueOnce(new Promise(() => {}))
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['test content'], 'genome_data.txt', {
+      type: 'text/plain',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Parsing file...')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Back')).toBeDisabled()
   })
 })
