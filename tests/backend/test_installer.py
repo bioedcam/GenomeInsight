@@ -1,0 +1,312 @@
+"""Tests for backend.installer — native install packaging (P1-22)."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from backend import installer
+
+# ── Platform detection ─────────────────────────────────────
+
+class TestDetectPlatform:
+    def test_macos(self):
+        with patch("platform.system", return_value="Darwin"):
+            assert installer._detect_platform() == "macos"
+
+    def test_linux(self):
+        with patch("platform.system", return_value="Linux"):
+            with patch("pathlib.Path.read_text", return_value="Linux version 5.15.0-generic"):
+                assert installer._detect_platform() == "linux"
+
+    def test_wsl2(self):
+        with patch("platform.system", return_value="Linux"):
+            with patch(
+                "pathlib.Path.read_text",
+                return_value="Linux version 5.15.153.1-microsoft-standard-WSL2",
+            ):
+                assert installer._detect_platform() == "wsl2"
+
+    def test_wsl2_lowercase_microsoft(self):
+        with patch("platform.system", return_value="Linux"):
+            with patch(
+                "pathlib.Path.read_text",
+                return_value="Linux version 5.15.0-Microsoft-custom",
+            ):
+                assert installer._detect_platform() == "wsl2"
+
+    def test_proc_version_unreadable(self):
+        with patch("platform.system", return_value="Linux"):
+            with patch("pathlib.Path.read_text", side_effect=OSError("No such file")):
+                assert installer._detect_platform() == "linux"
+
+
+# ── Data directory ─────────────────────────────────────────
+
+class TestEnsureDataDir:
+    def test_creates_directories(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        data_dir = tmp_path / ".genomeinsight"
+        monkeypatch.setattr(installer, "DATA_DIR", data_dir)
+
+        installer.ensure_data_dir()
+
+        assert data_dir.is_dir()
+        assert (data_dir / "samples").is_dir()
+        assert (data_dir / "downloads").is_dir()
+        assert (data_dir / "logs").is_dir()
+
+    def test_idempotent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        data_dir = tmp_path / ".genomeinsight"
+        monkeypatch.setattr(installer, "DATA_DIR", data_dir)
+
+        installer.ensure_data_dir()
+        installer.ensure_data_dir()  # Should not raise
+
+        assert data_dir.is_dir()
+
+
+# ── Plist rendering ────────────────────────────────────────
+
+class TestRenderPlist:
+    def test_replaces_install_dir(self, tmp_path: Path):
+        plist = tmp_path / "test.plist"
+        plist.write_text(
+            '<?xml version="1.0"?>\n'
+            "<dict>\n"
+            "  <string>__INSTALL_DIR__</string>\n"
+            "  <string>~/Library/Logs/test.log</string>\n"
+            "</dict>\n"
+        )
+
+        rendered = installer._render_plist(plist, Path("/opt/genomeinsight"))
+
+        assert "__INSTALL_DIR__" not in rendered
+        assert "/opt/genomeinsight" in rendered
+
+    def test_expands_tilde_in_logs(self, tmp_path: Path):
+        plist = tmp_path / "test.plist"
+        plist.write_text("<string>~/Library/Logs/test.log</string>")
+
+        rendered = installer._render_plist(plist, Path("/opt/gi"))
+
+        assert "~/Library/Logs" not in rendered
+        assert str(installer.LOG_DIR_MACOS) in rendered
+
+
+# ── Systemd rendering ─────────────────────────────────────
+
+class TestRenderSystemdUnit:
+    def test_replaces_working_directory(self, tmp_path: Path):
+        unit = tmp_path / "test.service"
+        unit.write_text(
+            "[Service]\n"
+            "WorkingDirectory=%h/GenomeInsight\n"
+            "Environment=PATH=%h/.local/bin:/usr/bin\n"
+        )
+
+        rendered = installer._render_systemd_unit(unit, Path("/home/user/GenomeInsight"))
+
+        assert "WorkingDirectory=/home/user/GenomeInsight" in rendered
+        assert "%h/GenomeInsight" not in rendered
+
+    def test_includes_python_bin_in_path(self, tmp_path: Path):
+        unit = tmp_path / "test.service"
+        unit.write_text("Environment=PATH=%h/.local/bin:/usr/bin\n")
+
+        rendered = installer._render_systemd_unit(unit, Path("/home/user/gi"))
+
+        # Should include the Python interpreter's bin directory
+        python_dir = str(Path(installer._find_python()).parent)
+        assert python_dir in rendered
+
+
+# ── Health check ───────────────────────────────────────────
+
+class TestHealthCheck:
+    def test_returns_false_on_connection_error(self):
+        # No server running on a random port
+        assert installer.health_check(port=59999) is False
+
+
+# ── CLI argument parsing ───────────────────────────────────
+
+class TestCLIParsing:
+    def test_install_defaults(self):
+        """install command parses with default options."""
+        with patch.object(installer, "cmd_install", return_value=0) as mock:
+            installer.main(["install"])
+            mock.assert_called_once()
+
+    def test_install_skip_flags(self):
+        """install --skip-pip --skip-frontend are parsed."""
+        with patch.object(installer, "cmd_install", return_value=0) as mock:
+            installer.main(["install", "--skip-pip", "--skip-frontend"])
+            args = mock.call_args[0][0]
+            assert args.skip_pip is True
+            assert args.skip_frontend is True
+
+    def test_uninstall_defaults(self):
+        with patch.object(installer, "cmd_uninstall", return_value=0) as mock:
+            installer.main(["uninstall"])
+            args = mock.call_args[0][0]
+            assert args.remove_data is False
+
+    def test_uninstall_remove_data(self):
+        with patch.object(installer, "cmd_uninstall", return_value=0) as mock:
+            installer.main(["uninstall", "--remove-data"])
+            args = mock.call_args[0][0]
+            assert args.remove_data is True
+
+    def test_status_command(self):
+        with patch.object(installer, "cmd_status", return_value=0) as mock:
+            installer.main(["status"])
+            mock.assert_called_once()
+
+    def test_start_command(self):
+        with patch.object(installer, "cmd_start", return_value=0) as mock:
+            installer.main(["start"])
+            mock.assert_called_once()
+
+    def test_stop_command(self):
+        with patch.object(installer, "cmd_stop", return_value=0) as mock:
+            installer.main(["stop"])
+            mock.assert_called_once()
+
+    def test_no_command_exits(self):
+        with pytest.raises(SystemExit):
+            installer.main([])
+
+
+# ── Install flow (mocked subprocess) ──────────────────────
+
+class TestInstallFlow:
+    @patch("backend.installer._detect_platform", return_value="linux")
+    @patch("backend.installer._has_systemd", return_value=False)
+    @patch("subprocess.run")
+    def test_install_linux_no_systemd(
+        self,
+        mock_run: MagicMock,
+        mock_systemd: MagicMock,
+        mock_plat: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Install on Linux without systemd prints manual instructions."""
+        monkeypatch.setattr(installer, "DATA_DIR", tmp_path / ".genomeinsight")
+
+        ns = argparse.Namespace(skip_pip=True, skip_frontend=True)
+        result = installer.cmd_install(ns)
+
+        assert result == 0
+        assert (tmp_path / ".genomeinsight").is_dir()
+
+    @patch("backend.installer._detect_platform", return_value="macos")
+    @patch("subprocess.run")
+    def test_install_macos(
+        self,
+        mock_run: MagicMock,
+        mock_plat: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Install on macOS calls launchctl load."""
+        monkeypatch.setattr(installer, "DATA_DIR", tmp_path / ".genomeinsight")
+        monkeypatch.setattr(installer, "LAUNCHD_DIR", tmp_path / "LaunchAgents")
+        monkeypatch.setattr(installer, "LOG_DIR_MACOS", tmp_path / "Logs")
+
+        mock_run.return_value = MagicMock(returncode=0)
+
+        ns = argparse.Namespace(skip_pip=True, skip_frontend=True)
+        result = installer.cmd_install(ns)
+
+        assert result == 0
+        # Verify plists were written
+        for label in installer.LAUNCHD_LABELS:
+            plist = tmp_path / "LaunchAgents" / f"{label}.plist"
+            assert plist.exists()
+            content = plist.read_text()
+            assert "__INSTALL_DIR__" not in content
+
+
+# ── Uninstall flow ─────────────────────────────────────────
+
+class TestUninstallFlow:
+    @patch("backend.installer._detect_platform", return_value="linux")
+    @patch("subprocess.run")
+    def test_uninstall_preserves_data(
+        self,
+        mock_run: MagicMock,
+        mock_plat: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        data_dir = tmp_path / ".genomeinsight"
+        data_dir.mkdir()
+        monkeypatch.setattr(installer, "DATA_DIR", data_dir)
+        monkeypatch.setattr(installer, "SYSTEMD_USER_DIR", tmp_path / "systemd")
+        mock_run.return_value = MagicMock(returncode=0)
+
+        ns = argparse.Namespace(remove_data=False)
+        result = installer.cmd_uninstall(ns)
+
+        assert result == 0
+        assert data_dir.is_dir()  # Data preserved
+
+    @patch("backend.installer._detect_platform", return_value="linux")
+    @patch("subprocess.run")
+    def test_uninstall_removes_data(
+        self,
+        mock_run: MagicMock,
+        mock_plat: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        data_dir = tmp_path / ".genomeinsight"
+        data_dir.mkdir()
+        (data_dir / "reference.db").touch()
+        monkeypatch.setattr(installer, "DATA_DIR", data_dir)
+        monkeypatch.setattr(installer, "SYSTEMD_USER_DIR", tmp_path / "systemd")
+        mock_run.return_value = MagicMock(returncode=0)
+
+        ns = argparse.Namespace(remove_data=True)
+        result = installer.cmd_uninstall(ns)
+
+        assert result == 0
+        assert not data_dir.exists()  # Data removed
+
+
+# ── Huey tasks stub ────────────────────────────────────────
+
+class TestHueyTasks:
+    def test_huey_instance_exists(self):
+        """The huey instance referenced by service configs exists."""
+        from backend.tasks.huey_tasks import huey
+
+        assert huey is not None
+        assert huey.name == "genomeinsight"
+
+
+# ── Repo root detection ───────────────────────────────────
+
+class TestRepoRoot:
+    def test_repo_root_is_project(self):
+        root = installer._repo_root()
+        assert (root / "pyproject.toml").exists()
+        assert (root / "backend").is_dir()
+
+
+# ── Template file existence ────────────────────────────────
+
+class TestTemplateFiles:
+    def test_launchd_templates_exist(self):
+        root = installer._repo_root()
+        for label in installer.LAUNCHD_LABELS:
+            assert (root / "launchd" / f"{label}.plist").exists()
+
+    def test_systemd_templates_exist(self):
+        root = installer._repo_root()
+        for unit in installer.SYSTEMD_UNITS:
+            assert (root / "systemd" / unit).exists()
