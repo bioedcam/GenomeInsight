@@ -578,3 +578,203 @@ class TestImportBackup:
                 files={"file": ("backup.tgz", f, "application/gzip")},
             )
         assert resp.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1-19c: GET /api/setup/storage-info
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestStorageInfo:
+    """Tests for the storage info endpoint."""
+
+    def test_returns_storage_info(self, setup_client: TestClient) -> None:
+        """Should return storage path and disk space info."""
+        resp = setup_client.get("/api/setup/storage-info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "data_dir" in data
+        assert "free_space_bytes" in data
+        assert "free_space_gb" in data
+        assert "total_space_bytes" in data
+        assert "total_space_gb" in data
+        assert data["status"] in ("ok", "warning", "blocked")
+        assert "message" in data
+        assert isinstance(data["path_exists"], bool)
+        assert isinstance(data["path_writable"], bool)
+
+    def test_free_space_positive(self, setup_client: TestClient) -> None:
+        """Free and total space should be positive values."""
+        resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["free_space_bytes"] > 0
+        assert data["total_space_bytes"] > 0
+        assert data["free_space_gb"] > 0
+        assert data["total_space_gb"] > 0
+
+    def test_path_exists_and_writable(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Temp data dir should exist and be writable."""
+        resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["path_exists"] is True
+        assert data["path_writable"] is True
+
+    def test_data_dir_matches_settings(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """Returned data_dir should match the configured path."""
+        resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["data_dir"] == str(tmp_data_dir)
+
+    def test_blocked_on_low_space(self, setup_client: TestClient) -> None:
+        """Should report 'blocked' when disk space < 5 GB."""
+        # Mock shutil.disk_usage to return very low space
+        low_usage = type("Usage", (), {"free": 2 * 1024**3, "total": 10 * 1024**3})()
+        with patch("backend.api.routes.setup.shutil.disk_usage", return_value=low_usage):
+            resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["status"] == "blocked"
+        assert "insufficient" in data["message"].lower()
+
+    def test_warning_on_moderate_space(self, setup_client: TestClient) -> None:
+        """Should report 'warning' when disk space between 5–10 GB."""
+        mid_usage = type("Usage", (), {"free": 7 * 1024**3, "total": 20 * 1024**3})()
+        with patch("backend.api.routes.setup.shutil.disk_usage", return_value=mid_usage):
+            resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["status"] == "warning"
+        assert "low" in data["message"].lower()
+
+    def test_ok_on_sufficient_space(self, setup_client: TestClient) -> None:
+        """Should report 'ok' when disk space >= 10 GB."""
+        ok_usage = type("Usage", (), {"free": 50 * 1024**3, "total": 100 * 1024**3})()
+        with patch("backend.api.routes.setup.shutil.disk_usage", return_value=ok_usage):
+            resp = setup_client.get("/api/setup/storage-info")
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert "sufficient" in data["message"].lower()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1-19c: POST /api/setup/set-storage-path
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSetStoragePath:
+    """Tests for the set-storage-path endpoint."""
+
+    def test_set_valid_path(
+        self, setup_client: TestClient, tmp_path: Path
+    ) -> None:
+        """Should successfully set a valid storage path."""
+        new_path = tmp_path / "new_genomeinsight"
+        resp = setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["data_dir"] == str(new_path)
+        assert data["free_space_gb"] > 0
+        assert data["status"] in ("ok", "warning", "blocked")
+
+    def test_creates_directory_structure(
+        self, setup_client: TestClient, tmp_path: Path
+    ) -> None:
+        """Should create data dir with samples, downloads, logs subdirs."""
+        new_path = tmp_path / "gi_data"
+        setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+        assert (new_path / "samples").is_dir()
+        assert (new_path / "downloads").is_dir()
+        assert (new_path / "logs").is_dir()
+
+    def test_writes_config_toml(
+        self, setup_client: TestClient, tmp_path: Path
+    ) -> None:
+        """Should write config.toml with data_dir."""
+        new_path = tmp_path / "gi_config_test"
+        setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+        config_path = new_path / "config.toml"
+        assert config_path.exists()
+        content = config_path.read_text()
+        assert str(new_path) in content
+        assert "[genomeinsight]" in content
+
+    def test_preserves_existing_config(
+        self, setup_client: TestClient, tmp_path: Path
+    ) -> None:
+        """Should preserve other settings in existing config.toml."""
+        new_path = tmp_path / "gi_preserve"
+        new_path.mkdir(parents=True)
+        config_path = new_path / "config.toml"
+        config_path.write_text(
+            '[genomeinsight]\ntheme = "dark"\nlog_level = "DEBUG"\n'
+        )
+
+        setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+
+        content = config_path.read_text()
+        assert 'theme = "dark"' in content
+        assert 'log_level = "DEBUG"' in content
+        assert str(new_path) in content
+
+    def test_tilde_expansion(
+        self, setup_client: TestClient,
+    ) -> None:
+        """Should expand ~ in the path."""
+        resp = setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": "~/.genomeinsight_test_tilde"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Path should be expanded (no ~)
+        assert "~" not in data["data_dir"]
+        assert data["success"] is True
+        # Clean up
+        expanded = Path(data["data_dir"])
+        if expanded.exists():
+            import shutil
+            shutil.rmtree(expanded)
+
+    def test_reject_unwritable_path(
+        self, setup_client: TestClient,
+    ) -> None:
+        """Should reject paths that can't be written to."""
+        resp = setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": "/root/genomeinsight_no_perms"},
+        )
+        # Should fail with 400 (permission denied)
+        assert resp.status_code == 400
+        detail = resp.json()["detail"].lower()
+        assert "permission" in detail or "cannot" in detail
+
+    def test_idempotent_set(
+        self, setup_client: TestClient, tmp_path: Path
+    ) -> None:
+        """Setting the same path twice should succeed."""
+        new_path = tmp_path / "gi_idempotent"
+        resp1 = setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+        resp2 = setup_client.post(
+            "/api/setup/set-storage-path",
+            json={"path": str(new_path)},
+        )
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
