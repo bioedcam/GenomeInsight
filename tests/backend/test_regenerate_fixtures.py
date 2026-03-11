@@ -61,6 +61,7 @@ class TestSeedCSVsExist:
 
 # ── Seed CSV content validation ──────────────────────────────────────
 
+
 class TestSeedCSVContent:
     """Validate that seed CSVs contain required key variants."""
 
@@ -86,6 +87,7 @@ class TestSeedCSVContent:
 
 
 # ── Regeneration script ──────────────────────────────────────────────
+
 
 class TestRegenerateFixtures:
     """Test the regenerate_fixtures.py script end-to-end."""
@@ -118,7 +120,8 @@ class TestRegenerateFixtures:
             tables = {
                 row[0]
                 for row in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
+                    "SELECT name FROM sqlite_master"
+                    " WHERE type='table' AND name != 'sqlite_sequence'"
                 ).fetchall()
             }
 
@@ -151,7 +154,9 @@ class TestRegenerateFixtures:
 
         assert clinvar_count >= 50, f"Expected >=50 clinvar rows, got {clinvar_count}"
         assert gene_pheno_count >= 20, f"Expected >=20 gene_phenotype rows, got {gene_pheno_count}"
-        assert cpic_alleles_count >= 10, f"Expected >=10 cpic_alleles rows, got {cpic_alleles_count}"
+        assert cpic_alleles_count >= 10, (
+            f"Expected >=10 cpic_alleles rows, got {cpic_alleles_count}"
+        )
         assert gwas_count >= 30, f"Expected >=30 gwas rows, got {gwas_count}"
 
     def test_mini_vep_bundle_has_data(self, tmp_path: Path) -> None:
@@ -174,7 +179,12 @@ class TestRegenerateFixtures:
 
     def test_wal_mode_enabled(self, tmp_path: Path) -> None:
         _run_script(tmp_path)
-        for db_name in ["mini_reference.db", "mini_vep_bundle.db", "mini_gnomad_af.db", "mini_dbnsfp.db"]:
+        for db_name in [
+            "mini_reference.db",
+            "mini_vep_bundle.db",
+            "mini_gnomad_af.db",
+            "mini_dbnsfp.db",
+        ]:
             with sqlite3.connect(str(tmp_path / db_name)) as conn:
                 mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
             assert mode == "wal", f"{db_name} should use WAL mode, got {mode}"
@@ -184,7 +194,8 @@ class TestRegenerateFixtures:
         _run_script(tmp_path)
         with sqlite3.connect(str(tmp_path / "mini_reference.db")) as conn:
             row = conn.execute(
-                "SELECT chrom, pos, significance, gene_symbol FROM clinvar_variants WHERE rsid = 'rs429358'"
+                "SELECT chrom, pos, significance, gene_symbol"
+                " FROM clinvar_variants WHERE rsid = 'rs429358'"
             ).fetchone()
         assert row is not None, "rs429358 not found in clinvar_variants"
         assert row[0] == "19"

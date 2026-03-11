@@ -36,19 +36,21 @@ CHROM_ORDER: dict[str, int] = {
 _RAW_FILTER_COLS = frozenset({"chrom", "genotype"})
 
 # Columns allowed as filter keys on annotated_variants.
-_ANNOTATED_FILTER_COLS = frozenset({
-    "chrom",
-    "genotype",
-    "gene_symbol",
-    "consequence",
-    "clinvar_significance",
-    "rare_flag",
-    "ultra_rare_flag",
-    "evidence_conflict",
-    "ensemble_pathogenic",
-    "zygosity",
-    "annotation_coverage",
-})
+_ANNOTATED_FILTER_COLS = frozenset(
+    {
+        "chrom",
+        "genotype",
+        "gene_symbol",
+        "consequence",
+        "clinvar_significance",
+        "rare_flag",
+        "ultra_rare_flag",
+        "evidence_conflict",
+        "ensemble_pathogenic",
+        "zygosity",
+        "annotation_coverage",
+    }
+)
 
 # Columns that support special IS NULL / IS NOT NULL filtering.
 # Filter values: "notnull" → IS NOT NULL, "null" → IS NULL.
@@ -151,9 +153,7 @@ def _select_table(sample_engine: sa.Engine) -> sa.Table:
     return raw_variants
 
 
-def _parse_filters(
-    filter_str: str | None, table: sa.Table
-) -> list[sa.ColumnElement]:
+def _parse_filters(filter_str: str | None, table: sa.Table) -> list[sa.ColumnElement]:
     """Parse filter query param into SQLAlchemy WHERE clauses.
 
     Filter format: ``key:value`` pairs separated by commas.
@@ -164,9 +164,7 @@ def _parse_filters(
     if not filter_str:
         return []
 
-    allowed_cols = (
-        _ANNOTATED_FILTER_COLS if table is annotated_variants else _RAW_FILTER_COLS
-    )
+    allowed_cols = _ANNOTATED_FILTER_COLS if table is annotated_variants else _RAW_FILTER_COLS
 
     clauses: list[sa.ColumnElement] = []
     for part in filter_str.split(","):
@@ -253,11 +251,24 @@ def _row_to_variant(row: sa.Row, table: sa.Table) -> VariantRow:
 
     if table is annotated_variants:
         for field in (
-            "ref", "alt", "zygosity", "gene_symbol", "consequence",
-            "clinvar_significance", "clinvar_review_stars", "gnomad_af_global",
-            "rare_flag", "cadd_phred", "sift_score", "sift_pred",
-            "polyphen2_hsvar_score", "polyphen2_hsvar_pred", "revel",
-            "annotation_coverage", "evidence_conflict", "ensemble_pathogenic",
+            "ref",
+            "alt",
+            "zygosity",
+            "gene_symbol",
+            "consequence",
+            "clinvar_significance",
+            "clinvar_review_stars",
+            "gnomad_af_global",
+            "rare_flag",
+            "cadd_phred",
+            "sift_score",
+            "sift_pred",
+            "polyphen2_hsvar_score",
+            "polyphen2_hsvar_pred",
+            "revel",
+            "annotation_coverage",
+            "evidence_conflict",
+            "ensemble_pathogenic",
         ):
             data[field] = getattr(row, field, None)
 
@@ -375,10 +386,7 @@ def chromosome_counts(
         rows = conn.execute(query).fetchall()
 
     # Sort by canonical chromosome order and return
-    summaries = [
-        ChromosomeSummary(chrom=row.chrom, count=row.count)
-        for row in rows
-    ]
+    summaries = [ChromosomeSummary(chrom=row.chrom, count=row.count) for row in rows]
     summaries.sort(key=lambda s: _chrom_sort_key(s.chrom))
     return summaries
 

@@ -160,9 +160,7 @@ class TestLoadRsmergeIntoDb:
         assert stats.merges_loaded == 2
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(dbsnp_merges)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(dbsnp_merges)).scalar()
         assert count == 2
 
     def test_clear_existing(self, reference_engine: sa.Engine):
@@ -173,9 +171,7 @@ class TestLoadRsmergeIntoDb:
         load_rsmerge_into_db(rows2, reference_engine, clear_existing=True)
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(dbsnp_merges)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(dbsnp_merges)).scalar()
         assert count == 1
 
     def test_append_mode(self, reference_engine: sa.Engine):
@@ -186,9 +182,7 @@ class TestLoadRsmergeIntoDb:
         load_rsmerge_into_db(rows2, reference_engine, clear_existing=False)
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(dbsnp_merges)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(dbsnp_merges)).scalar()
         assert count == 2
 
     def test_duplicate_old_rsid_updates(self, reference_engine: sa.Engine):
@@ -201,9 +195,7 @@ class TestLoadRsmergeIntoDb:
 
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(dbsnp_merges.c.current_rsid).where(
-                    dbsnp_merges.c.old_rsid == "rs100"
-                )
+                sa.select(dbsnp_merges.c.current_rsid).where(dbsnp_merges.c.old_rsid == "rs100")
             ).first()
         assert row is not None
         assert row.current_rsid == "rs300"
@@ -219,9 +211,7 @@ class TestLoadRsmergeFromIter:
         assert stats.merges_loaded == 7
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(dbsnp_merges)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(dbsnp_merges)).scalar()
         # May be fewer than 7 due to ON CONFLICT DO UPDATE for duplicates
         assert count is not None
         assert count >= 1
@@ -245,9 +235,7 @@ class TestRecordDbsnpVersion:
         )
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "dbsnp"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "dbsnp")
             ).first()
         assert row is not None
         assert row.version == "b155"
@@ -259,9 +247,7 @@ class TestRecordDbsnpVersion:
 
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "dbsnp"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "dbsnp")
             ).first()
         assert row is not None
         assert row.version == "b155"
@@ -450,9 +436,7 @@ class TestAnnotateSampleDbsnp:
         sample_with_variants: sa.Engine,
         seeded_reference_engine: sa.Engine,
     ):
-        result = annotate_sample_dbsnp(
-            sample_with_variants, seeded_reference_engine
-        )
+        result = annotate_sample_dbsnp(sample_with_variants, seeded_reference_engine)
 
         assert result.total_variants == 10
         assert result.rows_written == 10
@@ -522,12 +506,8 @@ class TestAnnotateSampleDbsnp:
         seeded_reference_engine: sa.Engine,
     ):
         """Running annotation twice should not duplicate rows."""
-        result1 = annotate_sample_dbsnp(
-            sample_with_variants, seeded_reference_engine
-        )
-        result2 = annotate_sample_dbsnp(
-            sample_with_variants, seeded_reference_engine
-        )
+        result1 = annotate_sample_dbsnp(sample_with_variants, seeded_reference_engine)
+        result2 = annotate_sample_dbsnp(sample_with_variants, seeded_reference_engine)
 
         assert result1.rows_written == result2.rows_written
 
@@ -600,9 +580,7 @@ class TestDownloadAndLoadRsmerge:
         # Version recorded
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "dbsnp"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "dbsnp")
             ).first()
         assert row is not None
 

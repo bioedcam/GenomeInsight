@@ -24,16 +24,6 @@ logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 
-# ── API Router ────────────────────────────────────────────────────────
-
-api_router = APIRouter(prefix="/api")
-
-
-@api_router.get("/health")
-async def health() -> dict[str, str]:
-    """Health check endpoint. Always exempt from auth."""
-    return {"status": "ok", "version": VERSION}
-
 
 # ── Lifespan ──────────────────────────────────────────────────────────
 
@@ -74,6 +64,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Create a fresh API router per app instance to avoid duplicate routes
+    api_router = APIRouter(prefix="/api")
+
+    @api_router.get("/health")
+    async def health() -> dict[str, str]:
+        """Health check endpoint. Always exempt from auth."""
+        return {"status": "ok", "version": VERSION}
 
     # API routes (must be included BEFORE static mount)
     api_router.include_router(column_presets_router)

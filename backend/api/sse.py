@@ -77,13 +77,16 @@ async def job_progress_stream(
             yield _format_sse("error", {"message": f"Job {job_id} not found"})
             return
 
-        yield _format_sse("progress", {
-            "job_id": status.job_id,
-            "status": status.status,
-            "progress_pct": status.progress_pct,
-            "message": status.message,
-            "error": status.error,
-        })
+        yield _format_sse(
+            "progress",
+            {
+                "job_id": status.job_id,
+                "status": status.status,
+                "progress_pct": status.progress_pct,
+                "message": status.message,
+                "error": status.error,
+            },
+        )
 
         if status.status in terminal_states:
             return

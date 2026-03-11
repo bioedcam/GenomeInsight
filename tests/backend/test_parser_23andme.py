@@ -340,9 +340,7 @@ class TestIntegration:
 
         # Read back
         with sample_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(raw_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(raw_variants)).scalar()
             assert count == 1000
 
             # Verify a specific variant
@@ -367,9 +365,7 @@ class TestIntegration:
             conn.commit()
 
         with sample_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(raw_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(raw_variants)).scalar()
             assert count == 100
 
             # Verify chromosome normalization in DB

@@ -74,8 +74,7 @@ DATABASES: dict[str, DatabaseInfo] = {
         name="dbnsfp",
         display_name="dbNSFP",
         description=(
-            "In-silico pathogenicity prediction scores"
-            " (SIFT, PolyPhen-2, CADD, REVEL, etc.)"
+            "In-silico pathogenicity prediction scores (SIFT, PolyPhen-2, CADD, REVEL, etc.)"
         ),
         url="https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz",
         filename="dbnsfp.db",

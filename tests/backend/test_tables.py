@@ -79,9 +79,7 @@ class TestReferenceMetadata:
         assert "idx_cpic_guidelines_gene_drug" in idx_names
 
     def test_literature_cache_unique_index(self):
-        idx = next(
-            i for i in literature_cache.indexes if i.name == "idx_literature_gene_pmid"
-        )
+        idx = next(i for i in literature_cache.indexes if i.name == "idx_literature_gene_pmid")
         assert idx.unique is True
 
     def test_log_entries_timestamp_index(self):
@@ -139,9 +137,7 @@ class TestSampleMetadata:
     def test_annotated_variants_bitmask_columns(self):
         col_names = {c.name for c in annotated_variants.columns}
         # VEP columns
-        assert {"gene_symbol", "consequence", "hgvs_protein", "mane_select"}.issubset(
-            col_names
-        )
+        assert {"gene_symbol", "consequence", "hgvs_protein", "mane_select"}.issubset(col_names)
         # ClinVar columns
         assert {"clinvar_significance", "clinvar_review_stars"}.issubset(col_names)
         # gnomAD columns
@@ -165,18 +161,14 @@ class TestSampleMetadata:
 
     def test_sample_metadata_check_constraint(self):
         constraints = [
-            c
-            for c in sample_metadata_table.constraints
-            if isinstance(c, sa.CheckConstraint)
+            c for c in sample_metadata_table.constraints if isinstance(c, sa.CheckConstraint)
         ]
         assert len(constraints) >= 1
         text = str(constraints[0].sqltext)
         assert "id = 1" in text
 
     def test_apoe_gate_check_constraint(self):
-        constraints = [
-            c for c in apoe_gate.constraints if isinstance(c, sa.CheckConstraint)
-        ]
+        constraints = [c for c in apoe_gate.constraints if isinstance(c, sa.CheckConstraint)]
         assert len(constraints) >= 1
 
     def test_variant_tags_composite_pk(self):
@@ -225,9 +217,7 @@ class TestQueryBuilding:
         assert "ORDER BY" in compiled
 
     def test_insert_raw_variant(self):
-        stmt = raw_variants.insert().values(
-            rsid="rs123", chrom="1", pos=100000, genotype="AG"
-        )
+        stmt = raw_variants.insert().values(rsid="rs123", chrom="1", pos=100000, genotype="AG")
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "INSERT" in compiled
         assert "raw_variants" in compiled
@@ -237,9 +227,7 @@ class TestQueryBuilding:
         stmt = (
             sa.select(annotated_variants)
             .where(
-                sa.tuple_(
-                    annotated_variants.c.chrom, annotated_variants.c.pos
-                )
+                sa.tuple_(annotated_variants.c.chrom, annotated_variants.c.pos)
                 > sa.tuple_(sa.literal("1"), sa.literal(50000))
             )
             .order_by(annotated_variants.c.chrom, annotated_variants.c.pos)
@@ -295,9 +283,7 @@ class TestMetadataMaterialisation:
         reference_metadata.create_all(engine)
 
         with engine.connect() as conn:
-            conn.execute(
-                samples.insert().values(name="Test Sample", db_path="/tmp/s.db")
-            )
+            conn.execute(samples.insert().values(name="Test Sample", db_path="/tmp/s.db"))
             conn.commit()
             result = conn.execute(sa.select(samples)).fetchall()
             assert len(result) == 1
@@ -312,9 +298,7 @@ class TestMetadataMaterialisation:
 
         with engine.connect() as conn:
             conn.execute(
-                raw_variants.insert().values(
-                    rsid="rs12345", chrom="1", pos=100000, genotype="AG"
-                )
+                raw_variants.insert().values(rsid="rs12345", chrom="1", pos=100000, genotype="AG")
             )
             conn.commit()
             result = conn.execute(

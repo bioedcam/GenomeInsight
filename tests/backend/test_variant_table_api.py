@@ -255,9 +255,7 @@ class TestCursorPagination:
     def test_cursor_at_end_returns_empty(self, client_with_sample):
         """Cursor past the last variant returns an empty page."""
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&cursor_chrom=MT&cursor_pos=999999"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&cursor_chrom=MT&cursor_pos=999999")
         data = response.json()
         assert len(data["items"]) == 0
         assert data["has_more"] is False
@@ -265,9 +263,7 @@ class TestCursorPagination:
     def test_cursor_jump_to_chromosome(self, client_with_sample):
         """Providing cursor_chrom=10&cursor_pos=0 skips to chr10 variants."""
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&cursor_chrom=2&cursor_pos=999999"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&cursor_chrom=2&cursor_pos=999999")
         data = response.json()
         # Should skip past chrom 1 and 2, start at chrom 10
         assert len(data["items"]) > 0
@@ -305,9 +301,7 @@ class TestFiltering:
     def test_filter_combined_with_cursor(self, client_with_sample):
         """Filtering and cursor should work together."""
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&filter=chrom:1&limit=2"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&filter=chrom:1&limit=2")
         data = response.json()
         assert len(data["items"]) == 2
         assert data["has_more"] is True
@@ -324,9 +318,7 @@ class TestFiltering:
     def test_unknown_filter_key_ignored(self, client_with_sample):
         """Unknown filter keys should be silently ignored."""
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&filter=nonexistent:foo"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&filter=nonexistent:foo")
         data = response.json()
         # Should return all variants (filter ignored)
         assert len(data["items"]) == len(TEST_VARIANTS)
@@ -334,9 +326,7 @@ class TestFiltering:
     def test_multiple_filters(self, client_with_sample):
         """Multiple comma-separated filters should AND together."""
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&filter=chrom:1,genotype:AG"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&filter=chrom:1,genotype:AG")
         data = response.json()
         assert len(data["items"]) == 1
         assert data["items"][0]["rsid"] == "rs101"
@@ -360,9 +350,7 @@ class TestVariantCount:
 
     def test_filtered_count(self, client_with_sample):
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants/count?sample_id={sid}&filter=chrom:1"
-        )
+        response = client.get(f"/api/variants/count?sample_id={sid}&filter=chrom:1")
         data = response.json()
         assert data["total"] == 3
         assert data["filtered"] is True
@@ -374,9 +362,7 @@ class TestVariantCount:
 
     def test_count_with_no_matches(self, client_with_sample):
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants/count?sample_id={sid}&filter=chrom:99"
-        )
+        response = client.get(f"/api/variants/count?sample_id={sid}&filter=chrom:99")
         data = response.json()
         assert data["total"] == 0
 
@@ -450,9 +436,7 @@ class TestChromosomeCounts:
 
     def test_with_filter(self, client_with_sample):
         client, sid = client_with_sample
-        response = client.get(
-            f"/api/variants/chromosomes?sample_id={sid}&filter=genotype:AA"
-        )
+        response = client.get(f"/api/variants/chromosomes?sample_id={sid}&filter=genotype:AA")
         data = response.json()
         count_map = {item["chrom"]: item["count"] for item in data}
         # AA genotype: rs100 (chr1), rs1000 (chr10), rsX001 (chrX)
@@ -478,24 +462,60 @@ class TestChromosomeCounts:
 
 # Mix of annotated (coverage != NULL) and unannotated (coverage = NULL) variants.
 ANNOTATED_TEST_VARIANTS = [
-    {"rsid": "rs100", "chrom": "1", "pos": 50000, "genotype": "AA",
-     "gene_symbol": "BRCA1", "consequence": "missense_variant",
-     "annotation_coverage": 0b000111},
-    {"rsid": "rs101", "chrom": "1", "pos": 100000, "genotype": "AG",
-     "gene_symbol": "TP53", "consequence": "synonymous_variant",
-     "annotation_coverage": 0b000011},
-    {"rsid": "rs102", "chrom": "1", "pos": 200000, "genotype": "GG",
-     "gene_symbol": None, "consequence": None,
-     "annotation_coverage": None},  # unannotated
-    {"rsid": "rs200", "chrom": "2", "pos": 10000, "genotype": "CC",
-     "gene_symbol": "APOE", "consequence": "missense_variant",
-     "annotation_coverage": 0b111111},
-    {"rsid": "rs201", "chrom": "2", "pos": 20000, "genotype": "CT",
-     "gene_symbol": None, "consequence": None,
-     "annotation_coverage": None},  # unannotated
-    {"rsid": "rs1000", "chrom": "10", "pos": 50000, "genotype": "AA",
-     "gene_symbol": None, "consequence": None,
-     "annotation_coverage": None},  # unannotated
+    {
+        "rsid": "rs100",
+        "chrom": "1",
+        "pos": 50000,
+        "genotype": "AA",
+        "gene_symbol": "BRCA1",
+        "consequence": "missense_variant",
+        "annotation_coverage": 0b000111,
+    },
+    {
+        "rsid": "rs101",
+        "chrom": "1",
+        "pos": 100000,
+        "genotype": "AG",
+        "gene_symbol": "TP53",
+        "consequence": "synonymous_variant",
+        "annotation_coverage": 0b000011,
+    },
+    {
+        "rsid": "rs102",
+        "chrom": "1",
+        "pos": 200000,
+        "genotype": "GG",
+        "gene_symbol": None,
+        "consequence": None,
+        "annotation_coverage": None,
+    },  # unannotated
+    {
+        "rsid": "rs200",
+        "chrom": "2",
+        "pos": 10000,
+        "genotype": "CC",
+        "gene_symbol": "APOE",
+        "consequence": "missense_variant",
+        "annotation_coverage": 0b111111,
+    },
+    {
+        "rsid": "rs201",
+        "chrom": "2",
+        "pos": 20000,
+        "genotype": "CT",
+        "gene_symbol": None,
+        "consequence": None,
+        "annotation_coverage": None,
+    },  # unannotated
+    {
+        "rsid": "rs1000",
+        "chrom": "10",
+        "pos": 50000,
+        "genotype": "AA",
+        "gene_symbol": None,
+        "consequence": None,
+        "annotation_coverage": None,
+    },  # unannotated
 ]
 
 
@@ -549,33 +569,24 @@ class TestAnnotationCoverageFilter:
     def test_list_annotated_only(self, client_with_annotated_sample):
         """List endpoint respects annotation_coverage:notnull filter."""
         client, sid = client_with_annotated_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&filter=annotation_coverage:notnull"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&filter=annotation_coverage:notnull")
         data = response.json()
         assert len(data["items"]) == 3
-        assert all(
-            item["annotation_coverage"] is not None for item in data["items"]
-        )
+        assert all(item["annotation_coverage"] is not None for item in data["items"])
 
     def test_list_unannotated_only(self, client_with_annotated_sample):
         """List endpoint respects annotation_coverage:null filter."""
         client, sid = client_with_annotated_sample
-        response = client.get(
-            f"/api/variants?sample_id={sid}&filter=annotation_coverage:null"
-        )
+        response = client.get(f"/api/variants?sample_id={sid}&filter=annotation_coverage:null")
         data = response.json()
         assert len(data["items"]) == 3
-        assert all(
-            item["annotation_coverage"] is None for item in data["items"]
-        )
+        assert all(item["annotation_coverage"] is None for item in data["items"])
 
     def test_combined_filter_chrom_and_coverage(self, client_with_annotated_sample):
         """annotation_coverage filter combines with other filters."""
         client, sid = client_with_annotated_sample
         response = client.get(
-            f"/api/variants/count?sample_id={sid}"
-            "&filter=chrom:1,annotation_coverage:notnull"
+            f"/api/variants/count?sample_id={sid}&filter=chrom:1,annotation_coverage:notnull"
         )
         data = response.json()
         # chrom 1 has rs100 (annotated), rs101 (annotated), rs102 (unannotated)
@@ -586,8 +597,7 @@ class TestAnnotationCoverageFilter:
         """Chromosome counts endpoint respects annotation_coverage filter."""
         client, sid = client_with_annotated_sample
         response = client.get(
-            f"/api/variants/chromosomes?sample_id={sid}"
-            "&filter=annotation_coverage:notnull"
+            f"/api/variants/chromosomes?sample_id={sid}&filter=annotation_coverage:notnull"
         )
         data = response.json()
         count_map = {item["chrom"]: item["count"] for item in data}

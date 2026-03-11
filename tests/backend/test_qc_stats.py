@@ -26,15 +26,15 @@ from backend.db.tables import raw_variants, reference_metadata, samples
 # haploid (hom): A → 1
 # Total: 10, called: 9, nocall: 1
 QC_TEST_VARIANTS = [
-    {"rsid": "rs100", "chrom": "1", "pos": 50000, "genotype": "AG"},     # het
-    {"rsid": "rs101", "chrom": "1", "pos": 100000, "genotype": "AA"},    # hom
-    {"rsid": "rs102", "chrom": "1", "pos": 200000, "genotype": "--"},    # nocall
-    {"rsid": "rs200", "chrom": "2", "pos": 10000, "genotype": "GG"},    # hom
-    {"rsid": "rs201", "chrom": "2", "pos": 20000, "genotype": "CT"},    # het
+    {"rsid": "rs100", "chrom": "1", "pos": 50000, "genotype": "AG"},  # het
+    {"rsid": "rs101", "chrom": "1", "pos": 100000, "genotype": "AA"},  # hom
+    {"rsid": "rs102", "chrom": "1", "pos": 200000, "genotype": "--"},  # nocall
+    {"rsid": "rs200", "chrom": "2", "pos": 10000, "genotype": "GG"},  # hom
+    {"rsid": "rs201", "chrom": "2", "pos": 20000, "genotype": "CT"},  # het
     {"rsid": "rs1000", "chrom": "10", "pos": 50000, "genotype": "CC"},  # hom
     {"rsid": "rs1900", "chrom": "19", "pos": 44908684, "genotype": "TC"},  # het
-    {"rsid": "rsX001", "chrom": "X", "pos": 5000, "genotype": "AA"},   # hom
-    {"rsid": "rsX002", "chrom": "X", "pos": 6000, "genotype": "A"},    # haploid (hom)
+    {"rsid": "rsX001", "chrom": "X", "pos": 5000, "genotype": "AA"},  # hom
+    {"rsid": "rsX002", "chrom": "X", "pos": 6000, "genotype": "A"},  # haploid (hom)
     {"rsid": "rsMT01", "chrom": "MT", "pos": 1000, "genotype": "CC"},  # hom
 ]
 

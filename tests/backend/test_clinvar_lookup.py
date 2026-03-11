@@ -114,9 +114,7 @@ class TestLookupByRsids:
         assert result["rs100"].clinvar_significance == "Pathogenic"
         assert result["rs100"].clinvar_review_stars == 3
 
-    def test_large_batch_exceeding_sqlite_limit(
-        self, seeded_reference_engine: sa.Engine
-    ) -> None:
+    def test_large_batch_exceeding_sqlite_limit(self, seeded_reference_engine: sa.Engine) -> None:
         """Test with >500 rsids to verify batching logic."""
         # Generate 600 fake rsids, but include known seed rsids
         rsids = [f"rs{i}" for i in range(1, 598)]
@@ -162,9 +160,7 @@ class TestLookupByPositions:
         result = lookup_clinvar_by_positions([], seeded_reference_engine)
         assert result == {}
 
-    def test_preserves_sample_rsid_as_key(
-        self, seeded_reference_engine: sa.Engine
-    ) -> None:
+    def test_preserves_sample_rsid_as_key(self, seeded_reference_engine: sa.Engine) -> None:
         """Result should use the sample's rsid, not the ClinVar rsid."""
         positions = [("19", 44908684, "i_custom_id")]
         result = lookup_clinvar_by_positions(positions, seeded_reference_engine)
@@ -185,9 +181,7 @@ class TestAnnotateSampleClinvar:
         sample_with_variants: sa.Engine,
         seeded_reference_engine: sa.Engine,
     ) -> None:
-        result = annotate_sample_clinvar(
-            sample_with_variants, seeded_reference_engine
-        )
+        result = annotate_sample_clinvar(sample_with_variants, seeded_reference_engine)
 
         assert isinstance(result, AnnotationResult)
         assert result.total_variants == 10
@@ -226,9 +220,7 @@ class TestAnnotateSampleClinvar:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs429358"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs429358")
             ).first()
 
         assert row is not None
@@ -363,9 +355,7 @@ class TestAnnotateSampleClinvar:
         # Verify the annotation was written with the sample's rsid
         with sample_engine.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "i6025323"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "i6025323")
             ).first()
 
         assert row is not None
@@ -378,12 +368,8 @@ class TestAnnotateSampleClinvar:
         seeded_reference_engine: sa.Engine,
     ) -> None:
         """Running annotation twice should update, not duplicate."""
-        result1 = annotate_sample_clinvar(
-            sample_with_variants, seeded_reference_engine
-        )
-        result2 = annotate_sample_clinvar(
-            sample_with_variants, seeded_reference_engine
-        )
+        result1 = annotate_sample_clinvar(sample_with_variants, seeded_reference_engine)
+        result2 = annotate_sample_clinvar(sample_with_variants, seeded_reference_engine)
 
         # Same counts both times
         assert result1.rows_written == result2.rows_written
@@ -413,9 +399,7 @@ class TestAnnotateSampleClinvar:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs1805007"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs1805007")
             ).first()
 
         # rs1805007 is not in SEED_CLINVAR, so it shouldn't be in annotated_variants

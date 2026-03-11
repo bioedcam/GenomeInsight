@@ -133,8 +133,7 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
             if name not in DATABASES:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unknown database: {name}. "
-                    f"Valid names: {', '.join(DATABASES.keys())}",
+                    detail=f"Unknown database: {name}. Valid names: {', '.join(DATABASES.keys())}",
                 )
     else:
         # Default: all required databases
@@ -231,31 +230,38 @@ async def download_progress(session_id: str) -> StreamingResponse:
             for db_name, job_id in entries:
                 status = await asyncio.to_thread(get_job_progress, engine, job_id)
                 if status is None:
-                    db_statuses.append({
-                        "db_name": db_name,
-                        "job_id": job_id,
-                        "status": "unknown",
-                        "progress_pct": 0.0,
-                        "message": "Job not found",
-                        "error": None,
-                    })
+                    db_statuses.append(
+                        {
+                            "db_name": db_name,
+                            "job_id": job_id,
+                            "status": "unknown",
+                            "progress_pct": 0.0,
+                            "message": "Job not found",
+                            "error": None,
+                        }
+                    )
                     all_terminal = False
                 else:
-                    db_statuses.append({
-                        "db_name": db_name,
-                        "job_id": status.job_id,
-                        "status": status.status,
-                        "progress_pct": status.progress_pct,
-                        "message": status.message,
-                        "error": status.error,
-                    })
+                    db_statuses.append(
+                        {
+                            "db_name": db_name,
+                            "job_id": status.job_id,
+                            "status": status.status,
+                            "progress_pct": status.progress_pct,
+                            "message": status.message,
+                            "error": status.error,
+                        }
+                    )
                     if status.status not in terminal_states:
                         all_terminal = False
 
-            yield _format_sse("progress", {
-                "session_id": session_id,
-                "databases": db_statuses,
-            })
+            yield _format_sse(
+                "progress",
+                {
+                    "session_id": session_id,
+                    "databases": db_statuses,
+                },
+            )
 
             if all_terminal:
                 # Clean up session
@@ -324,7 +330,8 @@ def _run_download(
 
         if result.error:
             _update_job(
-                engine, job_id,
+                engine,
+                job_id,
                 status="failed",
                 progress_pct=0.0,
                 error=result.error,
@@ -338,7 +345,8 @@ def _run_download(
             shutil.move(str(result.dest_path), str(final_dest))
 
         _update_job(
-            engine, job_id,
+            engine,
+            job_id,
             status="complete",
             progress_pct=100.0,
             message=f"{db_info.display_name} download complete",
@@ -354,7 +362,8 @@ def _run_download(
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
         _update_job(
-            engine, job_id,
+            engine,
+            job_id,
             status="failed",
             progress_pct=0.0,
             error=error_msg,

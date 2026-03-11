@@ -45,6 +45,7 @@ export default function SetupWizard() {
   // If disclaimer already accepted, advance past step 0
   useEffect(() => {
     if (status?.disclaimer_accepted && currentStep === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentStep(1)
     }
   }, [status?.disclaimer_accepted, currentStep])

@@ -128,25 +128,25 @@ class TestVCFDataLines:
         data = _get_data_lines(vcf)
         assert len(data) == 1
         fields = data[0].split("\t")
-        assert fields[0] == "1"       # CHROM
-        assert fields[1] == "1000"    # POS
-        assert fields[2] == "rs100"   # ID
-        assert fields[3] == "A"       # REF
-        assert fields[4] == "."       # ALT (hom → no alt)
-        assert fields[5] == "."       # QUAL
-        assert fields[6] == "PASS"    # FILTER
-        assert fields[7] == "."       # INFO
-        assert fields[8] == "GT"      # FORMAT
-        assert fields[9] == "0/0"     # GT value
+        assert fields[0] == "1"  # CHROM
+        assert fields[1] == "1000"  # POS
+        assert fields[2] == "rs100"  # ID
+        assert fields[3] == "A"  # REF
+        assert fields[4] == "."  # ALT (hom → no alt)
+        assert fields[5] == "."  # QUAL
+        assert fields[6] == "PASS"  # FILTER
+        assert fields[7] == "."  # INFO
+        assert fields[8] == "GT"  # FORMAT
+        assert fields[9] == "0/0"  # GT value
 
     def test_heterozygous_call(self) -> None:
         rows = [("rs200", "2", 2000, "AG")]
         vcf = export_vcf_from_rows(rows, file_date=FIXED_DATE)
         data = _get_data_lines(vcf)
         fields = data[0].split("\t")
-        assert fields[3] == "A"       # REF = first allele
-        assert fields[4] == "G"       # ALT = second allele
-        assert fields[9] == "0/1"     # het GT
+        assert fields[3] == "A"  # REF = first allele
+        assert fields[4] == "G"  # ALT = second allele
+        assert fields[9] == "0/1"  # het GT
 
     def test_haploid_call(self) -> None:
         """Y/MT chromosomes may have single-character genotypes."""
@@ -154,9 +154,9 @@ class TestVCFDataLines:
         vcf = export_vcf_from_rows(rows, file_date=FIXED_DATE)
         data = _get_data_lines(vcf)
         fields = data[0].split("\t")
-        assert fields[3] == "T"       # REF
-        assert fields[4] == "."       # ALT
-        assert fields[9] == "0"       # haploid GT
+        assert fields[3] == "T"  # REF
+        assert fields[4] == "."  # ALT
+        assert fields[9] == "0"  # haploid GT
 
     def test_nocalls_skipped_by_default(self) -> None:
         rows = [
@@ -177,8 +177,8 @@ class TestVCFDataLines:
         data = _get_data_lines(vcf)
         assert len(data) == 2
         nocall_fields = data[1].split("\t")
-        assert nocall_fields[3] == "N"     # REF = N for no-call
-        assert nocall_fields[9] == "./."   # missing GT
+        assert nocall_fields[3] == "N"  # REF = N for no-call
+        assert nocall_fields[9] == "./."  # missing GT
 
     def test_rows_sorted_by_chrom_pos(self) -> None:
         rows = [
@@ -269,7 +269,9 @@ class TestOutputDestinations:
     def test_write_to_file(self, tmp_path: Path) -> None:
         dest = tmp_path / "output.vcf"
         content = export_vcf_from_rows(
-            SAMPLE_ROWS, dest=dest, file_date=FIXED_DATE,
+            SAMPLE_ROWS,
+            dest=dest,
+            file_date=FIXED_DATE,
         )
         assert dest.exists()
         assert dest.read_text(encoding="utf-8") == content
@@ -277,7 +279,9 @@ class TestOutputDestinations:
     def test_write_to_stream(self) -> None:
         stream = StringIO()
         content = export_vcf_from_rows(
-            SAMPLE_ROWS, dest=stream, file_date=FIXED_DATE,
+            SAMPLE_ROWS,
+            dest=stream,
+            file_date=FIXED_DATE,
         )
         assert stream.getvalue() == content
 
@@ -310,18 +314,23 @@ class TestExportFromEngine:
         assert len(data) == 10
 
     def test_export_to_file(
-        self, sample_with_variants: sa.Engine, tmp_path: Path,
+        self,
+        sample_with_variants: sa.Engine,
+        tmp_path: Path,
     ) -> None:
         dest = tmp_path / "sample.vcf"
         export_vcf_from_engine(
-            sample_with_variants, dest=dest, file_date=FIXED_DATE,
+            sample_with_variants,
+            dest=dest,
+            file_date=FIXED_DATE,
         )
         assert dest.exists()
         text = dest.read_text(encoding="utf-8")
         assert text.startswith("##fileformat=VCFv4.2")
 
     def test_output_sorted_by_canonical_chrom_order(
-        self, sample_with_variants: sa.Engine,
+        self,
+        sample_with_variants: sa.Engine,
     ) -> None:
         """Verify variants are sorted by canonical chrom order, not text order."""
         vcf = export_vcf_from_engine(sample_with_variants, file_date=FIXED_DATE)
@@ -348,7 +357,4 @@ class TestExportFromEngine:
 
 def _get_data_lines(vcf: str) -> list[str]:
     """Extract non-header, non-empty lines from a VCF string."""
-    return [
-        line for line in vcf.strip().split("\n")
-        if line and not line.startswith("#")
-    ]
+    return [line for line in vcf.strip().split("\n") if line and not line.startswith("#")]

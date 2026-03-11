@@ -272,9 +272,7 @@ class DownloadManager:
 
                             # Update job progress for SSE
                             if total_bytes and total_bytes > 0:
-                                pct = min(
-                                    (current_offset / total_bytes) * 100.0, 99.9
-                                )
+                                pct = min((current_offset / total_bytes) * 100.0, 99.9)
                                 self._update_job(
                                     job_id,
                                     status="running",
@@ -307,9 +305,7 @@ class DownloadManager:
         sha256 = _compute_sha256(tmp_path)
         verified = True
         if expected_sha256 and sha256 != expected_sha256:
-            error_msg = (
-                f"SHA-256 mismatch: expected {expected_sha256}, got {sha256}"
-            )
+            error_msg = f"SHA-256 mismatch: expected {expected_sha256}, got {sha256}"
             self._update_download_status(download_id, "failed")
             self._update_job(job_id, status="failed", progress_pct=100.0, error=error_msg)
             tmp_path.unlink(missing_ok=True)

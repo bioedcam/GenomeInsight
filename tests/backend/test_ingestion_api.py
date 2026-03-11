@@ -66,42 +66,32 @@ class TestIngestEndpoint:
 
     def test_ingest_valid_file_returns_202(self, client):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         assert response.status_code == 202
 
     def test_ingest_returns_sample_id(self, client):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         assert "sample_id" in data
         assert isinstance(data["sample_id"], int)
 
     def test_ingest_returns_job_id(self, client):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         assert "job_id" in data
         assert data["job_id"]  # non-empty
 
     def test_ingest_returns_variant_count(self, client):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         assert data["variant_count"] > 0
 
     def test_ingest_returns_file_format(self, client):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         assert data["file_format"] == "23andme_v5"
 
@@ -127,9 +117,7 @@ class TestIngestEndpoint:
 
     def test_ingest_creates_sample_db_file(self, client, tmp_data_dir):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         sample_id = data["sample_id"]
         sample_db = tmp_data_dir / "samples" / f"sample_{sample_id}.db"
@@ -137,34 +125,26 @@ class TestIngestEndpoint:
 
     def test_ingest_writes_raw_variants(self, client, tmp_data_dir):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
         sample_id = data["sample_id"]
         sample_db = tmp_data_dir / "samples" / f"sample_{sample_id}.db"
 
         engine = sa.create_engine(f"sqlite:///{sample_db}")
         with engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(raw_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(raw_variants)).scalar()
         engine.dispose()
         assert count == data["variant_count"]
 
     def test_ingest_creates_complete_job(self, client, tmp_data_dir):
         with open(V5_FILE, "rb") as f:
-            response = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            response = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         data = response.json()
 
         ref_path = tmp_data_dir / "reference.db"
         engine = sa.create_engine(f"sqlite:///{ref_path}")
         with engine.connect() as conn:
-            job = conn.execute(
-                sa.select(jobs).where(jobs.c.job_id == data["job_id"])
-            ).fetchone()
+            job = conn.execute(sa.select(jobs).where(jobs.c.job_id == data["job_id"])).fetchone()
         engine.dispose()
 
         assert job is not None
@@ -188,13 +168,9 @@ class TestIngestEndpoint:
 
     def test_ingest_multiple_files_get_unique_ids(self, client):
         with open(V5_FILE, "rb") as f1:
-            r1 = client.post(
-                "/api/ingest", files={"file": ("sample1.txt", f1, "text/plain")}
-            )
+            r1 = client.post("/api/ingest", files={"file": ("sample1.txt", f1, "text/plain")})
         with open(V5_FILE, "rb") as f2:
-            r2 = client.post(
-                "/api/ingest", files={"file": ("sample2.txt", f2, "text/plain")}
-            )
+            r2 = client.post("/api/ingest", files={"file": ("sample2.txt", f2, "text/plain")})
         assert r1.json()["sample_id"] != r2.json()["sample_id"]
         assert r1.json()["job_id"] != r2.json()["job_id"]
 
@@ -210,9 +186,7 @@ class TestIngestStatus:
     def test_status_returns_sse_content_type(self, client):
         # First ingest a file to get a job_id
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         job_id = r.json()["job_id"]
 
         response = client.get(f"/api/ingest/status/{job_id}")
@@ -220,9 +194,7 @@ class TestIngestStatus:
 
     def test_status_contains_complete_event(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         job_id = r.json()["job_id"]
 
         response = client.get(f"/api/ingest/status/{job_id}")
@@ -250,9 +222,7 @@ class TestListSamples:
 
     def test_list_after_ingest(self, client):
         with open(V5_FILE, "rb") as f:
-            client.post(
-                "/api/ingest", files={"file": ("my_sample.txt", f, "text/plain")}
-            )
+            client.post("/api/ingest", files={"file": ("my_sample.txt", f, "text/plain")})
 
         response = client.get("/api/samples")
         assert response.status_code == 200
@@ -263,9 +233,7 @@ class TestListSamples:
     def test_list_multiple_samples(self, client):
         for name in ["s1.txt", "s2.txt"]:
             with open(V5_FILE, "rb") as f:
-                client.post(
-                    "/api/ingest", files={"file": (name, f, "text/plain")}
-                )
+                client.post("/api/ingest", files={"file": (name, f, "text/plain")})
 
         response = client.get("/api/samples")
         data = response.json()
@@ -282,9 +250,7 @@ class TestGetSample:
 
     def test_get_existing_sample(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         response = client.get(f"/api/samples/{sid}")
@@ -306,9 +272,7 @@ class TestUpdateSample:
 
     def test_rename_sample(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("old_name.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("old_name.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         response = client.patch(f"/api/samples/{sid}", json={"name": "New Name"})
@@ -317,9 +281,7 @@ class TestUpdateSample:
 
     def test_update_sets_updated_at(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         response = client.patch(f"/api/samples/{sid}", json={"name": "Renamed"})
@@ -340,9 +302,7 @@ class TestDeleteSample:
 
     def test_delete_returns_204(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         response = client.delete(f"/api/samples/{sid}")
@@ -350,9 +310,7 @@ class TestDeleteSample:
 
     def test_delete_removes_from_list(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         client.delete(f"/api/samples/{sid}")
@@ -361,9 +319,7 @@ class TestDeleteSample:
 
     def test_delete_removes_db_file(self, client, tmp_data_dir):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
         sample_db = tmp_data_dir / "samples" / f"sample_{sid}.db"
         assert sample_db.exists()
@@ -377,9 +333,7 @@ class TestDeleteSample:
 
     def test_get_after_delete_returns_404(self, client):
         with open(V5_FILE, "rb") as f:
-            r = client.post(
-                "/api/ingest", files={"file": ("sample.txt", f, "text/plain")}
-            )
+            r = client.post("/api/ingest", files={"file": ("sample.txt", f, "text/plain")})
         sid = r.json()["sample_id"]
 
         client.delete(f"/api/samples/{sid}")

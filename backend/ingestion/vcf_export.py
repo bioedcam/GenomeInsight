@@ -40,7 +40,15 @@ _CHROM_ORDER: dict[str, int] = {
 
 # VCF header column names.
 _VCF_COLUMNS = (
-    "#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT",
+    "#CHROM",
+    "POS",
+    "ID",
+    "REF",
+    "ALT",
+    "QUAL",
+    "FILTER",
+    "INFO",
+    "FORMAT",
     "SAMPLE",
 )
 
@@ -51,6 +59,7 @@ _VALID_BASES: frozenset[str] = frozenset("ACGT")
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _chrom_sort_key(chrom: str) -> int:
     """Return an integer sort key for a chromosome string."""
@@ -99,9 +108,9 @@ def _build_header_lines(
         file_date = date.today()
 
     # Sanitize sample name: strip tabs, newlines, control characters.
-    safe_name = "".join(
-        c for c in sample_name if c.isprintable() and c not in "\t\n\r"
-    ) or "SAMPLE"
+    safe_name = (
+        "".join(c for c in sample_name if c.isprintable() and c not in "\t\n\r") or "SAMPLE"
+    )
 
     lines = [
         f"##fileformat={_VCF_VERSION}",
@@ -133,6 +142,7 @@ def _build_header_lines(
 # Data row type
 # ---------------------------------------------------------------------------
 
+
 class _VariantRow:
     """Lightweight container for a variant to be exported."""
 
@@ -148,6 +158,7 @@ class _VariantRow:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def export_vcf_from_rows(
     variants: Iterable[tuple[str, str, int, str]],
@@ -182,10 +193,7 @@ def export_vcf_from_rows(
         is also written to that file.
     """
     # Materialise and sort.
-    rows = [
-        _VariantRow(rsid, chrom, pos, gt)
-        for rsid, chrom, pos, gt in variants
-    ]
+    rows = [_VariantRow(rsid, chrom, pos, gt) for rsid, chrom, pos, gt in variants]
     rows.sort(key=lambda r: (_chrom_sort_key(r.chrom), r.pos))
 
     header_lines = _build_header_lines(sample_name=sample_name, file_date=file_date)
@@ -205,18 +213,20 @@ def export_vcf_from_rows(
         else:
             ref, alt, gt = fields
 
-        data_line = "\t".join([
-            row.chrom,
-            str(row.pos),
-            row.rsid,
-            ref,
-            alt,
-            ".",      # QUAL
-            "PASS",   # FILTER
-            ".",      # INFO
-            "GT",     # FORMAT
-            gt,       # sample genotype
-        ])
+        data_line = "\t".join(
+            [
+                row.chrom,
+                str(row.pos),
+                row.rsid,
+                ref,
+                alt,
+                ".",  # QUAL
+                "PASS",  # FILTER
+                ".",  # INFO
+                "GT",  # FORMAT
+                gt,  # sample genotype
+            ]
+        )
         buf.write(data_line)
         buf.write("\n")
 

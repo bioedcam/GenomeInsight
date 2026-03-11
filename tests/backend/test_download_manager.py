@@ -181,8 +181,9 @@ def test_start_fresh_download(
     # Verify download record is marked complete
     with ref_engine.connect() as conn:
         row = conn.execute(
-            sa.select(downloads.c.status, downloads.c.downloaded_bytes)
-            .where(downloads.c.id == result.download_id)
+            sa.select(downloads.c.status, downloads.c.downloaded_bytes).where(
+                downloads.c.id == result.download_id
+            )
         ).fetchone()
     assert row is not None
     assert row.status == "complete"
@@ -191,8 +192,7 @@ def test_start_fresh_download(
     # Verify job record is complete
     with ref_engine.connect() as conn:
         job = conn.execute(
-            sa.select(jobs.c.status, jobs.c.progress_pct)
-            .where(jobs.c.job_id == result.job_id)
+            sa.select(jobs.c.status, jobs.c.progress_pct).where(jobs.c.job_id == result.job_id)
         ).fetchone()
     assert job is not None
     assert job.status == "complete"
@@ -376,8 +376,7 @@ def test_download_server_error(
     # Download record should be marked failed
     with ref_engine.connect() as conn:
         row = conn.execute(
-            sa.select(downloads.c.status)
-            .where(downloads.c.id == result.download_id)
+            sa.select(downloads.c.status).where(downloads.c.id == result.download_id)
         ).fetchone()
     assert row is not None
     assert row.status == "failed"
@@ -385,8 +384,7 @@ def test_download_server_error(
     # Job should be marked failed
     with ref_engine.connect() as conn:
         job = conn.execute(
-            sa.select(jobs.c.status, jobs.c.error)
-            .where(jobs.c.job_id == result.job_id)
+            sa.select(jobs.c.status, jobs.c.error).where(jobs.c.job_id == result.job_id)
         ).fetchone()
     assert job is not None
     assert job.status == "failed"
@@ -498,8 +496,7 @@ def test_job_type_is_download(
 
     with ref_engine.connect() as conn:
         job = conn.execute(
-            sa.select(jobs.c.job_type)
-            .where(jobs.c.job_id == result.job_id)
+            sa.select(jobs.c.job_type).where(jobs.c.job_id == result.job_id)
         ).fetchone()
     assert job is not None
     assert job.job_type == "download"

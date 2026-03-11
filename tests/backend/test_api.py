@@ -41,8 +41,9 @@ def client(tmp_path):
 
     test_settings = Settings(data_dir=tmp_path)
 
-    with patch("backend.main.get_settings", return_value=test_settings), patch(
-        "backend.db.connection.get_settings", return_value=test_settings
+    with (
+        patch("backend.main.get_settings", return_value=test_settings),
+        patch("backend.db.connection.get_settings", return_value=test_settings),
     ):
         # Reset the singleton so it picks up test settings
         from backend.db.connection import reset_registry
