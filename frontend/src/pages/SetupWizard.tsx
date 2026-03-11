@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSetupStatus } from '@/api/setup'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
+import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import WizardStepper, { type WizardStep } from '@/components/setup/WizardStepper'
 import { cn } from '@/lib/utils'
 import { Dna } from 'lucide-react'
@@ -45,9 +46,17 @@ export default function SetupWizard() {
     setCurrentStep(1)
   }, [])
 
+  const handleNext = useCallback(() => {
+    setCurrentStep((prev) => Math.min(WIZARD_STEPS.length - 1, prev + 1))
+  }, [])
+
   const handleBack = useCallback(() => {
     setCurrentStep((prev) => Math.max(0, prev - 1))
   }, [])
+
+  const handleSkipToEnd = useCallback(() => {
+    navigate('/', { replace: true })
+  }, [navigate])
 
   if (isLoading) {
     return (
@@ -88,7 +97,15 @@ export default function SetupWizard() {
           <DisclaimerStep onAccepted={handleDisclaimerAccepted} />
         )}
 
-        {currentStep > 0 && currentStep < WIZARD_STEPS.length && (
+        {currentStep === 1 && (
+          <ImportBackupStep
+            onNext={handleNext}
+            onBack={handleBack}
+            onSkipToEnd={handleSkipToEnd}
+          />
+        )}
+
+        {currentStep > 1 && currentStep < WIZARD_STEPS.length && (
           <StepPlaceholder
             step={WIZARD_STEPS[currentStep]}
             stepNumber={currentStep}

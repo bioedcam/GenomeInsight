@@ -18,3 +18,18 @@ export interface AcceptDisclaimerResult {
   accepted: boolean
   accepted_at: string
 }
+
+export interface DetectExistingResult {
+  existing_found: boolean
+  has_config: boolean
+  has_samples: boolean
+  has_databases: boolean
+  data_dir: string
+}
+
+export interface ImportBackupResult {
+  success: boolean
+  samples_restored: number
+  config_restored: boolean
+  message: string
+}

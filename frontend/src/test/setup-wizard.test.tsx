@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from './test-utils'
 import SetupWizard from '@/pages/SetupWizard'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
+import ImportBackupStep from '@/components/setup/ImportBackupStep'
 import WizardStepper from '@/components/setup/WizardStepper'
 
 const mockFetch = vi.fn()
@@ -150,6 +151,195 @@ describe('DisclaimerStep', () => {
     // The bold text should be in a <strong> element
     const strongEl = screen.getByText('Not a diagnostic tool.')
     expect(strongEl.tagName).toBe('STRONG')
+  })
+})
+
+// ─── ImportBackupStep tests ──────────────────────────────────────
+
+function mockDetectExisting(overrides: Record<string, unknown> = {}) {
+  return {
+    existing_found: false,
+    has_config: false,
+    has_samples: false,
+    has_databases: false,
+    data_dir: '/tmp/test',
+    ...overrides,
+  }
+}
+
+describe('ImportBackupStep', () => {
+  it('shows import UI when no existing installation', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDetectExisting()),
+    })
+
+    const onNext = vi.fn()
+    const onBack = vi.fn()
+    render(<ImportBackupStep onNext={onNext} onBack={onBack} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Import from Backup')).toBeInTheDocument()
+    })
+
+    // Should show drop zone
+    expect(screen.getByText(/drop a .tar.gz backup file/i)).toBeInTheDocument()
+    // Should show skip button
+    expect(screen.getByText(/skip — start fresh/i)).toBeInTheDocument()
+  })
+
+  it('shows existing installation when detected', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockDetectExisting({
+            existing_found: true,
+            has_config: true,
+            has_samples: true,
+            has_databases: true,
+          }),
+        ),
+    })
+
+    const onNext = vi.fn()
+    const onBack = vi.fn()
+    const onSkipToEnd = vi.fn()
+    render(
+      <ImportBackupStep
+        onNext={onNext}
+        onBack={onBack}
+        onSkipToEnd={onSkipToEnd}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing Installation Detected')).toBeInTheDocument()
+    })
+
+    // Should show detection details
+    expect(screen.getByText('Configuration')).toBeInTheDocument()
+    expect(screen.getByText('Sample databases')).toBeInTheDocument()
+    expect(screen.getByText('Reference databases')).toBeInTheDocument()
+  })
+
+  it('shows Go to Dashboard when full installation found', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockDetectExisting({
+            existing_found: true,
+            has_config: true,
+            has_samples: true,
+            has_databases: true,
+          }),
+        ),
+    })
+
+    const onSkipToEnd = vi.fn()
+    render(
+      <ImportBackupStep
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        onSkipToEnd={onSkipToEnd}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Go to Dashboard')).toBeInTheDocument()
+    })
+  })
+
+  it('does not show Go to Dashboard when DBs are missing', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockDetectExisting({
+            existing_found: true,
+            has_config: true,
+            has_samples: false,
+            has_databases: false,
+          }),
+        ),
+    })
+
+    render(
+      <ImportBackupStep
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        onSkipToEnd={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing Installation Detected')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Go to Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('calls onBack when Back button is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDetectExisting()),
+    })
+
+    const onBack = vi.fn()
+    render(<ImportBackupStep onNext={vi.fn()} onBack={onBack} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Import from Backup')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('calls onNext when Skip is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDetectExisting()),
+    })
+
+    const onNext = vi.fn()
+    render(<ImportBackupStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Import from Backup')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText(/skip — start fresh/i))
+    expect(onNext).toHaveBeenCalledOnce()
+  })
+
+  it('shows loading state while detecting', () => {
+    mockFetch.mockReturnValue(new Promise(() => {})) // Never resolves
+    render(<ImportBackupStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    expect(
+      screen.getByText(/checking for existing installation/i),
+    ).toBeInTheDocument()
+  })
+
+  it('has accessible drop zone', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDetectExisting()),
+    })
+
+    render(<ImportBackupStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Import from Backup')).toBeInTheDocument()
+    })
+
+    const dropZone = screen.getByRole('button', {
+      name: /select backup archive/i,
+    })
+    expect(dropZone).toBeInTheDocument()
+    expect(dropZone).toHaveAttribute('tabindex', '0')
   })
 })
 
