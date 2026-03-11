@@ -11,6 +11,13 @@ import FindingsPreview from '@/components/dashboard/FindingsPreview'
 import QualityControl from '@/components/dashboard/QualityControl'
 import { Pill } from 'lucide-react'
 
+// Mock react-plotly.js to avoid canvas dependency in test env
+vi.mock('react-plotly.js', () => ({
+  default: ({ layout }: { layout: { title?: { text?: string } } }) => (
+    <div data-testid="plotly-chart" data-title={layout?.title?.text} />
+  ),
+}))
+
 const mockFetch = vi.fn()
 globalThis.fetch = mockFetch
 
@@ -49,6 +56,23 @@ function mockDatabaseListResponse(downloaded = 3, total = 4) {
   }
 }
 
+function mockQCStatsResponse() {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      total_variants: 623841,
+      called_variants: 610000,
+      nocall_variants: 13841,
+      het_count: 210000,
+      hom_count: 400000,
+      call_rate: 0.977817,
+      heterozygosity_rate: 0.344262,
+      per_chromosome: [],
+    }),
+  }
+}
+
 function setupFetchMocks(options: {
   samples?: unknown[]
   variantCount?: number
@@ -58,6 +82,9 @@ function setupFetchMocks(options: {
   mockFetch.mockImplementation((url: string) => {
     if (url.includes('/api/samples')) {
       return Promise.resolve(mockSamplesResponse(options.samples ?? []))
+    }
+    if (url.includes('/api/variants/qc-stats')) {
+      return Promise.resolve(mockQCStatsResponse())
     }
     if (url.includes('/api/variants/count')) {
       return Promise.resolve(mockVariantCountResponse(options.variantCount ?? 623841))
@@ -251,16 +278,16 @@ describe('QualityControl', () => {
   it('shows dash when variant count is null', () => {
     render(<QualityControl variantCount={null} />)
     fireEvent.click(screen.getByText('Sample QC'))
-    // All three metrics show "—" when no data
+    // variant count + call rate + het rate all show "—"
     const dashes = screen.getAllByText('—')
     expect(dashes.length).toBe(3)
   })
 
-  it('shows placeholder for Call Rate and Ti/Tv', () => {
+  it('shows labels for Call Rate and Het Rate', () => {
     render(<QualityControl variantCount={100} />)
     fireEvent.click(screen.getByText('Sample QC'))
     expect(screen.getByText('Call Rate')).toBeInTheDocument()
-    expect(screen.getByText('Ti/Tv Ratio')).toBeInTheDocument()
+    expect(screen.getByText('Het Rate')).toBeInTheDocument()
   })
 
   it('has accessible expand/collapse button', () => {

@@ -1,0 +1,224 @@
+"""Tests for QC stats API endpoint and genotype classification (P1-21).
+
+T1-06: QC metrics computation: call rate, heterozygosity rate on known fixture.
+T1-20: QC metrics match hand-calculated values for test fixture.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import sqlalchemy as sa
+from fastapi.testclient import TestClient
+
+from backend.api.routes.variants import _classify_genotype
+from backend.config import Settings
+from backend.db.connection import DBRegistry, reset_registry
+from backend.db.sample_schema import create_sample_tables
+from backend.db.tables import raw_variants, reference_metadata, samples
+
+# Known test variants with deterministic genotype classification:
+# het: AG, CT, TC → 3
+# hom: AA, GG, CC, CC, AA → 5
+# nocall: -- → 1
+# haploid (hom): A → 1
+# Total: 10, called: 9, nocall: 1
+QC_TEST_VARIANTS = [
+    {"rsid": "rs100", "chrom": "1", "pos": 50000, "genotype": "AG"},     # het
+    {"rsid": "rs101", "chrom": "1", "pos": 100000, "genotype": "AA"},    # hom
+    {"rsid": "rs102", "chrom": "1", "pos": 200000, "genotype": "--"},    # nocall
+    {"rsid": "rs200", "chrom": "2", "pos": 10000, "genotype": "GG"},    # hom
+    {"rsid": "rs201", "chrom": "2", "pos": 20000, "genotype": "CT"},    # het
+    {"rsid": "rs1000", "chrom": "10", "pos": 50000, "genotype": "CC"},  # hom
+    {"rsid": "rs1900", "chrom": "19", "pos": 44908684, "genotype": "TC"},  # het
+    {"rsid": "rsX001", "chrom": "X", "pos": 5000, "genotype": "AA"},   # hom
+    {"rsid": "rsX002", "chrom": "X", "pos": 6000, "genotype": "A"},    # haploid (hom)
+    {"rsid": "rsMT01", "chrom": "MT", "pos": 1000, "genotype": "CC"},  # hom
+]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Unit tests for _classify_genotype
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestClassifyGenotype:
+    """Unit tests for genotype classification logic."""
+
+    def test_nocall_dashes(self):
+        assert _classify_genotype("--") == "nocall"
+
+    def test_nocall_empty(self):
+        assert _classify_genotype("") == "nocall"
+
+    def test_homozygous_aa(self):
+        assert _classify_genotype("AA") == "hom"
+
+    def test_homozygous_gg(self):
+        assert _classify_genotype("GG") == "hom"
+
+    def test_homozygous_cc(self):
+        assert _classify_genotype("CC") == "hom"
+
+    def test_homozygous_tt(self):
+        assert _classify_genotype("TT") == "hom"
+
+    def test_heterozygous_ag(self):
+        assert _classify_genotype("AG") == "het"
+
+    def test_heterozygous_ct(self):
+        assert _classify_genotype("CT") == "het"
+
+    def test_heterozygous_tc(self):
+        assert _classify_genotype("TC") == "het"
+
+    def test_haploid_single_base(self):
+        assert _classify_genotype("A") == "hom"
+
+    def test_haploid_single_t(self):
+        assert _classify_genotype("T") == "hom"
+
+    def test_deletion_d(self):
+        assert _classify_genotype("D") == "hom"
+
+    def test_insertion_i(self):
+        assert _classify_genotype("I") == "hom"
+
+    def test_heterozygous_di(self):
+        assert _classify_genotype("DI") == "het"
+
+    def test_heterozygous_id(self):
+        assert _classify_genotype("ID") == "het"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration tests for GET /api/variants/qc-stats
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def qc_client(tmp_data_dir: Path):
+    """TestClient with a sample pre-loaded with QC_TEST_VARIANTS."""
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+
+    ref_path = settings.reference_db_path
+    ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
+    reference_metadata.create_all(ref_engine)
+
+    with ref_engine.begin() as conn:
+        result = conn.execute(
+            samples.insert().values(
+                name="qc_test",
+                db_path="samples/sample_1.db",
+                file_format="23andme_v5",
+                file_hash="qchash",
+            )
+        )
+        sample_id = result.lastrowid
+    ref_engine.dispose()
+
+    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+    create_sample_tables(sample_engine)
+    with sample_engine.begin() as conn:
+        conn.execute(raw_variants.insert(), QC_TEST_VARIANTS)
+    sample_engine.dispose()
+
+    with (
+        patch("backend.main.get_settings", return_value=settings),
+        patch("backend.db.connection.get_settings", return_value=settings),
+        patch("backend.api.routes.variants.get_registry") as mock_reg,
+        patch("backend.api.routes.ingest.get_registry") as mock_reg2,
+        patch("backend.api.routes.samples.get_registry") as mock_reg3,
+    ):
+        reset_registry()
+        registry = DBRegistry(settings)
+        mock_reg.return_value = registry
+        mock_reg2.return_value = registry
+        mock_reg3.return_value = registry
+
+        from backend.main import create_app
+
+        app = create_app()
+        with TestClient(app) as tc:
+            yield tc, sample_id
+
+        registry.dispose_all()
+        reset_registry()
+
+
+class TestQCStatsEndpoint:
+    """Integration tests for GET /api/variants/qc-stats."""
+
+    def test_returns_200(self, qc_client):
+        client, sid = qc_client
+        response = client.get(f"/api/variants/qc-stats?sample_id={sid}")
+        assert response.status_code == 200
+
+    def test_total_variants_correct(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        assert data["total_variants"] == 10
+
+    def test_nocall_count(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        assert data["nocall_variants"] == 1
+
+    def test_called_variants(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        # 10 total - 1 nocall = 9 called
+        assert data["called_variants"] == 9
+
+    def test_het_count(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        # AG, CT, TC = 3 heterozygous
+        assert data["het_count"] == 3
+
+    def test_hom_count(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        # AA, GG, CC, CC, AA, A (haploid) = 6 homozygous
+        assert data["hom_count"] == 6
+
+    def test_call_rate(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        # 9 called / 10 total = 0.9
+        assert data["call_rate"] == pytest.approx(0.9, abs=0.001)
+
+    def test_heterozygosity_rate(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        # 3 het / 9 called = 0.333...
+        assert data["heterozygosity_rate"] == pytest.approx(1 / 3, abs=0.001)
+
+    def test_per_chromosome_count(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        chroms = {c["chrom"] for c in data["per_chromosome"]}
+        assert chroms == {"1", "2", "10", "19", "X", "MT"}
+
+    def test_per_chromosome_sorted(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        chrom_list = [c["chrom"] for c in data["per_chromosome"]]
+        assert chrom_list == ["1", "2", "10", "19", "X", "MT"]
+
+    def test_chrom1_breakdown(self, qc_client):
+        client, sid = qc_client
+        data = client.get(f"/api/variants/qc-stats?sample_id={sid}").json()
+        chr1 = next(c for c in data["per_chromosome"] if c["chrom"] == "1")
+        assert chr1["total"] == 3
+        assert chr1["het_count"] == 1  # AG
+        assert chr1["hom_count"] == 1  # AA
+        assert chr1["nocall_count"] == 1  # --
+
+    def test_404_invalid_sample(self, qc_client):
+        client, _ = qc_client
+        response = client.get("/api/variants/qc-stats?sample_id=9999")
+        assert response.status_code == 404

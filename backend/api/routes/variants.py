@@ -381,3 +381,112 @@ def chromosome_counts(
     ]
     summaries.sort(key=lambda s: _chrom_sort_key(s.chrom))
     return summaries
+
+
+# ── QC stats (P1-21) ──────────────────────────────────────────────────
+
+
+class ChromosomeQCStats(BaseModel):
+    """Per-chromosome QC breakdown for charts."""
+
+    chrom: str
+    total: int
+    het_count: int
+    hom_count: int
+    nocall_count: int
+
+
+class QCStatsResponse(BaseModel):
+    """Aggregate QC statistics for a sample."""
+
+    total_variants: int
+    called_variants: int
+    nocall_variants: int
+    het_count: int
+    hom_count: int
+    call_rate: float
+    heterozygosity_rate: float
+    per_chromosome: list[ChromosomeQCStats]
+
+
+def _classify_genotype(genotype: str) -> str:
+    """Classify a genotype string as het, hom, or nocall.
+
+    23andMe genotypes:
+      - "--" or "" → nocall
+      - Single character ("A") → haploid (hom for stats)
+      - Two identical chars ("AA") → homozygous
+      - Two different chars ("AG") → heterozygous
+      - "D" or "I" (indels) → treated as hom
+      - "DI" or "ID" → treated as het
+    """
+    if not genotype or genotype == "--":
+        return "nocall"
+    if len(genotype) == 1:
+        return "hom"
+    if genotype[0] == genotype[1]:
+        return "hom"
+    return "het"
+
+
+@router.get("/qc-stats")
+def qc_stats(
+    sample_id: int = Query(..., description="Sample ID to compute QC stats for"),
+) -> QCStatsResponse:
+    """Compute QC statistics from variant genotype data.
+
+    Returns overall call rate, heterozygosity rate, and per-chromosome
+    breakdowns for QC chart rendering (P1-21).
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(table.c.chrom, table.c.genotype).select_from(table)
+        ).fetchall()
+
+    # Accumulate per-chromosome stats
+    chrom_stats: dict[str, dict[str, int]] = {}
+    for row in rows:
+        chrom = row.chrom
+        if chrom not in chrom_stats:
+            chrom_stats[chrom] = {"total": 0, "het": 0, "hom": 0, "nocall": 0}
+        bucket = chrom_stats[chrom]
+        bucket["total"] += 1
+        classification = _classify_genotype(row.genotype)
+        bucket[classification] += 1
+
+    # Build per-chromosome list
+    per_chrom = [
+        ChromosomeQCStats(
+            chrom=chrom,
+            total=stats["total"],
+            het_count=stats["het"],
+            hom_count=stats["hom"],
+            nocall_count=stats["nocall"],
+        )
+        for chrom, stats in chrom_stats.items()
+    ]
+    per_chrom.sort(key=lambda s: _chrom_sort_key(s.chrom))
+
+    # Aggregate totals
+    total = sum(s.total for s in per_chrom)
+    nocall = sum(s.nocall_count for s in per_chrom)
+    het = sum(s.het_count for s in per_chrom)
+    hom = sum(s.hom_count for s in per_chrom)
+    called = total - nocall
+
+    call_rate = called / total if total > 0 else 0.0
+    het_rate = het / called if called > 0 else 0.0
+
+    return QCStatsResponse(
+        total_variants=total,
+        called_variants=called,
+        nocall_variants=nocall,
+        het_count=het,
+        hom_count=hom,
+        call_rate=round(call_rate, 6),
+        heterozygosity_rate=round(het_rate, 6),
+        per_chromosome=per_chrom,
+    )

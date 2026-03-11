@@ -11,7 +11,7 @@ import ModuleCardsGrid from '@/components/dashboard/ModuleCardsGrid'
 import FindingsPreview from '@/components/dashboard/FindingsPreview'
 import QualityControl from '@/components/dashboard/QualityControl'
 import { useSamples } from '@/api/samples'
-import { useTotalVariantCount } from '@/api/variants'
+import { useTotalVariantCount, useQCStats } from '@/api/variants'
 import { parseSampleId } from '@/lib/format'
 import { Upload } from 'lucide-react'
 
@@ -23,6 +23,7 @@ export default function Dashboard() {
   const activeSample = samples?.find((s) => s.id === activeSampleId)
 
   const { data: variantCount } = useTotalVariantCount(activeSampleId)
+  const { data: qcStats } = useQCStats(activeSampleId)
 
   // ── Loading state: avoid flash of upload prompt ───────────
 
@@ -75,7 +76,7 @@ export default function Dashboard() {
       <FindingsPreview />
 
       {/* Collapsible QC */}
-      <QualityControl variantCount={variantCount ?? null} />
+      <QualityControl variantCount={variantCount ?? null} qcStats={qcStats ?? null} />
     </div>
   )
 }
