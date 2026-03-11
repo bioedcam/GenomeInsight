@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from './test-utils'
 import SetupWizard from '@/pages/SetupWizard'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
+import StorageStep from '@/components/setup/StorageStep'
 import WizardStepper from '@/components/setup/WizardStepper'
 
 const mockFetch = vi.fn()
@@ -400,5 +401,185 @@ describe('SetupWizard', () => {
     expect(screen.getByText('Services')).toBeInTheDocument()
     expect(screen.getByText('Databases')).toBeInTheDocument()
     expect(screen.getByText('Upload')).toBeInTheDocument()
+  })
+})
+
+// ─── StorageStep tests ────────────────────────────────────────────
+
+function mockStorageInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    data_dir: '/home/test/.genomeinsight',
+    free_space_bytes: 50 * 1024 * 1024 * 1024,
+    free_space_gb: 50,
+    total_space_bytes: 100 * 1024 * 1024 * 1024,
+    total_space_gb: 100,
+    status: 'ok',
+    message: '50.0 GB free — sufficient for GenomeInsight.',
+    path_exists: true,
+    path_writable: true,
+    ...overrides,
+  }
+}
+
+describe('StorageStep', () => {
+  it('renders storage location heading', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Storage Location')).toBeInTheDocument()
+    })
+  })
+
+  it('shows loading state initially', () => {
+    mockFetch.mockReturnValue(new Promise(() => {}))
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByText(/checking storage/i)).toBeInTheDocument()
+  })
+
+  it('shows disk space info when loaded', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Disk Space OK')).toBeInTheDocument()
+    })
+    expect(screen.getByText('50 GB')).toBeInTheDocument()
+    expect(screen.getByText('100 GB')).toBeInTheDocument()
+  })
+
+  it('shows warning state for low disk space', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockStorageInfo({
+            status: 'warning',
+            free_space_gb: 7,
+            message: 'Low disk space (7.0 GB free).',
+          }),
+        ),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Low Disk Space')).toBeInTheDocument()
+    })
+  })
+
+  it('shows blocked state and disables continue', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(
+          mockStorageInfo({
+            status: 'blocked',
+            free_space_gb: 2,
+            message:
+              'Insufficient disk space. GenomeInsight requires at least 5 GB free. Current: 2.0 GB.',
+          }),
+        ),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Insufficient Disk Space')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).toBeDisabled()
+  })
+
+  it('shows default location with data_dir', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Default location')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('/home/test/.genomeinsight'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows custom path input when selected', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Custom location')).toBeInTheDocument()
+    })
+
+    // Click custom option
+    fireEvent.click(screen.getByText('Custom location'))
+
+    // Input should appear
+    expect(
+      screen.getByLabelText('Custom storage path'),
+    ).toBeInTheDocument()
+  })
+
+  it('calls onBack when Back button is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    const onBack = vi.fn()
+    render(<StorageStep onNext={vi.fn()} onBack={onBack} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Storage Location')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('shows path writable status', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo({ path_writable: true })),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Path writable')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+  })
+
+  it('shows path not writable when false', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve(mockStorageInfo({ path_writable: false })),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Path writable')).toBeInTheDocument()
+    })
+    expect(screen.getByText('No')).toBeInTheDocument()
   })
 })

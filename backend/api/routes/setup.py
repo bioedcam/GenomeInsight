@@ -1,4 +1,4 @@
-"""Setup wizard API routes (P1-19a, P1-19b).
+"""Setup wizard API routes (P1-19a, P1-19b, P1-19c).
 
 Endpoints:
     GET  /api/setup/status             — Check first-launch state and disclaimer acceptance
@@ -6,6 +6,8 @@ Endpoints:
     GET  /api/setup/disclaimer         — Get disclaimer text
     GET  /api/setup/detect-existing    — Auto-detect existing installation
     POST /api/setup/import-backup      — Import from .tar.gz backup archive
+    GET  /api/setup/storage-info       — Get current storage path and disk space info
+    POST /api/setup/set-storage-path   — Set the storage path and persist to config.toml
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import shutil
 import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -75,6 +78,36 @@ class ImportBackupResponse(BaseModel):
     success: bool
     samples_restored: int
     config_restored: bool
+    message: str
+
+
+class StorageInfoResponse(BaseModel):
+    """Current storage path and disk space information."""
+
+    data_dir: str
+    free_space_bytes: int
+    free_space_gb: float
+    total_space_bytes: int
+    total_space_gb: float
+    status: Literal["ok", "warning", "blocked"]
+    message: str
+    path_exists: bool
+    path_writable: bool
+
+
+class SetStoragePathRequest(BaseModel):
+    """Request to set the storage path."""
+
+    path: str
+
+
+class SetStoragePathResponse(BaseModel):
+    """Result of setting the storage path."""
+
+    success: bool
+    data_dir: str
+    free_space_gb: float
+    status: Literal["ok", "warning", "blocked"]
     message: str
 
 
@@ -366,3 +399,206 @@ async def import_backup(file: UploadFile) -> ImportBackupResponse:
         # Clean up temp file
         if tmp_archive.exists():
             tmp_archive.unlink()
+
+
+# ── P1-19c: Storage path + disk space check ──────────────────────
+
+# Thresholds per PRD §2.18
+_WARN_THRESHOLD_GB = 10
+_BLOCK_THRESHOLD_GB = 5
+
+
+def _get_disk_space(path: Path) -> tuple[int, int]:
+    """Get free and total disk space for a path.
+
+    Walks up the path tree until an existing ancestor is found,
+    then uses shutil.disk_usage on that ancestor.
+
+    Returns (free_bytes, total_bytes).
+    """
+    check_path = path
+    while not check_path.exists():
+        parent = check_path.parent
+        if parent == check_path:
+            break
+        check_path = parent
+
+    usage = shutil.disk_usage(check_path)
+    return usage.free, usage.total
+
+
+def _assess_disk_space(free_bytes: int) -> tuple[Literal["ok", "warning", "blocked"], str]:
+    """Assess disk space and return (status, message)."""
+    free_gb = free_bytes / (1024**3)
+    if free_gb < _BLOCK_THRESHOLD_GB:
+        return (
+            "blocked",
+            f"Insufficient disk space. GenomeInsight requires at least "
+            f"{_BLOCK_THRESHOLD_GB} GB free. Current: {free_gb:.1f} GB.",
+        )
+    if free_gb < _WARN_THRESHOLD_GB:
+        return (
+            "warning",
+            f"Low disk space ({free_gb:.1f} GB free). GenomeInsight reference "
+            f"databases require ~4 GB, and sample data needs additional headroom. "
+            f"Consider freeing space or choosing a different path.",
+        )
+    return "ok", f"{free_gb:.1f} GB free — sufficient for GenomeInsight."
+
+
+def _resolve_storage_path(raw_path: str) -> Path:
+    """Resolve a user-provided storage path, expanding ~ and env vars."""
+    return Path(raw_path).expanduser().resolve()
+
+
+@router.get("/storage-info", response_model=StorageInfoResponse)
+async def storage_info() -> StorageInfoResponse:
+    """Get current storage path and disk space information.
+
+    Returns the current data_dir, free/total disk space, and whether
+    the space is sufficient (ok), low (warning), or insufficient (blocked).
+    """
+    settings = get_settings()
+    data_dir = settings.data_dir
+
+    free_bytes, total_bytes = _get_disk_space(data_dir)
+    free_gb = free_bytes / (1024**3)
+    total_gb = total_bytes / (1024**3)
+    status, message = _assess_disk_space(free_bytes)
+
+    path_exists = data_dir.exists()
+    path_writable = False
+    if path_exists:
+        try:
+            test_file = data_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()
+            path_writable = True
+        except OSError:
+            pass
+    else:
+        # Check if the parent is writable (for creating the directory)
+        parent = data_dir.parent
+        while not parent.exists():
+            parent = parent.parent
+        path_writable = parent.exists() and parent.stat().st_mode & 0o200 != 0
+
+    return StorageInfoResponse(
+        data_dir=str(data_dir),
+        free_space_bytes=free_bytes,
+        free_space_gb=round(free_gb, 1),
+        total_space_bytes=total_bytes,
+        total_space_gb=round(total_gb, 1),
+        status=status,
+        message=message,
+        path_exists=path_exists,
+        path_writable=path_writable,
+    )
+
+
+@router.post("/set-storage-path", response_model=SetStoragePathResponse)
+async def set_storage_path(body: SetStoragePathRequest) -> SetStoragePathResponse:
+    """Set the storage path and persist it to config.toml.
+
+    Validates the path, checks disk space, creates the directory structure,
+    and writes the chosen path to config.toml. Does NOT block on low disk
+    space — the frontend enforces the block threshold.
+    """
+    resolved = _resolve_storage_path(body.path)
+
+    # Validate path is absolute after resolution
+    if not resolved.is_absolute():
+        raise HTTPException(
+            status_code=400,
+            detail="Storage path must be absolute.",
+        )
+
+    # Create directory structure
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+        (resolved / "samples").mkdir(exist_ok=True)
+        (resolved / "downloads").mkdir(exist_ok=True)
+        (resolved / "logs").mkdir(exist_ok=True)
+    except PermissionError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create directory at {resolved}: permission denied.",
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create directory at {resolved}: {exc}",
+        )
+
+    # Verify writability
+    try:
+        test_file = resolved / ".write_test"
+        test_file.write_text("test")
+        test_file.unlink()
+    except OSError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory at {resolved} is not writable.",
+        )
+
+    # Check disk space
+    free_bytes, _ = _get_disk_space(resolved)
+    free_gb = free_bytes / (1024**3)
+    status, message = _assess_disk_space(free_bytes)
+
+    # Write config.toml — only update data_dir, preserve other settings
+    config_path = resolved / "config.toml"
+    _write_config_toml(config_path, data_dir=str(resolved))
+
+    logger.info(
+        "storage_path_set",
+        data_dir=str(resolved),
+        free_gb=round(free_gb, 1),
+        status=status,
+    )
+
+    return SetStoragePathResponse(
+        success=True,
+        data_dir=str(resolved),
+        free_space_gb=round(free_gb, 1),
+        status=status,
+        message=message,
+    )
+
+
+def _write_config_toml(config_path: Path, *, data_dir: str) -> None:
+    """Write or update config.toml with the data_dir setting.
+
+    Preserves existing config entries if the file already exists.
+    """
+    existing_content: dict[str, dict[str, object]] = {}
+    if config_path.exists():
+        try:
+            import tomllib
+
+            existing_content = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Update the genomeinsight section
+    section = existing_content.get("genomeinsight", {})
+    section["data_dir"] = data_dir
+    existing_content["genomeinsight"] = section
+
+    # Write TOML manually (tomllib is read-only, avoid tomli_w dependency)
+    lines: list[str] = []
+    for table_name, table_values in existing_content.items():
+        lines.append(f"[{table_name}]")
+        if isinstance(table_values, dict):
+            for key, value in table_values.items():
+                if isinstance(value, str):
+                    lines.append(f'{key} = "{value}"')
+                elif isinstance(value, bool):
+                    lines.append(f"{key} = {'true' if value else 'false'}")
+                elif isinstance(value, (int, float)):
+                    lines.append(f"{key} = {value}")
+                else:
+                    lines.append(f'{key} = "{value}"')
+        lines.append("")
+
+    config_path.write_text("\n".join(lines), encoding="utf-8")

@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSetupStatus } from '@/api/setup'
 import DisclaimerStep from '@/components/setup/DisclaimerStep'
 import ImportBackupStep from '@/components/setup/ImportBackupStep'
+import StorageStep from '@/components/setup/StorageStep'
 import WizardStepper, { type WizardStep } from '@/components/setup/WizardStepper'
 import { cn } from '@/lib/utils'
 import { Dna } from 'lucide-react'
@@ -105,7 +106,11 @@ export default function SetupWizard() {
           />
         )}
 
-        {currentStep > 1 && currentStep < WIZARD_STEPS.length && (
+        {currentStep === 2 && (
+          <StorageStep onNext={handleNext} onBack={handleBack} />
+        )}
+
+        {currentStep > 2 && currentStep < WIZARD_STEPS.length && (
           <StepPlaceholder
             step={WIZARD_STEPS[currentStep]}
             stepNumber={currentStep}

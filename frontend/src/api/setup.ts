@@ -6,7 +6,9 @@ import type {
   DetectExistingResult,
   DisclaimerData,
   ImportBackupResult,
+  SetStoragePathResult,
   SetupStatus,
+  StorageInfoResult,
 } from '@/types/setup'
 
 const SETUP_STATUS_KEY = ['setup', 'status'] as const
@@ -95,6 +97,49 @@ export function useImportBackup() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
       queryClient.invalidateQueries({ queryKey: DETECT_EXISTING_KEY })
+    },
+  })
+}
+
+// ── P1-19c: Storage path + disk space ──────────────────────────
+
+const STORAGE_INFO_KEY = ['setup', 'storage-info'] as const
+
+async function fetchStorageInfo(): Promise<StorageInfoResult> {
+  const res = await fetch('/api/setup/storage-info')
+  if (!res.ok) throw new Error(`Storage info failed: ${res.status}`)
+  return res.json()
+}
+
+async function postSetStoragePath(path: string): Promise<SetStoragePathResult> {
+  const res = await fetch('/api/setup/set-storage-path', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail || `Set storage path failed: ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+export function useStorageInfo() {
+  return useQuery({
+    queryKey: STORAGE_INFO_KEY,
+    queryFn: fetchStorageInfo,
+    staleTime: 0,
+  })
+}
+
+export function useSetStoragePath() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: postSetStoragePath,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: STORAGE_INFO_KEY })
+      queryClient.invalidateQueries({ queryKey: SETUP_STATUS_KEY })
     },
   })
 }

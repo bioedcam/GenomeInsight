@@ -33,3 +33,25 @@ export interface ImportBackupResult {
   config_restored: boolean
   message: string
 }
+
+// ── P1-19c: Storage path + disk space ──────────────────────────
+
+export interface StorageInfoResult {
+  data_dir: string
+  free_space_bytes: number
+  free_space_gb: number
+  total_space_bytes: number
+  total_space_gb: number
+  status: 'ok' | 'warning' | 'blocked'
+  message: string
+  path_exists: boolean
+  path_writable: boolean
+}
+
+export interface SetStoragePathResult {
+  success: boolean
+  data_dir: string
+  free_space_gb: number
+  status: 'ok' | 'warning' | 'blocked'
+  message: string
+}
