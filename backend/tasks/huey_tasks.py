@@ -11,6 +11,7 @@ from huey import SqliteHuey
 from backend.config import get_settings
 
 _settings = get_settings()
+_settings.data_dir.mkdir(parents=True, exist_ok=True)
 _huey_db = str(_settings.data_dir / "huey.db")
 
 # Allow override for testing (immediate mode runs tasks inline)
