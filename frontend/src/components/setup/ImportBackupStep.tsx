@@ -31,11 +31,15 @@ export default function ImportBackupStep({
   const importMutation = useImportBackup()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
   const handleFileSelect = useCallback((file: File) => {
     if (file.name.endsWith('.tar.gz') || file.name.endsWith('.tgz')) {
       setSelectedFile(file)
+      setFileError(null)
+    } else {
+      setFileError('Please select a .tar.gz or .tgz file')
     }
   }, [])
 
@@ -272,6 +276,11 @@ export default function ImportBackupStep({
           aria-hidden="true"
         />
       </div>
+
+      {/* File type error */}
+      {fileError && (
+        <p className="text-center text-sm text-destructive">{fileError}</p>
+      )}
 
       {/* Import button */}
       {selectedFile && (
