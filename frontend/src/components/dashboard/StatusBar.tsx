@@ -7,16 +7,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useDatabaseList } from '@/api/setup'
 import { cn } from '@/lib/utils'
+import { formatNumber } from '@/lib/format'
 import { Database, User } from 'lucide-react'
 import type { Sample } from '@/types/samples'
 
 interface StatusBarProps {
   sample: Sample
   variantCount: number | null
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString()
 }
 
 function formatRelativeTime(dateStr: string): string {

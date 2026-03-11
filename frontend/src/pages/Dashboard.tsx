@@ -19,10 +19,20 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const activeSampleId = parseSampleId(searchParams.get('sample_id'))
 
-  const { data: samples } = useSamples()
+  const { data: samples, isLoading } = useSamples()
   const activeSample = samples?.find((s) => s.id === activeSampleId)
 
   const { data: variantCount } = useTotalVariantCount(activeSampleId)
+
+  // ── Loading state: avoid flash of upload prompt ───────────
+
+  if (isLoading && activeSampleId) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
 
   // ── No active sample: show upload prompt ──────────────────
 

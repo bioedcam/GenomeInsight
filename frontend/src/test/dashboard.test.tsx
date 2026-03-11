@@ -1,6 +1,8 @@
-import type React from 'react'
+import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from './test-utils'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import Dashboard from '@/pages/Dashboard'
 import StatusBar from '@/components/dashboard/StatusBar'
 import ModuleCard from '@/components/dashboard/ModuleCard'
@@ -70,6 +72,19 @@ function setupFetchMocks(options: {
   })
 }
 
+function createWrapper(initialEntries: string[] = ['/']) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={initialEntries}>
+        {children}
+      </MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
 const SAMPLE = {
   id: 1,
   name: 'Eduardo',
@@ -85,27 +100,14 @@ const SAMPLE = {
 describe('Dashboard', () => {
   it('shows upload prompt when no sample is active', async () => {
     setupFetchMocks()
-    render(<Dashboard />)
+    render(<Dashboard />, { wrapper: createWrapper() })
     expect(await screen.findByText('Get Started')).toBeInTheDocument()
     expect(screen.getByText(/Upload a 23andMe raw data file/)).toBeInTheDocument()
   })
 
   it('renders dashboard layout when sample is active', async () => {
     setupFetchMocks({ samples: [SAMPLE], variantCount: 500000 })
-    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
-    const { MemoryRouter } = await import('react-router-dom')
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
-    })
-    render(<Dashboard />, {
-      wrapper: ({ children }: { children: React.ReactNode }) => (
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={['/?sample_id=1']}>
-            {children}
-          </MemoryRouter>
-        </QueryClientProvider>
-      ),
-    })
+    render(<Dashboard />, { wrapper: createWrapper(['/?sample_id=1']) })
     expect(await screen.findByText('Eduardo')).toBeInTheDocument()
   })
 })

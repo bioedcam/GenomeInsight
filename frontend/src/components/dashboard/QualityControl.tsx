@@ -6,14 +6,11 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { formatNumber } from '@/lib/format'
 import { ChevronDown, ChevronRight, FlaskConical } from 'lucide-react'
 
 interface QualityControlProps {
   variantCount: number | null
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString()
 }
 
 export default function QualityControl({ variantCount }: QualityControlProps) {
