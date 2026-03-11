@@ -751,7 +751,7 @@ class TestSetStoragePath:
             shutil.rmtree(expanded)
 
     def test_reject_unwritable_path(
-        self, setup_client: TestClient, tmp_path: Path
+        self, setup_client: TestClient,
     ) -> None:
         """Should reject paths that can't be written to."""
         resp = setup_client.post(

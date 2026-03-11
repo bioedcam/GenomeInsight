@@ -13,6 +13,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tarfile
 from datetime import UTC, datetime
@@ -481,7 +482,7 @@ async def storage_info() -> StorageInfoResponse:
         parent = data_dir.parent
         while not parent.exists():
             parent = parent.parent
-        path_writable = parent.exists() and parent.stat().st_mode & 0o200 != 0
+        path_writable = parent.exists() and os.access(parent, os.W_OK)
 
     return StorageInfoResponse(
         data_dir=str(data_dir),
@@ -519,27 +520,27 @@ async def set_storage_path(body: SetStoragePathRequest) -> SetStoragePathRespons
         (resolved / "samples").mkdir(exist_ok=True)
         (resolved / "downloads").mkdir(exist_ok=True)
         (resolved / "logs").mkdir(exist_ok=True)
-    except PermissionError:
+    except PermissionError as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot create directory at {resolved}: permission denied.",
-        )
+        ) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot create directory at {resolved}: {exc}",
-        )
+        ) from exc
 
     # Verify writability
     try:
         test_file = resolved / ".write_test"
         test_file.write_text("test")
         test_file.unlink()
-    except OSError:
+    except OSError as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Directory at {resolved} is not writable.",
-        )
+        ) from exc
 
     # Check disk space
     free_bytes, _ = _get_disk_space(resolved)
@@ -577,8 +578,12 @@ def _write_config_toml(config_path: Path, *, data_dir: str) -> None:
             import tomllib
 
             existing_content = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "config_toml_parse_failed",
+                path=str(config_path),
+                error=str(exc),
+            )
 
     # Update the genomeinsight section
     section = existing_content.get("genomeinsight", {})

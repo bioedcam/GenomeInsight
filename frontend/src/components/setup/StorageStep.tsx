@@ -137,6 +137,7 @@ export default function StorageStep({ onNext, onBack }: StorageStepProps) {
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     Use an absolute path. Tilde (~) will be expanded to your home directory.
+                    Disk space will be validated when you continue.
                   </p>
                 </div>
               )}
@@ -219,7 +220,7 @@ export default function StorageStep({ onNext, onBack }: StorageStepProps) {
                         : 'bg-primary',
                   )}
                   style={{
-                    width: `${Math.min(100, ((storageInfo.total_space_gb - storageInfo.free_space_gb) / storageInfo.total_space_gb) * 100)}%`,
+                    width: `${storageInfo.total_space_gb > 0 ? Math.min(100, ((storageInfo.total_space_gb - storageInfo.free_space_gb) / storageInfo.total_space_gb) * 100) : 0}%`,
                   }}
                 />
               </div>
