@@ -315,6 +315,55 @@ class TestLookupByPositions:
         annot = result["i12345"]
         assert annot.rsid == "i12345"
 
+    def test_sqlite_bind_limit(self, vep_engine_inmemory: sa.Engine) -> None:
+        """500+ positions triggers multi-batch processing without bind error."""
+        # Mix unique positions with known ones to exercise batching
+        positions = [(f"chr{n}", n, f"i{n}") for n in range(500)]
+        # Add a known position to verify at least one match
+        positions.append(("19", 44908684, "i_known"))
+        result = lookup_vep_by_positions(positions, vep_engine_inmemory)
+        # Should complete without SQLite bind error
+        assert "i_known" in result
+        assert result["i_known"].gene_symbol == "APOE"
+
+    def test_ambiguous_position_skipped(self) -> None:
+        """Multiple bundle rsids at same (chrom, pos) are skipped."""
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE vep_annotations ("
+                    "  rsid TEXT, chrom TEXT, pos INTEGER,"
+                    "  ref TEXT, alt TEXT, gene_symbol TEXT,"
+                    "  transcript_id TEXT, consequence TEXT,"
+                    "  hgvs_coding TEXT, hgvs_protein TEXT,"
+                    "  strand TEXT, exon_number INTEGER,"
+                    "  intron_number INTEGER, mane_select INTEGER"
+                    ")"
+                )
+            )
+            # Two different rsids at the same (chrom, pos)
+            conn.execute(
+                sa.text(
+                    "INSERT INTO vep_annotations VALUES "
+                    "('rs_a', '1', 100, 'A', 'G', 'GENE_A', "
+                    "'ENST_A', 'missense_variant', NULL, NULL, "
+                    "'+', NULL, NULL, 1)"
+                )
+            )
+            conn.execute(
+                sa.text(
+                    "INSERT INTO vep_annotations VALUES "
+                    "('rs_b', '1', 100, 'C', 'T', 'GENE_B', "
+                    "'ENST_B', 'synonymous_variant', NULL, NULL, "
+                    "'+', NULL, NULL, 0)"
+                )
+            )
+        positions = [("1", 100, "i_sample")]
+        result = lookup_vep_by_positions(positions, engine)
+        # Ambiguous: multiple rsids at same position, should be skipped
+        assert len(result) == 0
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # MANE Select & severity preference

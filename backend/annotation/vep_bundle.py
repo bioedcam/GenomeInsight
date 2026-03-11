@@ -297,7 +297,21 @@ def lookup_vep_by_positions(
                 if key not in pos_rows or sample_rsid in results:
                     continue
 
-                best = _pick_best(pos_rows[key], matched_by="chrom_pos")
+                candidate_rows = pos_rows[key]
+                candidate_rsids = {r.rsid for r in candidate_rows}
+                if len(candidate_rsids) > 1:
+                    logger.warning(
+                        "ambiguous_vep_position_match",
+                        extra={
+                            "sample_rsid": sample_rsid,
+                            "chrom": chrom,
+                            "pos": pos,
+                            "candidate_rsids": sorted(candidate_rsids),
+                        },
+                    )
+                    continue
+
+                best = _pick_best(candidate_rows, matched_by="chrom_pos")
                 if best:
                     # best is keyed by the bundle rsid; re-key by sample rsid
                     annot = next(iter(best.values()))
