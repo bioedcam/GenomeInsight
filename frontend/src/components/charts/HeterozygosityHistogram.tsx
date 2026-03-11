@@ -19,6 +19,15 @@ export default function HeterozygosityHistogram({
 }: HeterozygosityHistogramProps) {
   // Compute per-chromosome heterozygosity rates (exclude chromosomes with 0 called)
   const filtered = data.filter((d) => d.het_count + d.hom_count > 0)
+
+  if (filtered.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        No called variants to display heterozygosity chart.
+      </p>
+    )
+  }
+
   const chroms = filtered.map((d) => `chr${d.chrom}`)
   const rates = filtered.map(
     (d) => d.het_count / (d.het_count + d.hom_count),

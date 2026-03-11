@@ -441,21 +441,31 @@ def qc_stats(
     sample_engine = _get_sample_engine(sample_id)
     table = _select_table(sample_engine)
 
-    with sample_engine.connect() as conn:
-        rows = conn.execute(
-            sa.select(table.c.chrom, table.c.genotype).select_from(table)
-        ).fetchall()
+    # SQL-level aggregation: GROUP BY (chrom, genotype) reduces ~600K rows
+    # to ~100-200 unique combinations, avoiding loading all rows into memory.
+    query = (
+        sa.select(
+            table.c.chrom,
+            table.c.genotype,
+            sa.func.count().label("cnt"),
+        )
+        .select_from(table)
+        .group_by(table.c.chrom, table.c.genotype)
+    )
 
-    # Accumulate per-chromosome stats
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    # Accumulate per-chromosome stats from grouped counts
     chrom_stats: dict[str, dict[str, int]] = {}
     for row in rows:
         chrom = row.chrom
         if chrom not in chrom_stats:
             chrom_stats[chrom] = {"total": 0, "het": 0, "hom": 0, "nocall": 0}
         bucket = chrom_stats[chrom]
-        bucket["total"] += 1
         classification = _classify_genotype(row.genotype)
-        bucket[classification] += 1
+        bucket["total"] += row.cnt
+        bucket[classification] += row.cnt
 
     # Build per-chromosome list
     per_chrom = [
