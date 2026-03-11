@@ -214,11 +214,14 @@ def iter_rsmerge_file(
                 continue
 
             stats.merges_loaded += 1
-            yield {
-                "old_rsid": record.old_rsid,
-                "current_rsid": record.current_rsid,
-                "build_id": record.build_id,
-            }, stats
+            yield (
+                {
+                    "old_rsid": record.old_rsid,
+                    "current_rsid": record.current_rsid,
+                    "build_id": record.build_id,
+                },
+                stats,
+            )
 
             if progress_callback and stats.total_lines % 100_000 == 0:
                 progress_callback(stats.total_lines)
@@ -354,9 +357,7 @@ def record_dbsnp_version(
     """Insert or update the dbSNP version in the database_versions table."""
     with engine.begin() as conn:
         existing = conn.execute(
-            sa.select(database_versions.c.db_name).where(
-                database_versions.c.db_name == "dbsnp"
-            )
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == "dbsnp")
         ).first()
 
         now = datetime.now(UTC)
@@ -429,9 +430,7 @@ def download_rsmerge_arch(
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         if progress_callback:
-                            progress_callback(
-                                response.num_bytes_downloaded, total_bytes
-                            )
+                            progress_callback(response.num_bytes_downloaded, total_bytes)
 
         tmp_path.rename(dest_path)
     except BaseException:

@@ -59,9 +59,7 @@ async def list_samples() -> list[SampleResponse]:
     """List all registered samples."""
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
-        rows = conn.execute(
-            sa.select(samples).order_by(samples.c.created_at.desc())
-        ).fetchall()
+        rows = conn.execute(sa.select(samples).order_by(samples.c.created_at.desc())).fetchall()
     return [_row_to_response(row) for row in rows]
 
 
@@ -70,9 +68,7 @@ async def get_sample(sample_id: int) -> SampleResponse:
     """Get a single sample by ID."""
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
-        row = conn.execute(
-            sa.select(samples).where(samples.c.id == sample_id)
-        ).fetchone()
+        row = conn.execute(sa.select(samples).where(samples.c.id == sample_id)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
     return _row_to_response(row)
@@ -94,18 +90,12 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
 
     with registry.reference_engine.begin() as conn:
         # Check sample exists
-        row = conn.execute(
-            sa.select(samples).where(samples.c.id == sample_id)
-        ).fetchone()
+        row = conn.execute(sa.select(samples).where(samples.c.id == sample_id)).fetchone()
         if row is None:
-            raise HTTPException(
-                status_code=404, detail=f"Sample {sample_id} not found."
-            )
+            raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
 
         # Update the sample registry
-        conn.execute(
-            samples.update().where(samples.c.id == sample_id).values(**update_values)
-        )
+        conn.execute(samples.update().where(samples.c.id == sample_id).values(**update_values))
 
     # Also update per-sample metadata table if applicable
     sample_db_path = settings.data_dir / row.db_path
@@ -131,9 +121,7 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
 
     # Return updated record
     with registry.reference_engine.connect() as conn:
-        updated_row = conn.execute(
-            sa.select(samples).where(samples.c.id == sample_id)
-        ).fetchone()
+        updated_row = conn.execute(sa.select(samples).where(samples.c.id == sample_id)).fetchone()
     if updated_row is None:
         raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
     return _row_to_response(updated_row)
@@ -146,13 +134,9 @@ async def delete_sample(sample_id: int) -> None:
     settings = registry.settings
 
     with registry.reference_engine.begin() as conn:
-        row = conn.execute(
-            sa.select(samples).where(samples.c.id == sample_id)
-        ).fetchone()
+        row = conn.execute(sa.select(samples).where(samples.c.id == sample_id)).fetchone()
         if row is None:
-            raise HTTPException(
-                status_code=404, detail=f"Sample {sample_id} not found."
-            )
+            raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
 
         # Remove from registry
         conn.execute(samples.delete().where(samples.c.id == sample_id))

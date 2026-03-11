@@ -72,6 +72,7 @@ def _run(cmd: list[str], check: bool = True, **kwargs) -> subprocess.CompletedPr
 
 # ── Data directory ─────────────────────────────────────────
 
+
 def ensure_data_dir() -> None:
     """Create the ~/.genomeinsight directory structure."""
     dirs = [
@@ -86,6 +87,7 @@ def ensure_data_dir() -> None:
 
 
 # ── Frontend build ─────────────────────────────────────────
+
 
 def build_frontend() -> bool:
     """Build the React frontend for production."""
@@ -108,6 +110,7 @@ def build_frontend() -> bool:
 
 
 # ── macOS launchd ──────────────────────────────────────────
+
 
 def _render_plist(template_path: Path, install_dir: Path) -> str:
     """Render a launchd plist template, replacing __INSTALL_DIR__."""
@@ -174,6 +177,7 @@ def status_launchd() -> None:
 
 
 # ── Linux/WSL2 systemd ────────────────────────────────────
+
 
 def _has_systemd() -> bool:
     """Check if systemd is available (user session)."""
@@ -273,6 +277,7 @@ def status_systemd() -> None:
 
 # ── Health check ───────────────────────────────────────────
 
+
 def health_check(host: str = "127.0.0.1", port: int = 8000) -> bool:
     """Check if the API server is responding."""
     import urllib.error
@@ -287,6 +292,7 @@ def health_check(host: str = "127.0.0.1", port: int = 8000) -> bool:
 
 
 # ── Main commands ──────────────────────────────────────────
+
 
 def cmd_install(args: argparse.Namespace) -> int:
     """Run the full install sequence."""
@@ -425,9 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     # install
     p_install = subparsers.add_parser("install", help="Install GenomeInsight services")
     p_install.add_argument("--skip-pip", action="store_true", help="Skip pip install step")
-    p_install.add_argument(
-        "--skip-frontend", action="store_true", help="Skip frontend build step"
-    )
+    p_install.add_argument("--skip-frontend", action="store_true", help="Skip frontend build step")
     p_install.set_defaults(func=cmd_install)
 
     # uninstall

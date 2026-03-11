@@ -15,6 +15,7 @@ from typing import TextIO
 # Public data types
 # ---------------------------------------------------------------------------
 
+
 class FormatVersion(Enum):
     """23andMe raw-data format versions."""
 
@@ -48,6 +49,7 @@ class ParseResult:
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class ParserError(Exception):
     """Base parser error."""
 
@@ -70,9 +72,7 @@ class UnrecognizedVersionError(ParserError):
 
 _COLUMN_HEADER = "# rsid\tchromosome\tposition\tgenotype"
 
-_VALID_CHROMOSOMES: frozenset[str] = frozenset(
-    [str(n) for n in range(1, 23)] + ["X", "Y", "MT"]
-)
+_VALID_CHROMOSOMES: frozenset[str] = frozenset([str(n) for n in range(1, 23)] + ["X", "Y", "MT"])
 
 _CHROM_MAP: dict[str, str] = {
     "23": "X",
@@ -98,15 +98,11 @@ _ERR_ANCESTRY = (
     "format only. AncestryDNA support is planned for a future release."
 )
 _ERR_CSV = (
-    "This file appears to be comma-separated. 23andMe raw data files use "
-    "tab-separated format."
+    "This file appears to be comma-separated. 23andMe raw data files use tab-separated format."
 )
-_ERR_BINARY = (
-    "This file contains binary data and is not a valid 23andMe text file."
-)
+_ERR_BINARY = "This file contains binary data and is not a valid 23andMe text file."
 _ERR_UNKNOWN = (
-    "Unrecognized file format. GenomeInsight expects 23andMe raw data "
-    "(tab-separated, .txt)."
+    "Unrecognized file format. GenomeInsight expects 23andMe raw data (tab-separated, .txt)."
 )
 _ERR_VERSION = (
     "Header pattern not recognized as 23andMe v3/v4/v5. "
@@ -119,6 +115,7 @@ _ERR_VERSION = (
 # ---------------------------------------------------------------------------
 # Chromosome normalisation
 # ---------------------------------------------------------------------------
+
 
 def normalize_chromosome(chrom: str) -> str:
     """Normalize a raw chromosome string to one of 1-22, X, Y, MT.
@@ -137,6 +134,7 @@ def normalize_chromosome(chrom: str) -> str:
 # Line validation
 # ---------------------------------------------------------------------------
 
+
 def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
     """Validate a single tab-split data line and return a ``ParsedVariant``.
 
@@ -148,9 +146,7 @@ def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
         1-based line number in the source file, used in error messages.
     """
     if len(parts) != 4:
-        raise MalformedDataError(
-            f"Line {line_num}: expected 4 columns, got {len(parts)}"
-        )
+        raise MalformedDataError(f"Line {line_num}: expected 4 columns, got {len(parts)}")
 
     rsid_raw, chrom_raw, pos_raw, genotype_raw = (p.strip() for p in parts)
 
@@ -165,13 +161,9 @@ def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
     try:
         pos = int(pos_raw)
     except ValueError:
-        raise MalformedDataError(
-            f"Line {line_num}: non-numeric position {pos_raw!r}"
-        ) from None
+        raise MalformedDataError(f"Line {line_num}: non-numeric position {pos_raw!r}") from None
     if pos < 0:
-        raise MalformedDataError(
-            f"Line {line_num}: negative position {pos}"
-        )
+        raise MalformedDataError(f"Line {line_num}: negative position {pos}")
 
     # -- genotype (keep as-is, including "--" for no-calls) ----------------
     if not genotype_raw:
@@ -183,6 +175,7 @@ def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
 # ---------------------------------------------------------------------------
 # Format / version detection helpers
 # ---------------------------------------------------------------------------
+
 
 def _check_binary(head: bytes) -> bool:
     """Return True if *head* looks like binary content."""
@@ -285,6 +278,7 @@ def _detect_version_from_header(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def detect_format(file_or_path: str | Path | TextIO) -> FormatVersion:
     """Detect the 23andMe format version by inspecting the file header.

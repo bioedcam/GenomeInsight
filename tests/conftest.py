@@ -14,7 +14,8 @@ from backend.config import Settings
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers to avoid 'unknown marker' warnings."""
     config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m not slow')",
+        "markers",
+        "slow: marks tests as slow (deselect with '-m not slow')",
     )
     config.addinivalue_line("markers", "e2e: marks end-to-end tests")
     config.addinivalue_line("markers", "integration: marks integration tests")

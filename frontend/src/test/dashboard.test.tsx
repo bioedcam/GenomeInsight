@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render as baseRender } from '@testing-library/react'
 import { render, screen, fireEvent } from './test-utils'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -127,14 +128,14 @@ const SAMPLE = {
 describe('Dashboard', () => {
   it('shows upload prompt when no sample is active', async () => {
     setupFetchMocks()
-    render(<Dashboard />, { wrapper: createWrapper() })
+    baseRender(<Dashboard />, { wrapper: createWrapper() })
     expect(await screen.findByText('Get Started')).toBeInTheDocument()
     expect(screen.getByText(/Upload a 23andMe raw data file/)).toBeInTheDocument()
   })
 
   it('renders dashboard layout when sample is active', async () => {
     setupFetchMocks({ samples: [SAMPLE], variantCount: 500000 })
-    render(<Dashboard />, { wrapper: createWrapper(['/?sample_id=1']) })
+    baseRender(<Dashboard />, { wrapper: createWrapper(['/?sample_id=1']) })
     expect(await screen.findByText('Eduardo')).toBeInTheDocument()
   })
 })

@@ -198,10 +198,7 @@ class TestParseClinvarVcfLine:
         assert skip == SkipReason.NO_RSID
 
     def test_skips_invalid_chrom_with_reason(self):
-        line = (
-            "Un\t12345\t100\tA\tG\t.\t.\t"
-            "RS=999;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
-        )
+        line = "Un\t12345\t100\tA\tG\t.\t.\tRS=999;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
         rec, skip = parse_clinvar_vcf_line(line)
         assert rec is None
         assert skip == SkipReason.INVALID_CHROM
@@ -213,10 +210,7 @@ class TestParseClinvarVcfLine:
 
     def test_skips_non_numeric_pos(self):
         """Non-numeric POS should return skip_reason=MALFORMED."""
-        line = (
-            "1\tNOTANUM\t42\tA\tG\t.\t.\t"
-            "RS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
-        )
+        line = "1\tNOTANUM\t42\tA\tG\t.\t.\tRS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
         rec, skip = parse_clinvar_vcf_line(line)
         assert rec is None
         assert skip == SkipReason.MALFORMED
@@ -234,10 +228,7 @@ class TestParseClinvarVcfLine:
         assert rec.accession == "RCV000012345"
 
     def test_multi_allelic_uses_first_alt(self):
-        line = (
-            "1\t100\t42\tA\tG,T\t.\t.\t"
-            "RS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
-        )
+        line = "1\t100\t42\tA\tG,T\t.\t.\tRS=99;CLNSIG=Benign;CLNREVSTAT=no_assertion_provided"
         rec, _ = parse_clinvar_vcf_line(line)
         assert rec is not None
         assert rec.alt == "G"
@@ -400,9 +391,7 @@ class TestLoadClinvarIntoDb:
         load_clinvar_into_db(rows, ref_engine, stats=stats)
 
         with ref_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(clinvar_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(clinvar_variants)).scalar()
         assert count == 11
 
     def test_known_pathogenic_variant(self, ref_engine: sa.Engine):
@@ -412,9 +401,7 @@ class TestLoadClinvarIntoDb:
 
         with ref_engine.connect() as conn:
             row = conn.execute(
-                sa.select(clinvar_variants).where(
-                    clinvar_variants.c.rsid == "rs28897696"
-                )
+                sa.select(clinvar_variants).where(clinvar_variants.c.rsid == "rs28897696")
             ).first()
 
         assert row is not None
@@ -450,9 +437,7 @@ class TestLoadClinvarIntoDb:
         load_clinvar_into_db(rows, ref_engine, stats=stats, clear_existing=True)
 
         with ref_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(clinvar_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(clinvar_variants)).scalar()
         # Should not double — old rows deleted
         assert count == 11
 
@@ -463,9 +448,7 @@ class TestLoadClinvarIntoDb:
         load_clinvar_into_db(rows, ref_engine, stats=stats, clear_existing=False)
 
         with ref_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(clinvar_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(clinvar_variants)).scalar()
         assert count == 22  # doubled
 
     def test_empty_rows(self, ref_engine: sa.Engine):
@@ -482,9 +465,7 @@ class TestLoadClinvarFromIter:
 
         assert stats.variants_loaded == 11
         with ref_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(clinvar_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(clinvar_variants)).scalar()
         assert count == 11
 
     def test_stream_load_known_variant(self, ref_engine: sa.Engine):
@@ -494,9 +475,7 @@ class TestLoadClinvarFromIter:
 
         with ref_engine.connect() as conn:
             row = conn.execute(
-                sa.select(clinvar_variants).where(
-                    clinvar_variants.c.rsid == "rs28897696"
-                )
+                sa.select(clinvar_variants).where(clinvar_variants.c.rsid == "rs28897696")
             ).first()
         assert row is not None
         assert row.significance == "Pathogenic"
@@ -504,14 +483,10 @@ class TestLoadClinvarFromIter:
 
 class TestRecordClinvarVersion:
     def test_insert_new_version(self, ref_engine: sa.Engine):
-        record_clinvar_version(
-            ref_engine, version="20260301", file_path="/tmp/clinvar.vcf.gz"
-        )
+        record_clinvar_version(ref_engine, version="20260301", file_path="/tmp/clinvar.vcf.gz")
         with ref_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "clinvar"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "clinvar")
             ).first()
         assert row is not None
         assert row.version == "20260301"
@@ -522,9 +497,7 @@ class TestRecordClinvarVersion:
 
         with ref_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "clinvar"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "clinvar")
             ).first()
         assert row.version == "20260301"
 
@@ -537,9 +510,7 @@ class TestRecordClinvarVersion:
         )
         with ref_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "clinvar"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "clinvar")
             ).first()
         assert row.checksum_sha256 == "abc123"
         assert row.file_size_bytes == 1024
@@ -630,9 +601,7 @@ class TestDownloadAndLoadClinvar:
         dest_dir = tmp_path / "downloads"
         dest_dir.mkdir()
 
-        with patch(
-            "backend.annotation.clinvar.download_clinvar_vcf"
-        ) as mock_dl:
+        with patch("backend.annotation.clinvar.download_clinvar_vcf") as mock_dl:
             mock_dl.return_value = MINI_CLINVAR_VCF
 
             stats = download_and_load_clinvar(ref_engine, dest_dir)
@@ -643,16 +612,12 @@ class TestDownloadAndLoadClinvar:
 
         # Verify data in DB
         with ref_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(clinvar_variants)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(clinvar_variants)).scalar()
             assert count == 11
 
             # Verify version recorded
             ver = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "clinvar"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "clinvar")
             ).first()
             assert ver is not None
             assert ver.version == "20260301"

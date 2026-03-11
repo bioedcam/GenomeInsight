@@ -55,7 +55,6 @@ describe('WizardStepper', () => {
 
   it('marks current step with aria-current', () => {
     render(<WizardStepper steps={steps} currentStep={1} />)
-    const stepIndicators = screen.getAllByText(/[1-3]|✓/)
     // Step 2 should have aria-current="step"
     const currentStepEl = document.querySelector('[aria-current="step"]')
     expect(currentStepEl).not.toBeNull()

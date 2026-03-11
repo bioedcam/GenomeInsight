@@ -70,9 +70,7 @@ def _ingest_file(file_bytes: bytes, filename: str) -> dict:
 
         # Set db_path now that we have the id
         db_path = f"samples/sample_{sample_id}.db"
-        conn.execute(
-            samples.update().where(samples.c.id == sample_id).values(db_path=db_path)
-        )
+        conn.execute(samples.update().where(samples.c.id == sample_id).values(db_path=db_path))
 
     # Create the per-sample database
     sample_db_path = settings.data_dir / db_path

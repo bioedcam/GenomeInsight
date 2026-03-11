@@ -91,9 +91,14 @@ class TestConsequenceSeverity:
 class TestVEPRecord:
     def test_to_dict_basic(self) -> None:
         r = VEPRecord(
-            rsid="rs1801133", chrom="1", pos=11856378,
-            ref="G", alt="A", gene_symbol="MTHFR",
-            consequence="missense_variant", mane_select=1,
+            rsid="rs1801133",
+            chrom="1",
+            pos=11856378,
+            ref="G",
+            alt="A",
+            gene_symbol="MTHFR",
+            consequence="missense_variant",
+            mane_select=1,
         )
         d = r.to_dict()
         assert d["rsid"] == "rs1801133"
@@ -168,10 +173,7 @@ class TestLoadSeedCSV:
         mane_rows = [r for r in rows if r["mane_select"] == 1]
         assert len(mane_rows) > 0, "No MANE Select transcripts found"
         # Specific known MANE Select: MTHFR ENST00000376592
-        mthfr_mane = [
-            r for r in mane_rows
-            if r["transcript_id"] == "ENST00000376592"
-        ]
+        mthfr_mane = [r for r in mane_rows if r["transcript_id"] == "ENST00000376592"]
         assert len(mthfr_mane) >= 1, "MTHFR MANE Select not flagged"
 
 
@@ -317,10 +319,7 @@ class TestParseVepVCF:
             "|Feature_type|Feature|BIOTYPE|EXON|INTRON"
             "|HGVSc|HGVSp|STRAND|FLAGS|MANE_SELECT"
         )
-        meta = (
-            f'##INFO=<ID=CSQ,Number=.,Type=String,'
-            f'Description="Format: {csq_hdr}">'
-        )
+        meta = f'##INFO=<ID=CSQ,Number=.,Type=String,Description="Format: {csq_hdr}">'
         lines = [
             "##fileformat=VCFv4.2",
             meta,
@@ -334,7 +333,8 @@ class TestParseVepVCF:
     def test_skips_invalid_chromosome(self, tmp_path: Path) -> None:
         csq = "G|intron_variant|LOW|GENE|1|Transcript|ENST1|coding|||||1||"
         vcf_path = self._make_vcf(
-            tmp_path, "bad_chrom.vcf",
+            tmp_path,
+            "bad_chrom.vcf",
             f"GL000220.1\t100\trs999\tA\tG\t.\t.\tCSQ={csq}",
         )
         stats = BuildStats()
@@ -345,7 +345,8 @@ class TestParseVepVCF:
     def test_skips_no_rsid(self, tmp_path: Path) -> None:
         csq = "G|intron_variant|LOW|GENE|1|Transcript|ENST1|coding|||||1||"
         vcf_path = self._make_vcf(
-            tmp_path, "no_rsid.vcf",
+            tmp_path,
+            "no_rsid.vcf",
             f"1\t100\t.\tA\tG\t.\t.\tCSQ={csq}",
         )
         stats = BuildStats()
@@ -383,7 +384,8 @@ class TestBuildBundleDB:
 
         with sqlite3.connect(str(db_path)) as conn:
             tables = {
-                row[0] for row in conn.execute(
+                row[0]
+                for row in conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
             }
@@ -412,7 +414,8 @@ class TestBuildBundleDB:
 
         with sqlite3.connect(str(db_path)) as conn:
             indexes = {
-                row[0] for row in conn.execute(
+                row[0]
+                for row in conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='index'"
                 ).fetchall()
             }
@@ -442,9 +445,7 @@ class TestBuildBundleDB:
 
         with sqlite3.connect(str(db_path)) as conn:
             conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT * FROM vep_annotations WHERE rsid = 'rs1801133'"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM vep_annotations WHERE rsid = 'rs1801133'").fetchone()
 
         assert row is not None, "rs1801133 not found in database"
         assert row["chrom"] == "1"
@@ -541,9 +542,12 @@ class TestCLI:
         output = tmp_path / "vep_bundle.db"
         result = subprocess.run(
             [
-                sys.executable, str(SCRIPT),
-                "--seed-csv", str(VEP_SEED_CSV),
-                "--output", str(output),
+                sys.executable,
+                str(SCRIPT),
+                "--seed-csv",
+                str(VEP_SEED_CSV),
+                "--output",
+                str(output),
                 "--dry-run",
             ],
             capture_output=True,
@@ -558,10 +562,14 @@ class TestCLI:
         output = tmp_path / "vep_bundle.db"
         result = subprocess.run(
             [
-                sys.executable, str(SCRIPT),
-                "--seed-csv", str(VEP_SEED_CSV),
-                "--output", str(output),
-                "--ensembl-version", "112",
+                sys.executable,
+                str(SCRIPT),
+                "--seed-csv",
+                str(VEP_SEED_CSV),
+                "--output",
+                str(output),
+                "--ensembl-version",
+                "112",
             ],
             capture_output=True,
             text=True,
@@ -580,10 +588,14 @@ class TestCLI:
         stats_file = tmp_path / "stats.json"
         result = subprocess.run(
             [
-                sys.executable, str(SCRIPT),
-                "--seed-csv", str(VEP_SEED_CSV),
-                "--output", str(output),
-                "--write-stats", str(stats_file),
+                sys.executable,
+                str(SCRIPT),
+                "--seed-csv",
+                str(VEP_SEED_CSV),
+                "--output",
+                str(output),
+                "--write-stats",
+                str(stats_file),
             ],
             capture_output=True,
             text=True,
@@ -592,6 +604,7 @@ class TestCLI:
         assert stats_file.exists()
 
         import json
+
         stats = json.loads(stats_file.read_text())
         assert stats["variants_stored"] >= 50
         assert stats["unique_genes"] > 0
@@ -600,8 +613,10 @@ class TestCLI:
         """Script exits with error for missing input file."""
         result = subprocess.run(
             [
-                sys.executable, str(SCRIPT),
-                "--vep-vcf", str(tmp_path / "nonexistent.vcf"),
+                sys.executable,
+                str(SCRIPT),
+                "--vep-vcf",
+                str(tmp_path / "nonexistent.vcf"),
             ],
             capture_output=True,
             text=True,
@@ -612,9 +627,12 @@ class TestCLI:
         """Cannot specify both --vep-vcf and --seed-csv."""
         result = subprocess.run(
             [
-                sys.executable, str(SCRIPT),
-                "--vep-vcf", "a.vcf",
-                "--seed-csv", "b.csv",
+                sys.executable,
+                str(SCRIPT),
+                "--vep-vcf",
+                "a.vcf",
+                "--seed-csv",
+                "b.csv",
             ],
             capture_output=True,
             text=True,

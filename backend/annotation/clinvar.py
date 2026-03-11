@@ -42,9 +42,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # NCBI FTP URL for ClinVar VCF (GRCh37/hg19)
-CLINVAR_VCF_URL = (
-    "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh37/clinvar.vcf.gz"
-)
+CLINVAR_VCF_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh37/clinvar.vcf.gz"
 
 # Batch size for bulk inserts (executemany)
 BATCH_SIZE = 10_000
@@ -473,9 +471,7 @@ def record_clinvar_version(
     with engine.begin() as conn:
         # Check if a record exists
         existing = conn.execute(
-            sa.select(database_versions.c.db_name).where(
-                database_versions.c.db_name == "clinvar"
-            )
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == "clinvar")
         ).first()
 
         now = datetime.now(UTC)
@@ -550,9 +546,7 @@ def download_clinvar_vcf(
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         if progress_callback:
-                            progress_callback(
-                                response.num_bytes_downloaded, total_bytes
-                            )
+                            progress_callback(response.num_bytes_downloaded, total_bytes)
 
         # Atomic rename on success
         tmp_path.rename(dest_path)
@@ -838,9 +832,7 @@ def annotate_sample_clinvar(
 
     # 3. Fallback: by (chrom, pos) for unmatched variants
     unmatched_positions = [
-        (r.chrom, r.pos, r.rsid)
-        for r in raw_rows
-        if r.rsid not in rsid_matches
+        (r.chrom, r.pos, r.rsid) for r in raw_rows if r.rsid not in rsid_matches
     ]
     pos_matches = lookup_clinvar_by_positions(unmatched_positions, reference_engine)
     result.matched_by_position = len(pos_matches)

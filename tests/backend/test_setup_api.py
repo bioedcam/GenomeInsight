@@ -110,9 +110,7 @@ class TestSetupStatus:
         assert data["has_databases"] is True
         assert data["needs_setup"] is False
 
-    def test_has_samples_detection(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_has_samples_detection(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Detect existing sample databases."""
         samples_dir = tmp_data_dir / "samples"
         samples_dir.mkdir(exist_ok=True)
@@ -122,9 +120,7 @@ class TestSetupStatus:
         data = resp.json()
         assert data["has_samples"] is True
 
-    def test_data_dir_in_response(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_data_dir_in_response(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Response includes the data directory path."""
         resp = setup_client.get("/api/setup/status")
         data = resp.json()
@@ -165,9 +161,7 @@ class TestGetDisclaimer:
 class TestAcceptDisclaimer:
     """Tests for the disclaimer acceptance endpoint."""
 
-    def test_accept_creates_flag_file(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_accept_creates_flag_file(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Accepting the disclaimer should persist a flag file."""
         resp = setup_client.post("/api/setup/accept-disclaimer")
         assert resp.status_code == 200
@@ -182,7 +176,8 @@ class TestAcceptDisclaimer:
         assert flag_data["version"] == "1.0"
 
     def test_accept_idempotent(
-        self, setup_client: TestClient,
+        self,
+        setup_client: TestClient,
     ) -> None:
         """Accepting twice should succeed (overwrite the flag)."""
         resp1 = setup_client.post("/api/setup/accept-disclaimer")
@@ -192,7 +187,8 @@ class TestAcceptDisclaimer:
         assert resp2.status_code == 200
 
     def test_accept_changes_status(
-        self, setup_client: TestClient,
+        self,
+        setup_client: TestClient,
     ) -> None:
         """After accepting, status should reflect disclaimer_accepted=True."""
         resp = setup_client.get("/api/setup/status")
@@ -204,7 +200,8 @@ class TestAcceptDisclaimer:
         assert resp.json()["disclaimer_accepted"] is True
 
     def test_accept_creates_data_dir_if_missing(
-        self, tmp_data_dir: Path,
+        self,
+        tmp_data_dir: Path,
     ) -> None:
         """Accept should create data_dir if it doesn't exist yet."""
         import asyncio
@@ -313,9 +310,7 @@ class TestDetectExisting:
         assert data["has_samples"] is False
         assert data["has_databases"] is False
 
-    def test_detect_config_toml(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_detect_config_toml(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect existing config.toml."""
         (tmp_data_dir / "config.toml").write_text("[genomeinsight]")
 
@@ -324,9 +319,7 @@ class TestDetectExisting:
         assert data["existing_found"] is True
         assert data["has_config"] is True
 
-    def test_detect_samples(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_detect_samples(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect existing sample databases."""
         samples_dir = tmp_data_dir / "samples"
         samples_dir.mkdir(exist_ok=True)
@@ -337,9 +330,7 @@ class TestDetectExisting:
         assert data["existing_found"] is True
         assert data["has_samples"] is True
 
-    def test_detect_databases(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_detect_databases(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect existing reference databases."""
         (tmp_data_dir / "clinvar.db").write_text("fake")
 
@@ -348,9 +339,7 @@ class TestDetectExisting:
         assert data["existing_found"] is True
         assert data["has_databases"] is True
 
-    def test_detect_full_install(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_detect_full_install(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect a complete existing installation."""
         (tmp_data_dir / "config.toml").write_text("[genomeinsight]")
         (tmp_data_dir / "clinvar.db").write_text("fake")
@@ -408,9 +397,7 @@ class TestImportBackup:
         self, setup_client: TestClient, tmp_data_dir: Path, tmp_path: Path
     ) -> None:
         """Should restore config.toml if included."""
-        archive = _create_backup_archive(
-            tmp_path, include_config=True, num_samples=1
-        )
+        archive = _create_backup_archive(tmp_path, include_config=True, num_samples=1)
 
         with archive.open("rb") as f:
             resp = setup_client.post(
@@ -427,9 +414,7 @@ class TestImportBackup:
         self, setup_client: TestClient, tmp_data_dir: Path, tmp_path: Path
     ) -> None:
         """Should restore disclaimer accepted flag if included."""
-        archive = _create_backup_archive(
-            tmp_path, include_disclaimer=True, num_samples=1
-        )
+        archive = _create_backup_archive(tmp_path, include_disclaimer=True, num_samples=1)
 
         with archive.open("rb") as f:
             resp = setup_client.post(
@@ -449,9 +434,7 @@ class TestImportBackup:
         assert resp.status_code == 400
         assert "tar.gz" in resp.json()["detail"].lower()
 
-    def test_reject_empty_file(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_reject_empty_file(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should reject an empty file."""
         empty_file = tmp_path / "empty.tar.gz"
         empty_file.write_bytes(b"")
@@ -534,13 +517,9 @@ class TestImportBackup:
         assert resp.status_code == 400
         assert "unexpected" in resp.json()["detail"].lower()
 
-    def test_import_message_format(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_import_message_format(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Message should describe what was restored."""
-        archive = _create_backup_archive(
-            tmp_path, include_config=True, num_samples=3
-        )
+        archive = _create_backup_archive(tmp_path, include_config=True, num_samples=3)
 
         with archive.open("rb") as f:
             resp = setup_client.post(
@@ -566,9 +545,7 @@ class TestImportBackup:
 
         assert not (tmp_data_dir / ".import_backup_tmp.tar.gz").exists()
 
-    def test_tgz_extension_accepted(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_tgz_extension_accepted(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should accept .tgz extension as well."""
         archive = _create_backup_archive(tmp_path, num_samples=1)
 
@@ -612,18 +589,14 @@ class TestStorageInfo:
         assert data["free_space_gb"] > 0
         assert data["total_space_gb"] > 0
 
-    def test_path_exists_and_writable(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_path_exists_and_writable(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Temp data dir should exist and be writable."""
         resp = setup_client.get("/api/setup/storage-info")
         data = resp.json()
         assert data["path_exists"] is True
         assert data["path_writable"] is True
 
-    def test_data_dir_matches_settings(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_data_dir_matches_settings(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Returned data_dir should match the configured path."""
         resp = setup_client.get("/api/setup/storage-info")
         data = resp.json()
@@ -666,9 +639,7 @@ class TestStorageInfo:
 class TestSetStoragePath:
     """Tests for the set-storage-path endpoint."""
 
-    def test_set_valid_path(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_set_valid_path(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should successfully set a valid storage path."""
         new_path = tmp_path / "new_genomeinsight"
         resp = setup_client.post(
@@ -682,9 +653,7 @@ class TestSetStoragePath:
         assert data["free_space_gb"] > 0
         assert data["status"] in ("ok", "warning", "blocked")
 
-    def test_creates_directory_structure(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_creates_directory_structure(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should create data dir with samples, downloads, logs subdirs."""
         new_path = tmp_path / "gi_data"
         setup_client.post(
@@ -695,9 +664,7 @@ class TestSetStoragePath:
         assert (new_path / "downloads").is_dir()
         assert (new_path / "logs").is_dir()
 
-    def test_writes_config_toml(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_writes_config_toml(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should write config.toml with data_dir."""
         new_path = tmp_path / "gi_config_test"
         setup_client.post(
@@ -710,16 +677,12 @@ class TestSetStoragePath:
         assert str(new_path) in content
         assert "[genomeinsight]" in content
 
-    def test_preserves_existing_config(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_preserves_existing_config(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Should preserve other settings in existing config.toml."""
         new_path = tmp_path / "gi_preserve"
         new_path.mkdir(parents=True)
         config_path = new_path / "config.toml"
-        config_path.write_text(
-            '[genomeinsight]\ntheme = "dark"\nlog_level = "DEBUG"\n'
-        )
+        config_path.write_text('[genomeinsight]\ntheme = "dark"\nlog_level = "DEBUG"\n')
 
         setup_client.post(
             "/api/setup/set-storage-path",
@@ -732,7 +695,8 @@ class TestSetStoragePath:
         assert str(new_path) in content
 
     def test_tilde_expansion(
-        self, setup_client: TestClient,
+        self,
+        setup_client: TestClient,
     ) -> None:
         """Should expand ~ in the path."""
         resp = setup_client.post(
@@ -748,10 +712,12 @@ class TestSetStoragePath:
         expanded = Path(data["data_dir"])
         if expanded.exists():
             import shutil
+
             shutil.rmtree(expanded)
 
     def test_reject_unwritable_path(
-        self, setup_client: TestClient,
+        self,
+        setup_client: TestClient,
     ) -> None:
         """Should reject paths that can't be written to."""
         resp = setup_client.post(
@@ -763,9 +729,7 @@ class TestSetStoragePath:
         detail = resp.json()["detail"].lower()
         assert "permission" in detail or "cannot" in detail
 
-    def test_idempotent_set(
-        self, setup_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_idempotent_set(self, setup_client: TestClient, tmp_path: Path) -> None:
         """Setting the same path twice should succeed."""
         new_path = tmp_path / "gi_idempotent"
         resp1 = setup_client.post(
@@ -788,9 +752,7 @@ class TestSetStoragePath:
 class TestGetCredentials:
     """Tests for the credentials retrieval endpoint."""
 
-    def test_returns_empty_credentials_by_default(
-        self, setup_client: TestClient
-    ) -> None:
+    def test_returns_empty_credentials_by_default(self, setup_client: TestClient) -> None:
         """Fresh install should return empty credential strings."""
         resp = setup_client.get("/api/setup/credentials")
         assert resp.status_code == 200
@@ -799,9 +761,7 @@ class TestGetCredentials:
         assert data["ncbi_api_key"] == ""
         assert data["omim_api_key"] == ""
 
-    def test_returns_all_credential_fields(
-        self, setup_client: TestClient
-    ) -> None:
+    def test_returns_all_credential_fields(self, setup_client: TestClient) -> None:
         """Response should contain all three credential fields."""
         resp = setup_client.get("/api/setup/credentials")
         data = resp.json()
@@ -818,9 +778,7 @@ class TestGetCredentials:
 class TestSaveCredentials:
     """Tests for the credentials save endpoint."""
 
-    def test_save_credentials(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_save_credentials(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should successfully save credentials to config.toml."""
         resp = setup_client.post(
             "/api/setup/credentials",
@@ -843,9 +801,7 @@ class TestSaveCredentials:
         assert 'pubmed_api_key = "abc123"' in content
         assert 'omim_api_key = "xyz789"' in content
 
-    def test_save_only_email(
-        self, setup_client: TestClient, tmp_data_dir: Path
-    ) -> None:
+    def test_save_only_email(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should save with only the required email."""
         resp = setup_client.post(
             "/api/setup/credentials",
@@ -864,9 +820,7 @@ class TestSaveCredentials:
     ) -> None:
         """Should preserve existing config entries when saving credentials."""
         config_path = tmp_data_dir / "config.toml"
-        config_path.write_text(
-            '[genomeinsight]\ntheme = "dark"\ndata_dir = "/some/path"\n'
-        )
+        config_path.write_text('[genomeinsight]\ntheme = "dark"\ndata_dir = "/some/path"\n')
 
         resp = setup_client.post(
             "/api/setup/credentials",

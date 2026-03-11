@@ -12,6 +12,7 @@ from backend import installer
 
 # ── Platform detection ─────────────────────────────────────
 
+
 class TestDetectPlatform:
     def test_macos(self):
         with patch("platform.system", return_value="Darwin"):
@@ -46,6 +47,7 @@ class TestDetectPlatform:
 
 # ── Data directory ─────────────────────────────────────────
 
+
 class TestEnsureDataDir:
     def test_creates_directories(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         data_dir = tmp_path / ".genomeinsight"
@@ -69,6 +71,7 @@ class TestEnsureDataDir:
 
 
 # ── Plist rendering ────────────────────────────────────────
+
 
 class TestRenderPlist:
     def test_replaces_install_dir(self, tmp_path: Path):
@@ -97,6 +100,7 @@ class TestRenderPlist:
 
 
 # ── Systemd rendering ─────────────────────────────────────
+
 
 class TestRenderSystemdUnit:
     def test_replaces_working_directory(self, tmp_path: Path):
@@ -129,6 +133,7 @@ class TestRenderSystemdUnit:
 
 # ── Health check ───────────────────────────────────────────
 
+
 class TestHealthCheck:
     def test_returns_false_on_connection_error(self):
         # No server running on a random port
@@ -136,6 +141,7 @@ class TestHealthCheck:
 
 
 # ── CLI argument parsing ───────────────────────────────────
+
 
 class TestCLIParsing:
     def test_install_defaults(self):
@@ -185,6 +191,7 @@ class TestCLIParsing:
 
 
 # ── Install flow (mocked subprocess) ──────────────────────
+
 
 class TestInstallFlow:
     @patch("backend.installer._detect_platform", return_value="linux")
@@ -237,6 +244,7 @@ class TestInstallFlow:
 
 # ── Uninstall flow ─────────────────────────────────────────
 
+
 class TestUninstallFlow:
     @patch("backend.installer._detect_platform", return_value="linux")
     @patch("subprocess.run")
@@ -284,6 +292,7 @@ class TestUninstallFlow:
 
 # ── Huey tasks stub ────────────────────────────────────────
 
+
 class TestHueyTasks:
     def test_huey_instance_exists(self):
         """The huey instance referenced by service configs exists."""
@@ -295,6 +304,7 @@ class TestHueyTasks:
 
 # ── Repo root detection ───────────────────────────────────
 
+
 class TestRepoRoot:
     def test_repo_root_is_project(self):
         root = installer._repo_root()
@@ -303,6 +313,7 @@ class TestRepoRoot:
 
 
 # ── Template file existence ────────────────────────────────
+
 
 class TestTemplateFiles:
     def test_launchd_templates_exist(self):

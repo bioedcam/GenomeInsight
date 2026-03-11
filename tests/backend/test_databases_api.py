@@ -200,9 +200,7 @@ class TestListDatabases:
         data = resp.json()
         assert data["downloaded_count"] == 0
 
-    def test_list_databases_shows_downloaded(
-        self, db_client: TestClient, tmp_data_dir: Path
-    ):
+    def test_list_databases_shows_downloaded(self, db_client: TestClient, tmp_data_dir: Path):
         # Create a fake downloaded ClinVar file
         clinvar_path = tmp_data_dir / "clinvar.db"
         clinvar_path.write_bytes(b"fake data")
@@ -211,9 +209,7 @@ class TestListDatabases:
         data = resp.json()
         assert data["downloaded_count"] == 1
 
-        clinvar_status = next(
-            d for d in data["databases"] if d["name"] == "clinvar"
-        )
+        clinvar_status = next(d for d in data["databases"] if d["name"] == "clinvar")
         assert clinvar_status["downloaded"] is True
         assert clinvar_status["file_size_bytes"] == len(b"fake data")
 
@@ -227,9 +223,15 @@ class TestListDatabases:
         db_entry = resp.json()["databases"][0]
 
         expected_fields = {
-            "name", "display_name", "description", "filename",
-            "expected_size_bytes", "required", "phase",
-            "downloaded", "file_size_bytes",
+            "name",
+            "display_name",
+            "description",
+            "filename",
+            "expected_size_bytes",
+            "required",
+            "phase",
+            "downloaded",
+            "file_size_bytes",
         }
         assert set(db_entry.keys()) == expected_fields
 
@@ -386,8 +388,7 @@ class TestTriggerDownload:
         engine = sa.create_engine(f"sqlite:///{ref_path}")
         with engine.connect() as conn:
             row = conn.execute(
-                sa.select(jobs.c.job_id, jobs.c.job_type)
-                .where(jobs.c.job_id == job_id)
+                sa.select(jobs.c.job_id, jobs.c.job_type).where(jobs.c.job_id == job_id)
             ).fetchone()
         engine.dispose()
 
@@ -538,8 +539,7 @@ class TestDownloadIntegration:
             for _ in range(40):  # max 4 seconds
                 with engine.connect() as conn:
                     row = conn.execute(
-                        sa.select(jobs.c.status)
-                        .where(jobs.c.job_id == job_id)
+                        sa.select(jobs.c.status).where(jobs.c.job_id == job_id)
                     ).fetchone()
                 if row and row.status in ("complete", "failed"):
                     break

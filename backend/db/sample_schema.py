@@ -33,9 +33,7 @@ def create_sample_tables(engine: sa.Engine) -> None:
     # Seed predefined tags (batch insert)
     with engine.connect() as conn:
         conn.execute(
-            sa.text(
-                "INSERT OR IGNORE INTO tags (name, is_predefined) VALUES (:name, 1)"
-            ),
+            sa.text("INSERT OR IGNORE INTO tags (name, is_predefined) VALUES (:name, 1)"),
             [{"name": tag_name} for tag_name in PREDEFINED_TAGS],
         )
         conn.commit()
