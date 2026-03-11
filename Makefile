@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run run-api run-frontend run-huey build-frontend clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run run-api run-frontend run-huey build-frontend install uninstall service-status service-start service-stop clean
 
 # Default Python and Node
 PYTHON ?= python3
@@ -69,6 +69,25 @@ lint:  ## Lint Python code with Ruff
 format:  ## Format Python code with Ruff
 	$(PYTHON) -m ruff format backend/ tests/
 	$(PYTHON) -m ruff check --fix backend/ tests/
+
+# ──────────────────────────────────────────────
+# Install / Uninstall (native services)
+# ──────────────────────────────────────────────
+
+install:  ## Install native services (launchd/systemd)
+	$(PYTHON) -m backend.installer install
+
+uninstall:  ## Uninstall native services
+	$(PYTHON) -m backend.installer uninstall
+
+service-status:  ## Show native service status
+	$(PYTHON) -m backend.installer status
+
+service-start:  ## Start native services
+	$(PYTHON) -m backend.installer start
+
+service-stop:  ## Stop native services
+	$(PYTHON) -m backend.installer stop
 
 # ──────────────────────────────────────────────
 # Clean

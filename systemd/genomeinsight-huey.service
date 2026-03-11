@@ -1,6 +1,6 @@
 [Unit]
 Description=GenomeInsight Huey Task Consumer
-After=network.target
+After=network.target genomeinsight-api.service
 
 [Service]
 Type=simple
@@ -8,7 +8,6 @@ ExecStart=huey_consumer backend.tasks.huey_tasks.huey -w 1
 WorkingDirectory=%h/GenomeInsight
 Restart=on-failure
 RestartSec=5
-After=genomeinsight-api.service
 Environment=PATH=%h/.local/bin:/usr/bin
 
 [Install]

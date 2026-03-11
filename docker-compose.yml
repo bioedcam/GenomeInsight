@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    image: genomeinsight:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - genomeinsight-data:/data
+    environment:
+      - GENOMEINSIGHT_DATA_DIR=/data
+      - GENOMEINSIGHT_HOST=0.0.0.0
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  huey:
+    image: genomeinsight:latest
+    volumes:
+      - genomeinsight-data:/data
+    environment:
+      - GENOMEINSIGHT_DATA_DIR=/data
+    command: huey_consumer backend.tasks.huey_tasks.huey -w 1
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  genomeinsight-data:
