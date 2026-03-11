@@ -9,7 +9,6 @@ Endpoints:
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -89,15 +88,6 @@ def _has_any_samples() -> bool:
     if not samples_dir.exists():
         return False
     return any(samples_dir.glob("sample_*.db"))
-
-
-def _get_disk_space(path: Path) -> dict[str, int]:
-    """Get disk space info for the given path."""
-    try:
-        usage = shutil.disk_usage(str(path))
-        return {"total": usage.total, "free": usage.free, "used": usage.used}
-    except OSError:
-        return {"total": 0, "free": 0, "used": 0}
 
 
 # ── GET /api/setup/status ────────────────────────────────────────────

@@ -205,14 +205,14 @@ class TestAcceptDisclaimer:
         """Accept should create data_dir if it doesn't exist yet."""
         import asyncio
 
+        from backend.api.routes.setup import accept_disclaimer
+
         # Use a sub-directory that doesn't exist yet
         new_data_dir = tmp_data_dir / "nonexistent_subdir"
         settings = Settings(data_dir=new_data_dir, wal_mode=False)
 
         with patch("backend.api.routes.setup.get_settings", return_value=settings):
-            from backend.api.routes.setup import accept_disclaimer
-
-            result = asyncio.get_event_loop().run_until_complete(accept_disclaimer())
+            result = asyncio.run(accept_disclaimer())
             assert result.accepted is True
             assert new_data_dir.exists()
             assert (new_data_dir / ".disclaimer_accepted").exists()

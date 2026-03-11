@@ -88,7 +88,7 @@ export default function SetupWizard() {
           <DisclaimerStep onAccepted={handleDisclaimerAccepted} />
         )}
 
-        {currentStep > 0 && (
+        {currentStep > 0 && currentStep < WIZARD_STEPS.length && (
           <StepPlaceholder
             step={WIZARD_STEPS[currentStep]}
             stepNumber={currentStep}
@@ -121,6 +121,7 @@ function StepPlaceholder({
         </p>
       </div>
       <button
+        type="button"
         onClick={onBack}
         className={cn(
           'rounded-lg border border-border px-5 py-2.5 text-sm font-medium',

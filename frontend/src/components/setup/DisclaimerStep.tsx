@@ -22,8 +22,12 @@ export default function DisclaimerStep({ onAccepted }: DisclaimerStepProps) {
   }
 
   async function handleAccept() {
-    await acceptMutation.mutateAsync()
-    onAccepted()
+    try {
+      await acceptMutation.mutateAsync()
+      onAccepted()
+    } catch {
+      // Error state handled by acceptMutation.isError
+    }
   }
 
   if (isLoading) {
@@ -108,6 +112,7 @@ export default function DisclaimerStep({ onAccepted }: DisclaimerStepProps) {
 
       {/* Accept button */}
       <button
+        type="button"
         onClick={handleAccept}
         disabled={!isChecked || acceptMutation.isPending}
         className={cn(
