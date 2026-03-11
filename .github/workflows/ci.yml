@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint ────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python linter
+        run: pip install ruff
+
+      - name: Ruff check
+        run: ruff check backend/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check backend/ tests/
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: ESLint
+        run: cd frontend && npm run lint
+
+  # ── Backend tests (matrix: macOS + Linux) ───────────────
+  test-backend:
+    name: Backend Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: python -m pytest tests/backend/ -v --tb=short
+
+  # ── Frontend tests ──────────────────────────────────────
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: cd frontend && npm ci
+
+      - name: Vitest
+        run: cd frontend && npm test
+
+  # ── Frontend build ──────────────────────────────────────
+  build-frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: cd frontend && npm ci
+
+      - name: Build
+        run: cd frontend && npm run build
+
+      - name: Verify dist output
+        run: test -f frontend/dist/index.html
+
+  # ── Native install smoke test ───────────────────────────
+  smoke-install:
+    name: Install Smoke Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Verify CLI entry point
+        run: genomeinsight-setup --help
+
+      - name: Verify data dir creation
+        run: |
+          python -c "
+          from backend.installer import ensure_data_dir, DATA_DIR
+          ensure_data_dir()
+          assert DATA_DIR.is_dir()
+          assert (DATA_DIR / 'samples').is_dir()
+          assert (DATA_DIR / 'downloads').is_dir()
+          assert (DATA_DIR / 'logs').is_dir()
+          print('Data directory OK:', DATA_DIR)
+          "
+
+      - name: Verify health endpoint (quick start/stop)
+        run: |
+          uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
+          SERVER_PID=$!
+          sleep 3
+          curl -sf http://127.0.0.1:8000/api/health || (kill $SERVER_PID; exit 1)
+          kill $SERVER_PID
+
+  # ── E2E tests (merge to main only) ─────────────────────
+  test-e2e:
+    name: E2E Tests (Playwright)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python deps
+        run: pip install -e ".[dev]"
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests (Chromium only in CI)
+        run: npx playwright test --project=chromium
+        env:
+          CI: true
+          GENOMEINSIGHT_HUEY_IMMEDIATE: "true"
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
