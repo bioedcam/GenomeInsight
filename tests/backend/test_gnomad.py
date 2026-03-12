@@ -1,4 +1,4 @@
-"""Tests for gnomAD AF-only SQLite index builder (P2-08).
+"""Tests for gnomAD AF-only SQLite index builder (P2-08) and rare variant flagging (P2-10).
 
 Covers:
 - T2-09: gnomAD loader ingests subset, lookup returns correct AF for rs7412 (APOE)
@@ -9,6 +9,9 @@ Covers:
 - Table creation and index creation
 - Version recording in database_versions
 - Download function structure
+- P2-10: classify_variant_rarity() and compute_rare_flags() utilities
+- P2-10: Rare flag boundary values, NULL AF handling, position-based flagging
+- P2-10: Database indexes on rare_flag and ultra_rare_flag columns
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ from backend.annotation.gnomad import (
     ULTRA_RARE_AF_THRESHOLD,
     GnomADAnnotation,
     LoadStats,
+    classify_variant_rarity,
+    compute_rare_flags,
     create_gnomad_tables,
     iter_gnomad_vcf,
     load_gnomad_from_csv,
@@ -37,7 +42,7 @@ from backend.annotation.gnomad import (
     parse_gnomad_vcf_line,
     record_gnomad_version,
 )
-from backend.db.tables import database_versions, reference_metadata
+from backend.db.tables import database_versions, reference_metadata, sample_metadata_obj
 
 # ── Fixtures ────────────────────────────────────────────────────────────
 
@@ -483,6 +488,80 @@ class TestRareVariantFlags:
         assert RARE_AF_THRESHOLD == 0.01
         assert ULTRA_RARE_AF_THRESHOLD == 0.001
 
+    def test_position_lookup_returns_rare_flags(self, gnomad_engine_with_data: sa.Engine):
+        """Position-based lookup also computes rare flags correctly."""
+        # rs80357906 at chrom=17, pos=43093449 (BRCA1 ultra-rare)
+        with gnomad_engine_with_data.connect() as conn:
+            row = conn.execute(
+                sa.text("SELECT chrom, pos, ref, alt FROM gnomad_af WHERE rsid = 'rs80357906'")
+            ).fetchone()
+        assert row is not None
+
+        positions = [(row.chrom, row.pos, row.ref, row.alt)]
+        results = lookup_gnomad_by_positions(positions, gnomad_engine_with_data)
+        key = (row.chrom, row.pos, row.ref, row.alt)
+
+        assert key in results
+        annot = results[key]
+        assert annot.rare_flag is True
+        assert annot.ultra_rare_flag is True
+
+    def test_boundary_exactly_at_rare_threshold(self, gnomad_engine: sa.Engine):
+        """AF exactly at 0.01 is NOT rare (strict less-than)."""
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af (rsid, chrom, pos, ref, alt, af_global) "
+                    "VALUES ('rs_boundary', '1', 100, 'A', 'G', 0.01)"
+                )
+            )
+        results = lookup_gnomad_by_rsids(["rs_boundary"], gnomad_engine)
+        annot = results["rs_boundary"]
+        assert annot.rare_flag is False
+        assert annot.ultra_rare_flag is False
+
+    def test_boundary_exactly_at_ultra_rare_threshold(self, gnomad_engine: sa.Engine):
+        """AF exactly at 0.001 is rare but NOT ultra-rare (strict less-than)."""
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af (rsid, chrom, pos, ref, alt, af_global) "
+                    "VALUES ('rs_boundary2', '1', 200, 'A', 'G', 0.001)"
+                )
+            )
+        results = lookup_gnomad_by_rsids(["rs_boundary2"], gnomad_engine)
+        annot = results["rs_boundary2"]
+        assert annot.rare_flag is True
+        assert annot.ultra_rare_flag is False
+
+    def test_zero_af_is_ultra_rare(self, gnomad_engine: sa.Engine):
+        """AF of 0.0 is both rare and ultra-rare (monomorphic in gnomAD)."""
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af (rsid, chrom, pos, ref, alt, af_global) "
+                    "VALUES ('rs_zero', '1', 300, 'A', 'G', 0.0)"
+                )
+            )
+        results = lookup_gnomad_by_rsids(["rs_zero"], gnomad_engine)
+        annot = results["rs_zero"]
+        assert annot.rare_flag is True
+        assert annot.ultra_rare_flag is True
+
+    def test_null_af_is_not_flagged(self, gnomad_engine: sa.Engine):
+        """NULL AF (no frequency data) produces no rare flags."""
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af (rsid, chrom, pos, ref, alt, af_global) "
+                    "VALUES ('rs_null', '1', 400, 'A', 'G', NULL)"
+                )
+            )
+        results = lookup_gnomad_by_rsids(["rs_null"], gnomad_engine)
+        annot = results["rs_null"]
+        assert annot.rare_flag is False
+        assert annot.ultra_rare_flag is False
+
 
 # ── Version recording tests ──────────────────────────────────────────────
 
@@ -559,3 +638,137 @@ class TestGnomADAnnotation:
         assert isinstance(annot.homozygous_count, int)
         assert isinstance(annot.rare_flag, bool)
         assert isinstance(annot.ultra_rare_flag, bool)
+
+
+# ── classify_variant_rarity tests (P2-10) ────────────────────────────────
+
+
+class TestClassifyVariantRarity:
+    """Test the classify_variant_rarity utility function (P2-10)."""
+
+    def test_ultra_rare(self):
+        """AF < 0.001 → ultra_rare."""
+        assert classify_variant_rarity(0.00004) == "ultra_rare"
+        assert classify_variant_rarity(0.0) == "ultra_rare"
+        assert classify_variant_rarity(0.0009) == "ultra_rare"
+
+    def test_rare(self):
+        """0.001 <= AF < 0.01 → rare."""
+        assert classify_variant_rarity(0.001) == "rare"
+        assert classify_variant_rarity(0.005) == "rare"
+        assert classify_variant_rarity(0.0099) == "rare"
+
+    def test_low_frequency(self):
+        """0.01 <= AF < 0.05 → low_frequency."""
+        assert classify_variant_rarity(0.01) == "low_frequency"
+        assert classify_variant_rarity(0.03) == "low_frequency"
+        assert classify_variant_rarity(0.0499) == "low_frequency"
+
+    def test_common(self):
+        """AF >= 0.05 → common."""
+        assert classify_variant_rarity(0.05) == "common"
+        assert classify_variant_rarity(0.15) == "common"
+        assert classify_variant_rarity(0.5) == "common"
+
+    def test_none_af(self):
+        """None AF → unknown."""
+        assert classify_variant_rarity(None) == "unknown"
+
+
+# ── compute_rare_flags tests (P2-10) ─────────────────────────────────────
+
+
+class TestComputeRareFlags:
+    """Test the compute_rare_flags utility function (P2-10)."""
+
+    def test_none_af(self):
+        """None AF → (False, False)."""
+        assert compute_rare_flags(None) == (False, False)
+
+    def test_common_variant(self):
+        """Common AF → (False, False)."""
+        assert compute_rare_flags(0.15) == (False, False)
+
+    def test_rare_variant(self):
+        """Rare AF → (True, False)."""
+        assert compute_rare_flags(0.005) == (True, False)
+
+    def test_ultra_rare_variant(self):
+        """Ultra-rare AF → (True, True)."""
+        assert compute_rare_flags(0.00004) == (True, True)
+
+    def test_boundary_at_rare_threshold(self):
+        """AF exactly at 0.01 → (False, False)."""
+        assert compute_rare_flags(0.01) == (False, False)
+
+    def test_boundary_at_ultra_rare_threshold(self):
+        """AF exactly at 0.001 → (True, False)."""
+        assert compute_rare_flags(0.001) == (True, False)
+
+    def test_zero_af(self):
+        """AF of 0.0 → (True, True)."""
+        assert compute_rare_flags(0.0) == (True, True)
+
+
+# ── Database index tests for rare flags (P2-10) ─────────────────────────
+
+
+class TestRareFlagIndexes:
+    """Test that rare_flag and ultra_rare_flag indexes exist in sample DB (P2-10)."""
+
+    def test_rare_flag_index_exists(self):
+        """Index on rare_flag column exists in annotated_variants."""
+        engine = sa.create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        sample_metadata_obj.create_all(engine)
+
+        with engine.connect() as conn:
+            indexes = conn.execute(
+                sa.text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='index' AND tbl_name='annotated_variants'"
+                )
+            ).fetchall()
+        index_names = {r[0] for r in indexes}
+        assert "idx_annot_rare_flag" in index_names
+
+    def test_ultra_rare_flag_index_exists(self):
+        """Index on ultra_rare_flag column exists in annotated_variants."""
+        engine = sa.create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        sample_metadata_obj.create_all(engine)
+
+        with engine.connect() as conn:
+            indexes = conn.execute(
+                sa.text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='index' AND tbl_name='annotated_variants'"
+                )
+            ).fetchall()
+        index_names = {r[0] for r in indexes}
+        assert "idx_annot_ultra_rare_flag" in index_names
+
+    def test_gnomad_af_global_index_exists(self):
+        """Index on gnomad_af_global column exists for AF range queries."""
+        engine = sa.create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        sample_metadata_obj.create_all(engine)
+
+        with engine.connect() as conn:
+            indexes = conn.execute(
+                sa.text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='index' AND tbl_name='annotated_variants'"
+                )
+            ).fetchall()
+        index_names = {r[0] for r in indexes}
+        assert "idx_annot_gnomad_af" in index_names

@@ -152,6 +152,53 @@ class GnomADAnnotation:
     ultra_rare_flag: bool
 
 
+# ── Rarity classification ────────────────────────────────────────────────
+
+
+def classify_variant_rarity(af_global: float | None) -> str:
+    """Classify a variant's rarity based on global allele frequency.
+
+    Returns one of: ``"ultra_rare"``, ``"rare"``, ``"low_frequency"``,
+    ``"common"``, or ``"unknown"`` (when AF is None/not available).
+
+    Thresholds:
+        - ultra_rare:    AF < 0.001
+        - rare:          0.001 <= AF < 0.01
+        - low_frequency: 0.01 <= AF < 0.05
+        - common:        AF >= 0.05
+        - unknown:       AF is None
+
+    Args:
+        af_global: Global allele frequency from gnomAD.
+
+    Returns:
+        Rarity category string.
+    """
+    if af_global is None:
+        return "unknown"
+    if af_global < ULTRA_RARE_AF_THRESHOLD:
+        return "ultra_rare"
+    if af_global < RARE_AF_THRESHOLD:
+        return "rare"
+    if af_global < 0.05:
+        return "low_frequency"
+    return "common"
+
+
+def compute_rare_flags(af_global: float | None) -> tuple[bool, bool]:
+    """Compute rare and ultra-rare boolean flags from global AF.
+
+    Args:
+        af_global: Global allele frequency from gnomAD.
+
+    Returns:
+        Tuple of (rare_flag, ultra_rare_flag).
+    """
+    if af_global is None:
+        return False, False
+    return af_global < RARE_AF_THRESHOLD, af_global < ULTRA_RARE_AF_THRESHOLD
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
@@ -697,10 +744,10 @@ def lookup_gnomad_by_rsids(
             rows = conn.execute(stmt, params).fetchall()
 
             for row in rows:
-                af_global = row.af_global
+                rare, ultra_rare = compute_rare_flags(row.af_global)
                 results[row.rsid] = GnomADAnnotation(
                     rsid=row.rsid,
-                    af_global=af_global,
+                    af_global=row.af_global,
                     af_afr=row.af_afr,
                     af_amr=row.af_amr,
                     af_eas=row.af_eas,
@@ -708,8 +755,8 @@ def lookup_gnomad_by_rsids(
                     af_fin=row.af_fin,
                     af_sas=row.af_sas,
                     homozygous_count=row.homozygous_count or 0,
-                    rare_flag=af_global is not None and af_global < RARE_AF_THRESHOLD,
-                    ultra_rare_flag=af_global is not None and af_global < ULTRA_RARE_AF_THRESHOLD,
+                    rare_flag=rare,
+                    ultra_rare_flag=ultra_rare,
                 )
 
     return results
@@ -761,11 +808,11 @@ def lookup_gnomad_by_positions(
             rows = conn.execute(stmt, params).fetchall()
 
             for row in rows:
-                af_global = row.af_global
+                rare, ultra_rare = compute_rare_flags(row.af_global)
                 key = (row.chrom, row.pos, row.ref, row.alt)
                 results[key] = GnomADAnnotation(
                     rsid=row.rsid,
-                    af_global=af_global,
+                    af_global=row.af_global,
                     af_afr=row.af_afr,
                     af_amr=row.af_amr,
                     af_eas=row.af_eas,
@@ -773,8 +820,8 @@ def lookup_gnomad_by_positions(
                     af_fin=row.af_fin,
                     af_sas=row.af_sas,
                     homozygous_count=row.homozygous_count or 0,
-                    rare_flag=af_global is not None and af_global < RARE_AF_THRESHOLD,
-                    ultra_rare_flag=af_global is not None and af_global < ULTRA_RARE_AF_THRESHOLD,
+                    rare_flag=rare,
+                    ultra_rare_flag=ultra_rare,
                 )
 
     return results

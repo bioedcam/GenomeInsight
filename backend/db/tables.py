@@ -397,6 +397,9 @@ sa.Index(
 sa.Index("idx_annot_gene", annotated_variants.c.gene_symbol)
 sa.Index("idx_annot_clinvar_sig", annotated_variants.c.clinvar_significance)
 sa.Index("idx_annot_coverage", annotated_variants.c.annotation_coverage)
+sa.Index("idx_annot_rare_flag", annotated_variants.c.rare_flag)
+sa.Index("idx_annot_ultra_rare_flag", annotated_variants.c.ultra_rare_flag)
+sa.Index("idx_annot_gnomad_af", annotated_variants.c.gnomad_af_global)
 
 # ── Findings (unified output from all analysis modules) ────────────────
 
