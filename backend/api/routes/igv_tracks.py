@@ -129,7 +129,7 @@ async def clinvar_vcf_region(
 USER_VCF_HEADER = """\
 ##fileformat=VCFv4.2
 ##source=GenomeInsight-UserVariants
-##INFO=<ID=GT,Number=1,Type=String,Description="Genotype call from raw data">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE"""
 
 
