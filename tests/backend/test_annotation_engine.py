@@ -856,6 +856,7 @@ class TestGnomadAnnotationLookupIntegration:
         assert data["gnomad_af_amr"] == pytest.approx(0.0560)
         assert data["gnomad_af_eas"] == pytest.approx(0.0980)
         assert data["gnomad_af_eur"] == pytest.approx(0.0730)
+        assert data["gnomad_af_fin"] == pytest.approx(0.0410)
         assert data["gnomad_af_sas"] == pytest.approx(0.0650)
 
     def test_rsid_lookup_returns_homozygous_count(
