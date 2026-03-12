@@ -130,7 +130,7 @@ describe("IgvBrowser", () => {
       expect(mockOn).toHaveBeenCalledWith("trackclick", expect.any(Function))
     })
     const trackClickHandler = mockOn.mock.calls.find(
-      ([event]: [string]) => event === "trackclick",
+      (args: unknown[]) => args[0] === "trackclick",
     )?.[1]
     const result = trackClickHandler(
       { config: { type: "variant" } },
@@ -155,7 +155,7 @@ describe("IgvBrowser", () => {
       expect(mockOn).toHaveBeenCalledWith("trackclick", expect.any(Function))
     })
     const trackClickHandler = mockOn.mock.calls.find(
-      ([event]: [string]) => event === "trackclick",
+      (args: unknown[]) => args[0] === "trackclick",
     )?.[1]
     const result = trackClickHandler(
       { config: { type: "variant" } },
