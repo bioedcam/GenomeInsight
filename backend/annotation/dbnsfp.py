@@ -46,13 +46,21 @@ logger = structlog.get_logger(__name__)
 # ── Constants ─────────────────────────────────────────────────────────────
 
 # dbNSFP 4.x academic download URL (placeholder — actual URL varies by version)
-DBNSFP_URL = (
+# The real dbNSFP distribution is a TSV archive; this URL points to our
+# pre-built SQLite bundle.  download_and_load_dbnsfp() is designed for the
+# TSV-based pipeline; for the pre-built bundle, use the download manager
+# directly and skip the TSV parse step.
+DBNSFP_TSV_URL = (
+    "https://dbnsfp.s3.amazonaws.com/dbNSFP4.5a.zip"
+)
+DBNSFP_PREBUILT_URL = (
     "https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz"
 )
 
 # Batch sizes
 BATCH_SIZE = 10_000
 LOOKUP_BATCH_SIZE = 500  # stay under SQLite 999-variable limit
+POSITION_LOOKUP_BATCH_SIZE = 249  # 4 params per position → 249 × 4 = 996 < 999
 
 # Chromosomes we accept (matching 23andMe scope)
 VALID_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT"}
@@ -199,28 +207,9 @@ class LoadStats:
 
 
 @dataclass
-class DbNSFPAnnotation:
-    """dbNSFP annotation data for a single variant."""
+class DbNSFPAnnotation(DbNSFPRecord):
+    """dbNSFP annotation data with computed deleterious count."""
 
-    rsid: str | None
-    chrom: str
-    pos: int
-    ref: str
-    alt: str
-    cadd_phred: float | None = None
-    sift_score: float | None = None
-    sift_pred: str | None = None
-    polyphen2_hsvar_score: float | None = None
-    polyphen2_hsvar_pred: str | None = None
-    revel: float | None = None
-    mutpred2: float | None = None
-    vest4: float | None = None
-    metasvm: float | None = None
-    metalr: float | None = None
-    gerp_rs: float | None = None
-    phylop: float | None = None
-    mpc: float | None = None
-    primateai: float | None = None
     deleterious_count: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -290,7 +279,7 @@ def _parse_dbnsfp_float(value: str | None) -> float | None:
     """Parse a dbNSFP float value that may contain multiple semicolon-delimited scores.
 
     dbNSFP stores multiple transcript-level scores separated by semicolons.
-    We take the first non-missing value (consistent with most-severe approach).
+    We take the first non-missing value (first-transcript approach).
     """
     if value is None or value in (".", "", "-"):
         return None
@@ -472,9 +461,7 @@ def iter_dbnsfp_tsv(
             record, skip_reason = parse_dbnsfp_tsv_line(fields)
 
             if record is None:
-                if skip_reason == "no_rsid":
-                    stats.skipped_no_rsid += 1
-                elif skip_reason == "invalid_chrom":
+                if skip_reason == "invalid_chrom":
                     stats.skipped_invalid_chrom += 1
                 elif skip_reason == "no_scores":
                     stats.skipped_no_scores += 1
@@ -622,6 +609,10 @@ def load_dbnsfp_from_csv(
         reader = csv.DictReader(f)
         for row in reader:
             stats.total_lines += 1
+            for required in ("chrom", "pos", "ref", "alt"):
+                if required not in row:
+                    msg = f"Missing required column '{required}' in CSV"
+                    raise ValueError(msg)
             batch.append({
                 "rsid": row.get("rsid") or None,
                 "chrom": row["chrom"],
@@ -685,7 +676,7 @@ def _insert_batch(engine: sa.Engine, batch: list[dict]) -> None:
 def download_dbnsfp(
     dest_dir: Path,
     *,
-    url: str = DBNSFP_URL,
+    url: str = DBNSFP_TSV_URL,
     progress_callback: Callable[[int, int | None], None] | None = None,
     timeout: float = 3600.0,
 ) -> Path:
@@ -744,7 +735,7 @@ def download_and_load_dbnsfp(
     dbnsfp_engine: sa.Engine,
     dest_dir: Path,
     *,
-    url: str = DBNSFP_URL,
+    url: str = DBNSFP_TSV_URL,
     download_progress: Callable[[int, int | None], None] | None = None,
     parse_progress: Callable[[int], None] | None = None,
     timeout: float = 3600.0,
@@ -929,8 +920,8 @@ def lookup_dbnsfp_by_positions(
     results: dict[tuple[str, int, str, str], DbNSFPAnnotation] = {}
 
     with dbnsfp_engine.connect() as conn:
-        for i in range(0, len(positions), 250):
-            batch = positions[i : i + 250]
+        for i in range(0, len(positions), POSITION_LOOKUP_BATCH_SIZE):
+            batch = positions[i : i + POSITION_LOOKUP_BATCH_SIZE]
 
             conditions = []
             params: dict[str, str | int] = {}

@@ -412,6 +412,13 @@ class TestLookupDbnsfpByPositions:
         )
         assert len(results) == 0
 
+    def test_large_position_batch_chunking(self, dbnsfp_engine_with_data: sa.Engine):
+        """Ensure batching works for lists larger than internal batch size."""
+        positions = [(str(i % 22 + 1), i, "A", "T") for i in range(300)]
+        positions.append(("19", 44908684, "T", "C"))  # one real one
+        results = lookup_dbnsfp_by_positions(positions, dbnsfp_engine_with_data)
+        assert ("19", 44908684, "T", "C") in results
+
 
 # ── Ensemble pathogenicity tests ─────────────────────────────────────────
 
