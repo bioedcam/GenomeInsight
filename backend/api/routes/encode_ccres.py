@@ -16,6 +16,21 @@ from backend.db.connection import get_registry
 
 logger = structlog.get_logger(__name__)
 
+
+# Helper to get the encode_ccres engine with proper error handling
+def _get_encode_engine():
+    """Get the ENCODE cCREs engine, raising 503 if unavailable."""
+    registry = get_registry()
+    try:
+        return registry.encode_ccres_engine
+    except Exception as exc:
+        logger.warning("encode_ccres_engine_unavailable", error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="ENCODE cCREs database not available. Download it via the setup wizard.",
+        ) from exc
+
+
 router = APIRouter(prefix="/encode-ccres", tags=["encode-ccres"])
 
 
@@ -71,15 +86,13 @@ async def query_region(
     """
     from backend.annotation.encode_ccres import is_loaded, query_ccres_by_region
 
-    registry = get_registry()
-
-    try:
-        engine = registry.encode_ccres_engine
-    except Exception:
+    if start >= end:
         raise HTTPException(
-            status_code=503,
-            detail="ENCODE cCREs database not available. Download it via the setup wizard.",
+            status_code=400,
+            detail="'start' must be less than 'end'.",
         )
+
+    engine = _get_encode_engine()
 
     if not is_loaded(engine):
         raise HTTPException(
@@ -115,15 +128,7 @@ async def get_summary() -> SummaryResponse:
     """Get cCRE counts grouped by classification."""
     from backend.annotation.encode_ccres import get_ccre_summary, is_loaded
 
-    registry = get_registry()
-
-    try:
-        engine = registry.encode_ccres_engine
-    except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="ENCODE cCREs database not available.",
-        )
+    engine = _get_encode_engine()
 
     if not is_loaded(engine):
         raise HTTPException(
@@ -151,7 +156,8 @@ async def get_status() -> StatusResponse:
 
     try:
         engine = registry.encode_ccres_engine
-    except Exception:
+    except Exception as exc:
+        logger.debug("encode_ccres_status_unavailable", error=str(exc))
         return StatusResponse(loaded=False, record_count=0)
 
     loaded = is_loaded(engine)

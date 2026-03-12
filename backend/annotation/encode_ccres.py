@@ -171,8 +171,12 @@ def download_encode_ccres_bed(
     dest_path = dest_dir / filename
 
     if dest_path.exists():
-        logger.info("encode_ccres_bed_exists", path=str(dest_path))
-        return dest_path
+        file_size = dest_path.stat().st_size
+        if file_size > 0:
+            logger.info("encode_ccres_bed_exists", path=str(dest_path), size=file_size)
+            return dest_path
+        logger.warning("encode_ccres_bed_empty_removing", path=str(dest_path))
+        dest_path.unlink()
 
     logger.info("encode_ccres_download_start", url=url, dest=str(dest_path))
 
@@ -335,21 +339,16 @@ def create_encode_ccres_tables(engine: sa.Engine) -> None:
 # ── Bulk loading ─────────────────────────────────────────────────────────
 
 
-def _insert_batch(engine: sa.Engine, batch: list[dict]) -> int:
-    """Insert a batch of cCRE records using INSERT OR IGNORE.
-
-    Returns:
-        Number of rows inserted.
-    """
+def _insert_batch(engine: sa.Engine, batch: list[dict]) -> None:
+    """Insert a batch of cCRE records using INSERT OR IGNORE."""
     if not batch:
-        return 0
+        return
     sql = sa.text(
         "INSERT OR IGNORE INTO encode_ccres (accession, chrom, start_pos, end_pos, ccre_class) "
         "VALUES (:accession, :chrom, :start_pos, :end_pos, :ccre_class)"
     )
     with engine.begin() as conn:
         conn.execute(sql, batch)
-    return len(batch)
 
 
 def _compute_sha256(file_path: Path) -> str:

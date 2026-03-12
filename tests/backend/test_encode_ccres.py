@@ -271,11 +271,18 @@ class TestLoadEncodeCcres:
         load_encode_ccres(sample_bed_file, ccres_engine)
 
         with ccres_engine.connect() as conn:
-            row = conn.execute(
-                sa.text("SELECT * FROM encode_ccres_version ORDER BY rowid DESC LIMIT 1")
-            ).fetchone()
+            row = (
+                conn.execute(
+                    sa.text(
+                        "SELECT loaded_at, source_url, record_count, sha256 "
+                        "FROM encode_ccres_version ORDER BY rowid DESC LIMIT 1"
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
             assert row is not None
-            assert row[2] == 5  # record_count
+            assert row["record_count"] == 5
 
     def test_progress_callback(self, ccres_engine: sa.Engine, tmp_path: Path):
         """Verify progress callback is called for large files."""
@@ -418,6 +425,13 @@ class TestAPIRoutes:
     def test_region_missing_params(self, client):
         resp = client.get("/api/encode-ccres/region?chrom=1")
         assert resp.status_code == 422  # validation error
+
+    def test_region_start_ge_end(self, client):
+        resp = client.get("/api/encode-ccres/region?chrom=1&start=500&end=500")
+        assert resp.status_code == 400
+
+        resp = client.get("/api/encode-ccres/region?chrom=1&start=1000&end=500")
+        assert resp.status_code == 400
 
     def test_summary_endpoint(self, client):
         resp = client.get("/api/encode-ccres/summary")
