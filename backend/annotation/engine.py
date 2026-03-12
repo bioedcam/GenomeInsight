@@ -60,8 +60,9 @@ GNOMAD_BIT = 0b000100  # bit 2 = 4
 DBNSFP_BIT = 0b001000  # bit 3 = 8
 GENE_PHENOTYPE_BIT = 0b010000  # bit 4 = 16
 
-# Maximum concurrent annotation source lookups
-_MAX_WORKERS = 5
+# Maximum concurrent annotation source lookups (VEP, ClinVar, gnomAD, dbNSFP)
+# Gene-phenotype runs sequentially after VEP since it depends on gene_symbol.
+_MAX_WORKERS = 4
 
 
 # ── Result dataclass ─────────────────────────────────────────────────────
