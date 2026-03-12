@@ -1,0 +1,124 @@
+/** React Query hooks for annotation API (P2-06).
+ *
+ * - useStartAnnotation: POST /api/annotation/{sample_id} → 202 with job_id
+ * - useCancelAnnotation: POST /api/annotation/cancel/{job_id}
+ * - useAnnotationProgress: SSE-based hook for real-time progress tracking
+ */
+
+import { useState, useEffect, useRef, useCallback } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+export interface AnnotationJobResult {
+  job_id: string
+  sample_id: number
+  status: "pending"
+}
+
+export interface AnnotationProgress {
+  job_id: string
+  status: "pending" | "running" | "complete" | "failed" | "cancelled"
+  progress_pct: number
+  message: string
+  error: string | null
+}
+
+// ── Start annotation mutation ──────────────────────────────────────────
+
+export function useStartAnnotation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (sampleId: number): Promise<AnnotationJobResult> => {
+      const res = await fetch(`/api/annotation/${sampleId}`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        const detail = body?.detail || `Start annotation failed: ${res.status}`
+        throw new Error(detail)
+      }
+      return await res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["variants-count"] })
+    },
+  })
+}
+
+// ── Cancel annotation mutation ─────────────────────────────────────────
+
+export function useCancelAnnotation() {
+  return useMutation({
+    mutationFn: async (jobId: string): Promise<{ job_id: string; status: string }> => {
+      const res = await fetch(`/api/annotation/cancel/${jobId}`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        const detail = body?.detail || `Cancel failed: ${res.status}`
+        throw new Error(detail)
+      }
+      return await res.json()
+    },
+  })
+}
+
+// ── SSE progress hook ──────────────────────────────────────────────────
+
+const TERMINAL_STATES = new Set(["complete", "failed", "cancelled"])
+
+export function useAnnotationProgress(jobId: string | null): AnnotationProgress | null {
+  const [progress, setProgress] = useState<AnnotationProgress | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const queryClient = useQueryClient()
+  const cleanup = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!jobId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProgress(null)
+      return
+    }
+
+    cleanup()
+
+    const es = new EventSource(`/api/annotation/status/${jobId}`)
+    eventSourceRef.current = es
+
+    es.addEventListener("progress", (event: MessageEvent) => {
+      let data: AnnotationProgress
+      try {
+        data = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      setProgress(data)
+
+      if (TERMINAL_STATES.has(data.status)) {
+        es.close()
+        eventSourceRef.current = null
+        // Invalidate variant queries so tables refresh with new annotations
+        queryClient.invalidateQueries({ queryKey: ["variants"] })
+        queryClient.invalidateQueries({ queryKey: ["variants-count"] })
+        queryClient.invalidateQueries({ queryKey: ["variants-total-count"] })
+        queryClient.invalidateQueries({ queryKey: ["variants-qc-stats"] })
+        queryClient.invalidateQueries({ queryKey: ["variants-chromosomes"] })
+      }
+    })
+
+    es.addEventListener("error", () => {
+      es.close()
+      eventSourceRef.current = null
+    })
+
+    return cleanup
+  }, [jobId, cleanup, queryClient])
+
+  return progress
+}
