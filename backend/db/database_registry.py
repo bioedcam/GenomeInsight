@@ -102,6 +102,16 @@ DATABASES: dict[str, DatabaseInfo] = {
         required=False,
         phase=3,
     ),
+    "encode_ccres": DatabaseInfo(
+        name="encode_ccres",
+        display_name="ENCODE cCREs",
+        description="Candidate cis-Regulatory Elements for IGV.js track visualization",
+        url="https://downloads.wenglab.org/V3/GRCh37-cCREs.bed",
+        filename="encode_ccres.db",
+        expected_size_bytes=30_000_000,  # ~30 MB (SQLite after BED loading)
+        required=False,
+        phase=2,
+    ),
 }
 
 
