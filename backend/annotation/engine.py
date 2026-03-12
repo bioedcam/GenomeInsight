@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from backend.annotation.evidence_conflict import apply_evidence_conflicts
 from backend.db.tables import annotated_variants, raw_variants
 
 if TYPE_CHECKING:
@@ -338,6 +339,8 @@ _UPSERT_COLUMNS = [
     "phylop",
     "mpc",
     "primateai",
+    # Evidence conflict
+    "evidence_conflict",
 ]
 
 
@@ -525,6 +528,9 @@ def run_annotation(
 
         # 6. Merge results and compute bitmask
         merged = _merge_annotations(batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data)
+
+        # 6b. Evidence conflict detection (P2-07)
+        apply_evidence_conflicts(merged)
 
         # 7. Bulk upsert
         written = _bulk_upsert(sample_engine, merged)
