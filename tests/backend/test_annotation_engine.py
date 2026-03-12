@@ -1,8 +1,10 @@
-"""Tests for the annotation engine orchestrator (P2-04).
+"""Tests for the annotation engine orchestrator (P2-04, P2-09).
 
 Covers:
 - T2-04: Annotation engine processes 1000 variants end-to-end, all fields
   populated in annotated_variants
+- P2-09: gnomAD annotation lookup integrated into engine — rsid primary,
+  position-based fallback, correct rare/ultra-rare thresholds
 - Concurrent lookup orchestration across VEP, ClinVar, gnomAD, dbNSFP
 - Bitmask computation (annotation_coverage)
 - Crash recovery (delete partial, re-run)
@@ -27,6 +29,7 @@ from backend.annotation.engine import (
     GNOMAD_BIT,
     VEP_BIT,
     AnnotationEngineResult,
+    _annot_to_dict,
     _bulk_upsert,
     _delete_all_annotations,
     _lookup_clinvar,
@@ -35,6 +38,13 @@ from backend.annotation.engine import (
     _lookup_vep,
     _merge_annotations,
     run_annotation,
+)
+from backend.annotation.gnomad import (
+    RARE_AF_THRESHOLD,
+    ULTRA_RARE_AF_THRESHOLD,
+    GnomADAnnotation,
+    create_gnomad_tables,
+    lookup_gnomad_by_rsids,
 )
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
@@ -200,25 +210,15 @@ def reference_engine() -> sa.Engine:
 
 @pytest.fixture
 def gnomad_engine() -> sa.Engine:
-    """In-memory gnomAD engine loaded from seed CSV."""
+    """In-memory gnomAD engine loaded from seed CSV with proper indexes."""
     engine = sa.create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    # Use the module's create_gnomad_tables for proper table + indexes
+    create_gnomad_tables(engine)
     with engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                "CREATE TABLE gnomad_af ("
-                "  rsid TEXT PRIMARY KEY, chrom TEXT, pos INTEGER,"
-                "  ref TEXT, alt TEXT, af_global REAL,"
-                "  af_afr REAL, af_amr REAL, af_eas REAL,"
-                "  af_eur REAL, af_fin REAL, af_sas REAL,"
-                "  homozygous_count INTEGER"
-                ")"
-            )
-        )
-        conn.execute(sa.text("CREATE INDEX idx_gnomad_rsid ON gnomad_af(rsid)"))
         with open(GNOMAD_SEED_CSV, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -796,3 +796,232 @@ class TestIntegration1000Variants:
         assert row.gnomad_af_global is not None
         assert row.cadd_phred is not None
         assert row.annotation_coverage == VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-09: gnomAD annotation lookup integration
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGnomadAnnotationLookupIntegration:
+    """P2-09: gnomAD annotation lookup integrated into annotation engine.
+
+    Verifies:
+    - rsid-based primary lookup delegates to gnomad.py
+    - Position-based fallback for unmatched rsids with ref/alt
+    - Correct rare/ultra-rare thresholds (0.01 / 0.001)
+    - All population AF fields returned (AFR/AMR/EAS/EUR/SAS)
+    - Homozygous count returned
+    - _annot_to_dict conversion preserves all fields
+    """
+
+    def test_annot_to_dict_preserves_fields(self) -> None:
+        """_annot_to_dict converts GnomADAnnotation to engine dict."""
+        annot = GnomADAnnotation(
+            rsid="rs7412",
+            af_global=0.0781,
+            af_afr=0.1130,
+            af_amr=0.0560,
+            af_eas=0.0980,
+            af_eur=0.0730,
+            af_fin=0.0410,
+            af_sas=0.0650,
+            homozygous_count=874,
+            rare_flag=False,
+            ultra_rare_flag=False,
+        )
+        d = _annot_to_dict(annot)
+
+        assert d["gnomad_af_global"] == pytest.approx(0.0781)
+        assert d["gnomad_af_afr"] == pytest.approx(0.1130)
+        assert d["gnomad_af_amr"] == pytest.approx(0.0560)
+        assert d["gnomad_af_eas"] == pytest.approx(0.0980)
+        assert d["gnomad_af_eur"] == pytest.approx(0.0730)
+        assert d["gnomad_af_fin"] == pytest.approx(0.0410)
+        assert d["gnomad_af_sas"] == pytest.approx(0.0650)
+        assert d["gnomad_homozygous_count"] == 874
+        assert d["rare_flag"] is False
+        assert d["ultra_rare_flag"] is False
+
+    def test_rsid_lookup_returns_all_population_afs(
+        self, gnomad_engine: sa.Engine
+    ) -> None:
+        """P2-09: Lookup returns global AF and per-population AF."""
+        result = _lookup_gnomad(["rs7412"], {}, gnomad_engine)
+
+        assert "rs7412" in result
+        data = result["rs7412"]
+        assert data["gnomad_af_global"] == pytest.approx(0.0781)
+        assert data["gnomad_af_afr"] == pytest.approx(0.1130)
+        assert data["gnomad_af_amr"] == pytest.approx(0.0560)
+        assert data["gnomad_af_eas"] == pytest.approx(0.0980)
+        assert data["gnomad_af_eur"] == pytest.approx(0.0730)
+        assert data["gnomad_af_sas"] == pytest.approx(0.0650)
+
+    def test_rsid_lookup_returns_homozygous_count(
+        self, gnomad_engine: sa.Engine
+    ) -> None:
+        """P2-09: Lookup returns homozygous count."""
+        result = _lookup_gnomad(["rs7412"], {}, gnomad_engine)
+        assert result["rs7412"]["gnomad_homozygous_count"] == 874
+
+    def test_rare_threshold_correct(self, gnomad_engine: sa.Engine) -> None:
+        """P2-09: rare_flag uses 0.01 threshold (not hardcoded)."""
+        # rs28897696 has af_global=0.0052 — rare but not ultra-rare
+        result = _lookup_gnomad(["rs28897696"], {}, gnomad_engine)
+        assert result["rs28897696"]["rare_flag"] is True
+        assert result["rs28897696"]["ultra_rare_flag"] is False
+
+    def test_ultra_rare_threshold_correct(self, gnomad_engine: sa.Engine) -> None:
+        """P2-09: ultra_rare_flag uses 0.001 threshold (bug fix from 0.0001)."""
+        # rs80357906 has af_global=0.00004 — ultra-rare
+        result = _lookup_gnomad(["rs80357906"], {}, gnomad_engine)
+        assert result["rs80357906"]["rare_flag"] is True
+        assert result["rs80357906"]["ultra_rare_flag"] is True
+
+        # Verify threshold constants match PRD
+        assert RARE_AF_THRESHOLD == 0.01
+        assert ULTRA_RARE_AF_THRESHOLD == 0.001
+
+    def test_ultra_rare_boundary(self, gnomad_engine: sa.Engine) -> None:
+        """AF exactly at 0.001 is NOT ultra-rare (strict less-than)."""
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af VALUES "
+                    "('rs_boundary', '1', 999, 'A', 'G', 0.001, "
+                    "0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 2)"
+                )
+            )
+        result = _lookup_gnomad(["rs_boundary"], {}, gnomad_engine)
+        assert result["rs_boundary"]["rare_flag"] is True
+        assert result["rs_boundary"]["ultra_rare_flag"] is False
+
+    def test_position_fallback_with_ref_alt(self, gnomad_engine: sa.Engine) -> None:
+        """Position-based fallback matches when rsid differs but coords match."""
+        # Insert variant under different rsid but same position
+        with gnomad_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO gnomad_af VALUES "
+                    "('rs_gnomad_id', '5', 500, 'C', 'T', 0.02, "
+                    "0.03, 0.01, 0.02, 0.025, 0.015, 0.018, 30)"
+                )
+            )
+
+        # Create a fake raw row with ref/alt for position fallback
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, "
+                    "genotype TEXT, ref TEXT, alt TEXT)"
+                )
+            )
+            conn.execute(
+                sa.text(
+                    "INSERT INTO t VALUES ('rs_user_id', '5', 500, 'CT', 'C', 'T')"
+                )
+            )
+            row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
+
+        raw_by_rsid = {"rs_user_id": row}
+        result = _lookup_gnomad(["rs_user_id"], raw_by_rsid, gnomad_engine)
+
+        assert "rs_user_id" in result
+        assert result["rs_user_id"]["gnomad_af_global"] == pytest.approx(0.02)
+
+    def test_position_fallback_skipped_without_ref_alt(
+        self, gnomad_engine: sa.Engine
+    ) -> None:
+        """Fallback is skipped when raw variant lacks ref/alt columns."""
+        # Create a raw row without ref/alt (like 23andMe data)
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)"
+                )
+            )
+            conn.execute(
+                sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')")
+            )
+            row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
+
+        raw_by_rsid = {"rs_no_match": row}
+        result = _lookup_gnomad(["rs_no_match"], raw_by_rsid, gnomad_engine)
+
+        # No match by rsid and no ref/alt for position fallback
+        assert "rs_no_match" not in result
+
+    def test_gnomad_fields_in_annotated_variants(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-09: Full pipeline writes all gnomAD fields to annotated_variants."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.rsid == "rs7412"
+                )
+            ).fetchone()
+
+        assert row is not None
+        # Global AF
+        assert row.gnomad_af_global == pytest.approx(0.0781)
+        # Per-population AFs (AFR/AMR/EAS/EUR/SAS per PRD)
+        assert row.gnomad_af_afr == pytest.approx(0.1130)
+        assert row.gnomad_af_amr == pytest.approx(0.0560)
+        assert row.gnomad_af_eas == pytest.approx(0.0980)
+        assert row.gnomad_af_eur == pytest.approx(0.0730)
+        assert row.gnomad_af_sas == pytest.approx(0.0650)
+        # Homozygous count
+        assert row.gnomad_homozygous_count == 874
+        # Rare flags
+        assert row.rare_flag in (False, 0)
+        assert row.ultra_rare_flag in (False, 0)
+        # Bitmask has gnomAD bit set
+        assert row.annotation_coverage & GNOMAD_BIT == GNOMAD_BIT
+
+    def test_gnomad_rare_variant_in_pipeline(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-09: Ultra-rare variant flags flow through full pipeline."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.rsid == "rs80357906"
+                )
+            ).fetchone()
+
+        assert row is not None
+        assert row.gnomad_af_global == pytest.approx(0.00004)
+        assert row.rare_flag in (True, 1)
+        assert row.ultra_rare_flag in (True, 1)
+
+    def test_delegates_to_gnomad_module(self, gnomad_engine: sa.Engine) -> None:
+        """Engine uses gnomad.py lookup functions (not duplicated SQL)."""
+        # Verify that the module-level lookup and engine lookup produce
+        # identical results, proving delegation
+        module_result = lookup_gnomad_by_rsids(["rs429358"], gnomad_engine)
+        engine_result = _lookup_gnomad(["rs429358"], {}, gnomad_engine)
+
+        module_annot = module_result["rs429358"]
+        engine_data = engine_result["rs429358"]
+
+        assert engine_data["gnomad_af_global"] == module_annot.af_global
+        assert engine_data["gnomad_af_afr"] == module_annot.af_afr
+        assert engine_data["gnomad_af_amr"] == module_annot.af_amr
+        assert engine_data["gnomad_af_eas"] == module_annot.af_eas
+        assert engine_data["gnomad_af_eur"] == module_annot.af_eur
+        assert engine_data["gnomad_af_sas"] == module_annot.af_sas
+        assert engine_data["gnomad_homozygous_count"] == module_annot.homozygous_count
+        assert engine_data["rare_flag"] == module_annot.rare_flag
+        assert engine_data["ultra_rare_flag"] == module_annot.ultra_rare_flag
