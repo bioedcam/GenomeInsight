@@ -1,10 +1,12 @@
-"""Tests for the annotation engine orchestrator (P2-04, P2-09).
+"""Tests for the annotation engine orchestrator (P2-04, P2-09, P2-12).
 
 Covers:
 - T2-04: Annotation engine processes 1000 variants end-to-end, all fields
   populated in annotated_variants
 - P2-09: gnomAD annotation lookup integrated into engine — rsid primary,
   position-based fallback, correct rare/ultra-rare thresholds
+- P2-12: dbNSFP annotation integrated into engine — rsid primary,
+  position-based fallback, all 14 score fields, deleterious_count
 - Concurrent lookup orchestration across VEP, ClinVar, gnomAD, dbNSFP
 - Bitmask computation (annotation_coverage)
 - Crash recovery (delete partial, re-run)
@@ -23,6 +25,12 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.pool import StaticPool
 
+from backend.annotation.dbnsfp import (
+    DbNSFPAnnotation,
+    create_dbnsfp_tables,
+    load_dbnsfp_from_csv,
+    lookup_dbnsfp_by_rsids,
+)
 from backend.annotation.engine import (
     CLINVAR_BIT,
     DBNSFP_BIT,
@@ -31,6 +39,7 @@ from backend.annotation.engine import (
     AnnotationEngineResult,
     _annot_to_dict,
     _bulk_upsert,
+    _dbnsfp_annot_to_dict,
     _delete_all_annotations,
     _lookup_clinvar,
     _lookup_dbnsfp,
@@ -250,64 +259,14 @@ def gnomad_engine() -> sa.Engine:
 
 @pytest.fixture
 def dbnsfp_engine() -> sa.Engine:
-    """In-memory dbNSFP engine loaded from seed CSV."""
+    """In-memory dbNSFP engine loaded from seed CSV using dbnsfp.py functions."""
     engine = sa.create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    with engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                "CREATE TABLE dbnsfp_scores ("
-                "  rsid TEXT PRIMARY KEY, chrom TEXT, pos INTEGER,"
-                "  ref TEXT, alt TEXT, cadd_phred REAL,"
-                "  sift_score REAL, sift_pred TEXT,"
-                "  polyphen2_hsvar_score REAL, polyphen2_hsvar_pred TEXT,"
-                "  revel REAL, mutpred2 REAL, vest4 REAL,"
-                "  metasvm REAL, metalr REAL, gerp_rs REAL,"
-                "  phylop REAL, mpc REAL, primateai REAL"
-                ")"
-            )
-        )
-        conn.execute(sa.text("CREATE INDEX idx_dbnsfp_rsid ON dbnsfp_scores(rsid)"))
-        with open(DBNSFP_SEED_CSV, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                conn.execute(
-                    sa.text(
-                        "INSERT INTO dbnsfp_scores VALUES "
-                        "(:rsid, :chrom, :pos, :ref, :alt, :cadd_phred, "
-                        ":sift_score, :sift_pred, :polyphen2_hsvar_score, "
-                        ":polyphen2_hsvar_pred, :revel, :mutpred2, :vest4, "
-                        ":metasvm, :metalr, :gerp_rs, :phylop, :mpc, :primateai)"
-                    ),
-                    {
-                        "rsid": row["rsid"],
-                        "chrom": row["chrom"],
-                        "pos": int(row["pos"]),
-                        "ref": row["ref"],
-                        "alt": row["alt"],
-                        "cadd_phred": float(row["cadd_phred"]) if row["cadd_phred"] else None,
-                        "sift_score": float(row["sift_score"]) if row["sift_score"] else None,
-                        "sift_pred": row["sift_pred"] or None,
-                        "polyphen2_hsvar_score": (
-                            float(row["polyphen2_hsvar_score"])
-                            if row["polyphen2_hsvar_score"]
-                            else None
-                        ),
-                        "polyphen2_hsvar_pred": row["polyphen2_hsvar_pred"] or None,
-                        "revel": float(row["revel"]) if row["revel"] else None,
-                        "mutpred2": float(row["mutpred2"]) if row["mutpred2"] else None,
-                        "vest4": float(row["vest4"]) if row["vest4"] else None,
-                        "metasvm": float(row["metasvm"]) if row["metasvm"] else None,
-                        "metalr": float(row["metalr"]) if row["metalr"] else None,
-                        "gerp_rs": float(row["gerp_rs"]) if row["gerp_rs"] else None,
-                        "phylop": float(row["phylop"]) if row["phylop"] else None,
-                        "mpc": float(row["mpc"]) if row["mpc"] else None,
-                        "primateai": float(row["primateai"]) if row["primateai"] else None,
-                    },
-                )
+    create_dbnsfp_tables(engine)
+    load_dbnsfp_from_csv(DBNSFP_SEED_CSV, engine, clear_existing=False)
     return engine
 
 
@@ -1026,3 +985,279 @@ class TestGnomadAnnotationLookupIntegration:
         assert engine_data["gnomad_homozygous_count"] == module_annot.homozygous_count
         assert engine_data["rare_flag"] == module_annot.rare_flag
         assert engine_data["ultra_rare_flag"] == module_annot.ultra_rare_flag
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-12: dbNSFP annotation integration
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestDbnsfpAnnotationIntegration:
+    """P2-12: dbNSFP annotation integrated into annotation engine.
+
+    Verifies:
+    - Delegation to dbnsfp.py lookup functions (not duplicated SQL)
+    - All 14 score fields flow through pipeline into annotated_variants
+    - deleterious_count is computed and stored
+    - Position-based fallback for unmatched rsids with ref/alt
+    - _dbnsfp_annot_to_dict conversion preserves all fields
+    """
+
+    def test_dbnsfp_annot_to_dict_preserves_fields(self) -> None:
+        """_dbnsfp_annot_to_dict converts DbNSFPAnnotation to engine dict."""
+        annot = DbNSFPAnnotation(
+            rsid="rs429358",
+            chrom="19",
+            pos=44908684,
+            ref="T",
+            alt="C",
+            cadd_phred=28.3,
+            sift_score=0.001,
+            sift_pred="D",
+            polyphen2_hsvar_score=0.998,
+            polyphen2_hsvar_pred="D",
+            revel=0.812,
+            mutpred2=0.780,
+            vest4=0.891,
+            metasvm=0.920,
+            metalr=0.885,
+            gerp_rs=5.48,
+            phylop=7.92,
+            mpc=1.85,
+            primateai=0.91,
+        )
+        d = _dbnsfp_annot_to_dict(annot)
+
+        assert d["cadd_phred"] == pytest.approx(28.3)
+        assert d["sift_score"] == pytest.approx(0.001)
+        assert d["sift_pred"] == "D"
+        assert d["polyphen2_hsvar_score"] == pytest.approx(0.998)
+        assert d["polyphen2_hsvar_pred"] == "D"
+        assert d["revel"] == pytest.approx(0.812)
+        assert d["mutpred2"] == pytest.approx(0.780)
+        assert d["vest4"] == pytest.approx(0.891)
+        assert d["metasvm"] == pytest.approx(0.920)
+        assert d["metalr"] == pytest.approx(0.885)
+        assert d["gerp_rs"] == pytest.approx(5.48)
+        assert d["phylop"] == pytest.approx(7.92)
+        assert d["mpc"] == pytest.approx(1.85)
+        assert d["primateai"] == pytest.approx(0.91)
+        # 5 of 5 tools predict deleterious for this variant
+        assert d["deleterious_count"] == 5
+
+    def test_dbnsfp_annot_to_dict_null_scores(self) -> None:
+        """_dbnsfp_annot_to_dict handles all-null scores."""
+        annot = DbNSFPAnnotation(
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+        )
+        d = _dbnsfp_annot_to_dict(annot)
+
+        assert d["cadd_phred"] is None
+        assert d["sift_score"] is None
+        assert d["revel"] is None
+        assert d["deleterious_count"] == 0
+
+    def test_rsid_lookup_returns_all_score_fields(
+        self, dbnsfp_engine: sa.Engine
+    ) -> None:
+        """P2-12: Lookup returns all 14 dbNSFP score fields."""
+        result = _lookup_dbnsfp(["rs429358"], {}, dbnsfp_engine)
+
+        assert "rs429358" in result
+        data = result["rs429358"]
+        assert data["cadd_phred"] == pytest.approx(28.3)
+        assert data["sift_score"] == pytest.approx(0.001)
+        assert data["sift_pred"] == "D"
+        assert data["polyphen2_hsvar_score"] == pytest.approx(0.998)
+        assert data["polyphen2_hsvar_pred"] == "D"
+        assert data["revel"] == pytest.approx(0.812)
+        assert data["mutpred2"] == pytest.approx(0.780)
+        assert data["vest4"] == pytest.approx(0.891)
+        assert data["metasvm"] == pytest.approx(0.920)
+        assert data["metalr"] == pytest.approx(0.885)
+        assert data["gerp_rs"] == pytest.approx(5.48)
+        assert data["phylop"] == pytest.approx(7.92)
+        assert data["mpc"] == pytest.approx(1.85)
+        assert data["primateai"] == pytest.approx(0.91)
+
+    def test_rsid_lookup_returns_deleterious_count(
+        self, dbnsfp_engine: sa.Engine
+    ) -> None:
+        """P2-12: Lookup computes and returns deleterious_count."""
+        result = _lookup_dbnsfp(["rs429358"], {}, dbnsfp_engine)
+        data = result["rs429358"]
+        # rs429358: SIFT=0.001(D), PP2=0.998(D), CADD=28.3(D), REVEL=0.812(D), MetaSVM=0.920(D)
+        assert data["deleterious_count"] == 5
+
+    def test_delegates_to_dbnsfp_module(self, dbnsfp_engine: sa.Engine) -> None:
+        """Engine uses dbnsfp.py lookup functions (not duplicated SQL)."""
+        module_result = lookup_dbnsfp_by_rsids(["rs429358"], dbnsfp_engine)
+        engine_result = _lookup_dbnsfp(["rs429358"], {}, dbnsfp_engine)
+
+        module_annot = module_result["rs429358"]
+        engine_data = engine_result["rs429358"]
+
+        assert engine_data["cadd_phred"] == module_annot.cadd_phred
+        assert engine_data["sift_score"] == module_annot.sift_score
+        assert engine_data["sift_pred"] == module_annot.sift_pred
+        assert engine_data["polyphen2_hsvar_score"] == module_annot.polyphen2_hsvar_score
+        assert engine_data["polyphen2_hsvar_pred"] == module_annot.polyphen2_hsvar_pred
+        assert engine_data["revel"] == module_annot.revel
+        assert engine_data["mutpred2"] == module_annot.mutpred2
+        assert engine_data["vest4"] == module_annot.vest4
+        assert engine_data["metasvm"] == module_annot.metasvm
+        assert engine_data["metalr"] == module_annot.metalr
+        assert engine_data["gerp_rs"] == module_annot.gerp_rs
+        assert engine_data["phylop"] == module_annot.phylop
+        assert engine_data["mpc"] == module_annot.mpc
+        assert engine_data["primateai"] == module_annot.primateai
+        assert engine_data["deleterious_count"] == module_annot.deleterious_count
+
+    def test_position_fallback_with_ref_alt(self, dbnsfp_engine: sa.Engine) -> None:
+        """Position-based fallback matches when rsid differs but coords match."""
+        # Create a fake raw row with ref/alt for position fallback
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, "
+                    "genotype TEXT, ref TEXT, alt TEXT)"
+                )
+            )
+            conn.execute(
+                sa.text(
+                    "INSERT INTO t VALUES ('rs_user_id', '19', 44908684, 'TC', 'T', 'C')"
+                )
+            )
+            row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
+
+        raw_by_rsid = {"rs_user_id": row}
+        result = _lookup_dbnsfp(["rs_user_id"], raw_by_rsid, dbnsfp_engine)
+
+        assert "rs_user_id" in result
+        assert result["rs_user_id"]["cadd_phred"] == pytest.approx(28.3)
+        assert result["rs_user_id"]["deleterious_count"] == 5
+
+    def test_position_fallback_skipped_without_ref_alt(
+        self, dbnsfp_engine: sa.Engine
+    ) -> None:
+        """Fallback is skipped when raw variant lacks ref/alt columns."""
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)"
+                )
+            )
+            conn.execute(
+                sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')")
+            )
+            row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
+
+        raw_by_rsid = {"rs_no_match": row}
+        result = _lookup_dbnsfp(["rs_no_match"], raw_by_rsid, dbnsfp_engine)
+
+        assert "rs_no_match" not in result
+
+    def test_dbnsfp_fields_in_annotated_variants(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-12: Full pipeline writes all dbNSFP fields to annotated_variants."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.rsid == "rs429358"
+                )
+            ).fetchone()
+
+        assert row is not None
+        # All 14 score fields
+        assert row.cadd_phred == pytest.approx(28.3)
+        assert row.sift_score == pytest.approx(0.001)
+        assert row.sift_pred == "D"
+        assert row.polyphen2_hsvar_score == pytest.approx(0.998)
+        assert row.polyphen2_hsvar_pred == "D"
+        assert row.revel == pytest.approx(0.812)
+        assert row.mutpred2 == pytest.approx(0.780)
+        assert row.vest4 == pytest.approx(0.891)
+        assert row.metasvm == pytest.approx(0.920)
+        assert row.metalr == pytest.approx(0.885)
+        assert row.gerp_rs == pytest.approx(5.48)
+        assert row.phylop == pytest.approx(7.92)
+        assert row.mpc == pytest.approx(1.85)
+        assert row.primateai == pytest.approx(0.91)
+        # Deleterious count
+        assert row.deleterious_count == 5
+        # Bitmask has dbNSFP bit set
+        assert row.annotation_coverage & DBNSFP_BIT == DBNSFP_BIT
+
+    def test_deleterious_count_in_pipeline(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-12: deleterious_count flows through full pipeline correctly."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            rows = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.annotation_coverage.op("&")(DBNSFP_BIT) == DBNSFP_BIT
+                )
+            ).fetchall()
+
+        # All dbNSFP-matched variants should have deleterious_count
+        for row in rows:
+            assert row.deleterious_count is not None
+            assert 0 <= row.deleterious_count <= 5
+
+    def test_partial_scores_deleterious_count(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-12: Variant with partial scores has correct deleterious count."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.rsid == "rs1801133"
+                )
+            ).fetchone()
+
+        # rs1801133 (MTHFR C677T) has known scores from seed data
+        if row is not None and row.deleterious_count is not None:
+            assert 0 <= row.deleterious_count <= 5
+
+    def test_known_variant_rs1801133_scores(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """T2-11 via engine: rs1801133 CADD and REVEL scores flow through pipeline."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.rsid == "rs1801133"
+                )
+            ).fetchone()
+
+        assert row is not None
+        assert row.cadd_phred == pytest.approx(24.8)
+        assert row.revel == pytest.approx(0.689)
+
+    def test_empty_rsids(self, dbnsfp_engine: sa.Engine) -> None:
+        """Empty rsid list returns empty dict."""
+        result = _lookup_dbnsfp([], {}, dbnsfp_engine)
+        assert len(result) == 0

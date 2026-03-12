@@ -28,6 +28,11 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from backend.annotation.dbnsfp import (
+    DbNSFPAnnotation,
+    lookup_dbnsfp_by_positions,
+    lookup_dbnsfp_by_rsids,
+)
 from backend.annotation.evidence_conflict import apply_evidence_conflicts
 from backend.annotation.gnomad import (
     GnomADAnnotation,
@@ -224,54 +229,77 @@ def _lookup_gnomad(
     return results
 
 
+def _dbnsfp_annot_to_dict(annot: DbNSFPAnnotation) -> dict:
+    """Convert a DbNSFPAnnotation dataclass to an engine-compatible dict."""
+    return {
+        "cadd_phred": annot.cadd_phred,
+        "sift_score": annot.sift_score,
+        "sift_pred": annot.sift_pred,
+        "polyphen2_hsvar_score": annot.polyphen2_hsvar_score,
+        "polyphen2_hsvar_pred": annot.polyphen2_hsvar_pred,
+        "revel": annot.revel,
+        "mutpred2": annot.mutpred2,
+        "vest4": annot.vest4,
+        "metasvm": annot.metasvm,
+        "metalr": annot.metalr,
+        "gerp_rs": annot.gerp_rs,
+        "phylop": annot.phylop,
+        "mpc": annot.mpc,
+        "primateai": annot.primateai,
+        "deleterious_count": annot.deleterious_count,
+    }
+
+
 def _lookup_dbnsfp(
     rsids: list[str],
     raw_by_rsid: dict[str, sa.Row],
     dbnsfp_engine: sa.Engine,
 ) -> dict[str, dict]:
-    """Look up dbNSFP in-silico prediction scores for a batch of rsids.
+    """Look up dbNSFP in-silico prediction scores by rsid with position fallback.
 
-    dbNSFP data lives in a separate SQLite DB with a ``dbnsfp_scores`` table.
-    We use sa.text() since the table isn't in SQLAlchemy metadata.
+    Primary strategy: batch rsid lookup via ``lookup_dbnsfp_by_rsids``.
+    Fallback: for unmatched rsids that have chrom/pos/ref/alt data, attempt
+    position-based lookup via ``lookup_dbnsfp_by_positions`` using the
+    composite ``(chrom, pos, ref, alt)`` primary key.
+
+    Delegates to :mod:`backend.annotation.dbnsfp` functions so that
+    lookup logic, score parsing, and deleterious count computation are
+    defined in one place.
     """
     if not rsids:
         return {}
 
+    # Primary: rsid-based lookup
+    rsid_matches = lookup_dbnsfp_by_rsids(rsids, dbnsfp_engine)
+
     results: dict[str, dict] = {}
-    batch_size = 500
+    for rsid, annot in rsid_matches.items():
+        results[rsid] = _dbnsfp_annot_to_dict(annot)
 
-    with dbnsfp_engine.connect() as conn:
-        for i in range(0, len(rsids), batch_size):
-            batch = rsids[i : i + batch_size]
-            placeholders = ", ".join(f":r{j}" for j in range(len(batch)))
-            params = {f"r{j}": rsid for j, rsid in enumerate(batch)}
+    # Fallback: position-based lookup for unmatched rsids
+    unmatched = [r for r in rsids if r not in results]
+    if unmatched:
+        positions: list[tuple[str, int, str, str]] = []
+        pos_to_rsid: dict[tuple[str, int, str, str], str] = {}
+        for rsid in unmatched:
+            raw = raw_by_rsid.get(rsid)
+            if raw is None:
+                continue
+            chrom = getattr(raw, "chrom", None)
+            pos = getattr(raw, "pos", None)
+            ref = getattr(raw, "ref", None)
+            alt = getattr(raw, "alt", None)
+            if chrom and pos and ref and alt:
+                key = (chrom, pos, ref, alt)
+                positions.append(key)
+                pos_to_rsid[key] = rsid
 
-            stmt = sa.text(
-                "SELECT rsid, cadd_phred, sift_score, sift_pred, "  # noqa: S608
-                "polyphen2_hsvar_score, polyphen2_hsvar_pred, "
-                "revel, mutpred2, vest4, metasvm, metalr, "
-                "gerp_rs, phylop, mpc, primateai "
-                f"FROM dbnsfp_scores WHERE rsid IN ({placeholders})"
-            )
-            rows = conn.execute(stmt, params).fetchall()
+        if positions:
+            pos_matches = lookup_dbnsfp_by_positions(positions, dbnsfp_engine)
+            for key, annot in pos_matches.items():
+                rsid = pos_to_rsid[key]
+                results[rsid] = _dbnsfp_annot_to_dict(annot)
 
-            for row in rows:
-                results[row.rsid] = {
-                    "cadd_phred": row.cadd_phred,
-                    "sift_score": row.sift_score,
-                    "sift_pred": row.sift_pred,
-                    "polyphen2_hsvar_score": row.polyphen2_hsvar_score,
-                    "polyphen2_hsvar_pred": row.polyphen2_hsvar_pred,
-                    "revel": row.revel,
-                    "mutpred2": row.mutpred2,
-                    "vest4": row.vest4,
-                    "metasvm": row.metasvm,
-                    "metalr": row.metalr,
-                    "gerp_rs": row.gerp_rs,
-                    "phylop": row.phylop,
-                    "mpc": row.mpc,
-                    "primateai": row.primateai,
-                }
     return results
 
 
@@ -370,6 +398,7 @@ _UPSERT_COLUMNS = [
     "phylop",
     "mpc",
     "primateai",
+    "deleterious_count",
     # Evidence conflict
     "evidence_conflict",
 ]
