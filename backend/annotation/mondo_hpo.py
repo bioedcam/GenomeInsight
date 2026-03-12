@@ -28,7 +28,6 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,7 +38,7 @@ import structlog
 from backend.db.tables import database_versions, gene_phenotype
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
 
 logger = structlog.get_logger(__name__)
 
@@ -254,8 +253,11 @@ def load_mondo_hpo_from_csv(
             stats.total_lines += 1
             gene = row.get("gene_symbol", "").strip()
             disease = row.get("disease_name", "").strip()
-            if not gene or not disease:
+            if not gene:
                 stats.skipped_no_gene += 1
+                continue
+            if not disease:
+                stats.skipped_no_disease += 1
                 continue
 
             rows.append(
@@ -304,15 +306,6 @@ def _wal_checkpoint(engine: sa.Engine) -> None:
     with engine.connect() as conn:
         conn.execute(sa.text("PRAGMA wal_checkpoint(TRUNCATE)"))
         conn.commit()
-
-
-def _batched(iterable: Iterator, size: int) -> Iterator[list]:
-    """Yield successive batches of ``size`` items."""
-    while True:
-        batch = list(islice(iterable, size))
-        if not batch:
-            break
-        yield batch
 
 
 def download_file(

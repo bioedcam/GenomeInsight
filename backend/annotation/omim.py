@@ -22,6 +22,7 @@ Usage::
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -226,22 +227,16 @@ def _parse_phenotype_entry(entry: str, gene_symbol: str, mim_number: str) -> OMI
         remaining = parts[:-1]
 
         # Check if last part looks like inheritance
-        if _parse_inheritance(last):
-            inheritance = _parse_inheritance(last)
+        parsed_inh = _parse_inheritance(last)
+        if parsed_inh:
+            inheritance = parsed_inh
             # Rejoin the rest as phenotype text
             phenotype_text = ",".join(remaining).strip()
-
-            # Check if the new last part has MIM and mapping key
-            if len(remaining) >= 2:
-                second_last = remaining[-1].strip()
-                _try_extract_mim_and_key(second_last, phenotype_text, gene_symbol)
         else:
             phenotype_text = entry.strip()
 
     # Try to extract MIM number from the entry
     # Pattern: number at end after comma, possibly with (N)
-    import re
-
     mim_match = re.search(r"\b(\d{6})\s*\((\d)\)\s*$", phenotype_text)
     if mim_match:
         phenotype_mim = mim_match.group(1)
@@ -265,18 +260,6 @@ def _parse_phenotype_entry(entry: str, gene_symbol: str, mim_number: str) -> OMI
         inheritance=inheritance,
         mapping_key=mapping_key,
     )
-
-
-def _try_extract_mim_and_key(
-    text: str, phenotype_text: str, gene_symbol: str
-) -> tuple[str | None, int | None]:
-    """Try to extract MIM number and mapping key from a text fragment."""
-    import re
-
-    match = re.search(r"(\d{6})\s*\((\d)\)", text)
-    if match:
-        return match.group(1), int(match.group(2))
-    return None, None
 
 
 # ── OMIM API interaction ─────────────────────────────────────────────────
@@ -394,7 +377,6 @@ def record_omim_version(
     engine: sa.Engine,
     *,
     version: str,
-    records_count: int = 0,
 ) -> None:
     """Insert or update the OMIM version in database_versions."""
     with engine.begin() as conn:
@@ -460,7 +442,7 @@ def enrich_with_omim(
 
     # Record version
     version = datetime.now(UTC).strftime("%Y%m%d")
-    record_omim_version(engine, version=version, records_count=loaded)
+    record_omim_version(engine, version=version)
 
     logger.info(
         "omim_enrichment_complete",

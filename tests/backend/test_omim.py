@@ -258,8 +258,9 @@ class TestInheritanceParsing:
     def test_empty(self) -> None:
         assert _parse_inheritance("") is None
 
-    def test_none(self) -> None:
-        assert _parse_inheritance("") is None
+    def test_unrecognized(self) -> None:
+        """Unrecognized patterns return None."""
+        assert _parse_inheritance("Unknown pattern") is None
 
 
 # ── Phenotype entry parsing tests ────────────────────────────────────────
@@ -447,7 +448,7 @@ class TestOMIMVersionRecording:
 
     def test_record_version(self, reference_engine: sa.Engine) -> None:
         """Record OMIM version in database_versions."""
-        record_omim_version(reference_engine, version="20260312", records_count=100)
+        record_omim_version(reference_engine, version="20260312")
         with reference_engine.connect() as conn:
             row = conn.execute(
                 sa.select(database_versions).where(database_versions.c.db_name == "omim")
