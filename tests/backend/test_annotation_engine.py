@@ -802,9 +802,7 @@ class TestGnomadAnnotationLookupIntegration:
         assert d["rare_flag"] is False
         assert d["ultra_rare_flag"] is False
 
-    def test_rsid_lookup_returns_all_population_afs(
-        self, gnomad_engine: sa.Engine
-    ) -> None:
+    def test_rsid_lookup_returns_all_population_afs(self, gnomad_engine: sa.Engine) -> None:
         """P2-09: Lookup returns global AF and per-population AF."""
         result = _lookup_gnomad(["rs7412"], {}, gnomad_engine)
 
@@ -818,9 +816,7 @@ class TestGnomadAnnotationLookupIntegration:
         assert data["gnomad_af_fin"] == pytest.approx(0.0410)
         assert data["gnomad_af_sas"] == pytest.approx(0.0650)
 
-    def test_rsid_lookup_returns_homozygous_count(
-        self, gnomad_engine: sa.Engine
-    ) -> None:
+    def test_rsid_lookup_returns_homozygous_count(self, gnomad_engine: sa.Engine) -> None:
         """P2-09: Lookup returns homozygous count."""
         result = _lookup_gnomad(["rs7412"], {}, gnomad_engine)
         assert result["rs7412"]["gnomad_homozygous_count"] == 874
@@ -878,11 +874,7 @@ class TestGnomadAnnotationLookupIntegration:
                     "genotype TEXT, ref TEXT, alt TEXT)"
                 )
             )
-            conn.execute(
-                sa.text(
-                    "INSERT INTO t VALUES ('rs_user_id', '5', 500, 'CT', 'C', 'T')"
-                )
-            )
+            conn.execute(sa.text("INSERT INTO t VALUES ('rs_user_id', '5', 500, 'CT', 'C', 'T')"))
             row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
 
         raw_by_rsid = {"rs_user_id": row}
@@ -891,21 +883,15 @@ class TestGnomadAnnotationLookupIntegration:
         assert "rs_user_id" in result
         assert result["rs_user_id"]["gnomad_af_global"] == pytest.approx(0.02)
 
-    def test_position_fallback_skipped_without_ref_alt(
-        self, gnomad_engine: sa.Engine
-    ) -> None:
+    def test_position_fallback_skipped_without_ref_alt(self, gnomad_engine: sa.Engine) -> None:
         """Fallback is skipped when raw variant lacks ref/alt columns."""
         # Create a raw row without ref/alt (like 23andMe data)
         engine = sa.create_engine("sqlite://")
         with engine.begin() as conn:
             conn.execute(
-                sa.text(
-                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)"
-                )
+                sa.text("CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)")
             )
-            conn.execute(
-                sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')")
-            )
+            conn.execute(sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')"))
             row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
 
         raw_by_rsid = {"rs_no_match": row}
@@ -924,9 +910,7 @@ class TestGnomadAnnotationLookupIntegration:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs7412"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs7412")
             ).fetchone()
 
         assert row is not None
@@ -956,9 +940,7 @@ class TestGnomadAnnotationLookupIntegration:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs80357906"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs80357906")
             ).fetchone()
 
         assert row is not None
@@ -1061,9 +1043,7 @@ class TestDbnsfpAnnotationIntegration:
         assert d["revel"] is None
         assert d["deleterious_count"] == 0
 
-    def test_rsid_lookup_returns_all_score_fields(
-        self, dbnsfp_engine: sa.Engine
-    ) -> None:
+    def test_rsid_lookup_returns_all_score_fields(self, dbnsfp_engine: sa.Engine) -> None:
         """P2-12: Lookup returns all 14 dbNSFP score fields."""
         result = _lookup_dbnsfp(["rs429358"], {}, dbnsfp_engine)
 
@@ -1084,9 +1064,7 @@ class TestDbnsfpAnnotationIntegration:
         assert data["mpc"] == pytest.approx(1.85)
         assert data["primateai"] == pytest.approx(0.91)
 
-    def test_rsid_lookup_returns_deleterious_count(
-        self, dbnsfp_engine: sa.Engine
-    ) -> None:
+    def test_rsid_lookup_returns_deleterious_count(self, dbnsfp_engine: sa.Engine) -> None:
         """P2-12: Lookup computes and returns deleterious_count."""
         result = _lookup_dbnsfp(["rs429358"], {}, dbnsfp_engine)
         data = result["rs429358"]
@@ -1129,9 +1107,7 @@ class TestDbnsfpAnnotationIntegration:
                 )
             )
             conn.execute(
-                sa.text(
-                    "INSERT INTO t VALUES ('rs_user_id', '19', 44908684, 'TC', 'T', 'C')"
-                )
+                sa.text("INSERT INTO t VALUES ('rs_user_id', '19', 44908684, 'TC', 'T', 'C')")
             )
             row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
 
@@ -1142,20 +1118,14 @@ class TestDbnsfpAnnotationIntegration:
         assert result["rs_user_id"]["cadd_phred"] == pytest.approx(28.3)
         assert result["rs_user_id"]["deleterious_count"] == 5
 
-    def test_position_fallback_skipped_without_ref_alt(
-        self, dbnsfp_engine: sa.Engine
-    ) -> None:
+    def test_position_fallback_skipped_without_ref_alt(self, dbnsfp_engine: sa.Engine) -> None:
         """Fallback is skipped when raw variant lacks ref/alt columns."""
         engine = sa.create_engine("sqlite://")
         with engine.begin() as conn:
             conn.execute(
-                sa.text(
-                    "CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)"
-                )
+                sa.text("CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)")
             )
-            conn.execute(
-                sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')")
-            )
+            conn.execute(sa.text("INSERT INTO t VALUES ('rs_no_match', '1', 100, 'AG')"))
             row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
 
         raw_by_rsid = {"rs_no_match": row}
@@ -1173,9 +1143,7 @@ class TestDbnsfpAnnotationIntegration:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs429358"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs429358")
             ).fetchone()
 
         assert row is not None
@@ -1229,9 +1197,7 @@ class TestDbnsfpAnnotationIntegration:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs1801133"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs1801133")
             ).fetchone()
 
         # rs1801133 (MTHFR C677T) is in seed data for all sources
@@ -1249,9 +1215,7 @@ class TestDbnsfpAnnotationIntegration:
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
-                sa.select(annotated_variants).where(
-                    annotated_variants.c.rsid == "rs1801133"
-                )
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs1801133")
             ).fetchone()
 
         assert row is not None

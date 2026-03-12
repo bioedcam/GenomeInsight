@@ -104,6 +104,7 @@ CREATE_INDEXES_SQL = [
 
 # ── Data classes ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class GnomADRecord:
     """A single parsed gnomAD variant record."""
@@ -496,21 +497,23 @@ def load_gnomad_from_csv(
         reader = csv.DictReader(f)
         for row in reader:
             stats.total_lines += 1
-            batch.append({
-                "rsid": row["rsid"],
-                "chrom": row["chrom"],
-                "pos": int(row["pos"]),
-                "ref": row["ref"],
-                "alt": row["alt"],
-                "af_global": _parse_float(row.get("af_global")),
-                "af_afr": _parse_float(row.get("af_afr")),
-                "af_amr": _parse_float(row.get("af_amr")),
-                "af_eas": _parse_float(row.get("af_eas")),
-                "af_eur": _parse_float(row.get("af_eur")),
-                "af_fin": _parse_float(row.get("af_fin")),
-                "af_sas": _parse_float(row.get("af_sas")),
-                "homozygous_count": _parse_int(row.get("homozygous_count")),
-            })
+            batch.append(
+                {
+                    "rsid": row["rsid"],
+                    "chrom": row["chrom"],
+                    "pos": int(row["pos"]),
+                    "ref": row["ref"],
+                    "alt": row["alt"],
+                    "af_global": _parse_float(row.get("af_global")),
+                    "af_afr": _parse_float(row.get("af_afr")),
+                    "af_amr": _parse_float(row.get("af_amr")),
+                    "af_eas": _parse_float(row.get("af_eas")),
+                    "af_eur": _parse_float(row.get("af_eur")),
+                    "af_fin": _parse_float(row.get("af_fin")),
+                    "af_sas": _parse_float(row.get("af_sas")),
+                    "homozygous_count": _parse_int(row.get("homozygous_count")),
+                }
+            )
             stats.variants_loaded += 1
 
             if len(batch) >= BATCH_SIZE:
@@ -591,9 +594,7 @@ def download_gnomad_vcf(
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         if progress_callback:
-                            progress_callback(
-                                response.num_bytes_downloaded, total_bytes
-                            )
+                            progress_callback(response.num_bytes_downloaded, total_bytes)
 
         # Atomic rename on success
         tmp_path.rename(dest_path)
@@ -677,9 +678,7 @@ def record_gnomad_version(
 
     with engine.begin() as conn:
         existing = conn.execute(
-            sa.select(database_versions.c.db_name).where(
-                database_versions.c.db_name == "gnomad"
-            )
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == "gnomad")
         ).first()
 
         now = datetime.now(UTC)

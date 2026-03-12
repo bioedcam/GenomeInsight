@@ -257,8 +257,7 @@ class TestCreateGnomadTables:
         with gnomad_engine.connect() as conn:
             indexes = conn.execute(
                 sa.text(
-                    "SELECT name FROM sqlite_master "
-                    "WHERE type='index' AND tbl_name='gnomad_af'"
+                    "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gnomad_af'"
                 )
             ).fetchall()
         index_names = {r[0] for r in indexes}
@@ -292,9 +291,7 @@ class TestLoadGnomadFromCsv:
     def test_correct_af_values(self, gnomad_engine_with_data: sa.Engine):
         """Specific AF values match the seed data."""
         with gnomad_engine_with_data.connect() as conn:
-            row = conn.execute(
-                sa.text("SELECT * FROM gnomad_af WHERE rsid = 'rs7412'")
-            ).fetchone()
+            row = conn.execute(sa.text("SELECT * FROM gnomad_af WHERE rsid = 'rs7412'")).fetchone()
 
         assert row is not None
         assert row.chrom == "19"
@@ -396,9 +393,7 @@ class TestLookupGnomadByRsids:
 
     def test_unmatched_rsids_excluded(self, gnomad_engine_with_data: sa.Engine):
         """Unmatched rsids are not in the results."""
-        results = lookup_gnomad_by_rsids(
-            ["rs7412", "rs_nonexistent"], gnomad_engine_with_data
-        )
+        results = lookup_gnomad_by_rsids(["rs7412", "rs_nonexistent"], gnomad_engine_with_data)
 
         assert "rs7412" in results
         assert "rs_nonexistent" not in results
