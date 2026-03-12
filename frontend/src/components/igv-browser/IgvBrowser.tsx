@@ -3,10 +3,10 @@
  *
  * Embeds an IGV.js genome browser configured for GRCh37 (hg19).
  * Uses useEffect + ref pattern to create/destroy the browser instance.
+ * IGV.js is dynamically imported to avoid bloating the test worker (~3MB module).
  */
-import { useEffect, useRef, useReducer, forwardRef, useImperativeHandle } from "react"
-import igv from "igv"
-import type { Browser, BrowserOptions, TrackLoad, TrackType } from "igv"
+import { useEffect, useRef, useMemo, useReducer, forwardRef, useImperativeHandle } from "react"
+import { __getIgvOverride, type IgvModule } from "./igv-test-utils"
 
 // ── Public API ──────────────────────────────────────────────────────
 
@@ -14,14 +14,14 @@ export interface IgvBrowserHandle {
   /** Navigate to a locus (gene symbol, rsid, or coordinates like "chr17:41,196,312-41,277,500") */
   search: (query: string) => void
   /** Get the underlying IGV browser instance (for advanced usage) */
-  getBrowser: () => Browser | null
+  getBrowser: () => IgvBrowserInstance | null
 }
 
 export interface IgvBrowserProps {
   /** Initial locus to display (e.g., "all", "chr1", "BRCA1", "chr17:41196312-41277500") */
   locus?: string
   /** Additional tracks to load beyond defaults */
-  tracks?: TrackLoad<TrackType>[]
+  tracks?: IgvTrack[]
   /** Callback when a variant is clicked in the browser */
   onVariantClick?: (variant: IgvVariantClickEvent) => void
   /** CSS class for the container div */
@@ -38,9 +38,36 @@ export interface IgvVariantClickEvent {
   alt: string
 }
 
+// Minimal type for track config (avoids importing igv types at compile time)
+export interface IgvTrack {
+  name?: string
+  type?: string
+  format?: string
+  url?: string
+  indexURL?: string
+  [key: string]: unknown
+}
+
+// Minimal browser instance type
+export interface IgvBrowserInstance {
+  search: (query: string) => void
+  on: (event: string, handler: (...args: unknown[]) => unknown) => void
+  [key: string]: unknown
+}
+
 // ── Default GRCh37 configuration ────────────────────────────────────
 
-const DEFAULT_GRCH37_OPTIONS: BrowserOptions = {
+interface IgvBrowserOptions {
+  genome: string
+  locus: string
+  showNavigation: boolean
+  showRuler: boolean
+  showCenterGuide: boolean
+  showCursorTrackingGuide: boolean
+  tracks: IgvTrack[]
+}
+
+const DEFAULT_GRCH37_OPTIONS: IgvBrowserOptions = {
   genome: "hg19",
   locus: "all",
   showNavigation: true,
@@ -73,19 +100,38 @@ function browserReducer(_state: BrowserState, action: BrowserAction): BrowserSta
   }
 }
 
+// ── Lazy loader for igv module ──────────────────────────────────────
+
+async function loadIgv() {
+  const override = __getIgvOverride()
+  if (override) return override
+  // Dynamic import using Function constructor to prevent vitest/vite from
+  // statically analyzing and pre-bundling the large igv module (~3MB / 84K lines)
+  const importFn = new Function("specifier", "return import(specifier)") as (
+    specifier: string,
+  ) => Promise<{ default: IgvModule }>
+  const igv = await importFn("igv")
+  return igv.default!
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 const IgvBrowser = forwardRef<IgvBrowserHandle, IgvBrowserProps>(
   function IgvBrowser(
-    { locus = "all", tracks = [], onVariantClick, className, minHeight = 500 },
+    { locus = "all", tracks, onVariantClick, className, minHeight = 500 },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const browserRef = useRef<Browser | null>(null)
+    const browserRef = useRef<IgvBrowserInstance | null>(null)
     const [state, dispatch] = useReducer(browserReducer, { status: "loading" })
-    // Track retry requests — incrementing forces the effect to re-run
-    const retryCountRef = useRef(0)
+    // Incrementing retryCount forces the init effect to re-run
     const [retryCount, setRetryCount] = useReducer((c: number) => c + 1, 0)
+
+    // Stable tracks serialization to avoid infinite effect loops
+    // when callers pass inline array literals (e.g., tracks={[]})
+    const tracksJson = JSON.stringify(tracks ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tracksJson is the stable serialization
+    const stableTracks = useMemo<IgvTrack[]>(() => tracks ?? [], [tracksJson])
 
     // Expose imperative handle for parent components
     useImperativeHandle(ref, () => ({
@@ -106,42 +152,49 @@ const IgvBrowser = forwardRef<IgvBrowserHandle, IgvBrowserProps>(
       if (!containerRef.current) return
 
       let cancelled = false
-
-      // Clean up any existing browser in this container
-      if (browserRef.current) {
-        igv.removeBrowser(browserRef.current)
-        browserRef.current = null
-      }
+      let igvModule: Awaited<ReturnType<typeof loadIgv>> | null = null
 
       dispatch({ type: "loading" })
 
-      const options: BrowserOptions = {
+      const options: IgvBrowserOptions = {
         ...DEFAULT_GRCH37_OPTIONS,
         locus,
-        tracks: [...tracks],
+        tracks: [...stableTracks],
       }
 
-      igv
-        .createBrowser(containerRef.current, options)
+      loadIgv()
+        .then((igv) => {
+          if (cancelled) return
+          igvModule = igv
+
+          // Clean up any existing browser in this container
+          if (browserRef.current) {
+            igv.removeBrowser(browserRef.current)
+            browserRef.current = null
+          }
+
+          return igv.createBrowser(containerRef.current!, options)
+        })
         .then((browser) => {
-          if (cancelled) {
-            igv.removeBrowser(browser)
+          if (cancelled || !browser) {
+            if (browser && igvModule) igvModule.removeBrowser(browser)
             return
           }
 
           browserRef.current = browser
 
           // Register variant click handler if provided
-          browser.on("trackclick", (track, popoverData) => {
+          browser.on("trackclick", (track: unknown, popoverData: unknown) => {
             if (!onVariantClickRef.current) return undefined
 
-            // Extract variant info from IGV click data
-            if (track?.config?.type === "variant" && popoverData) {
-              const fields = Array.isArray(popoverData) ? popoverData : []
+            const trackObj = track as { config?: { type?: string } } | null
+            if (trackObj?.config?.type === "variant" && popoverData) {
+              const fields = Array.isArray(popoverData)
+                ? (popoverData as { name: string; value: string }[])
+                : []
               const getName = (name: string) =>
                 fields.find(
-                  (f: { name: string; value: string }) =>
-                    f.name?.toLowerCase() === name.toLowerCase(),
+                  (f) => f.name?.toLowerCase() === name.toLowerCase(),
                 )?.value
 
               const chr = getName("Chr") ?? getName("Chromosome") ?? ""
@@ -149,6 +202,9 @@ const IgvBrowser = forwardRef<IgvBrowserHandle, IgvBrowserProps>(
               const id = getName("ID") ?? getName("Names") ?? ""
               const refAllele = getName("Ref") ?? ""
               const alt = getName("Alt") ?? ""
+
+              // Skip if essential fields are missing
+              if (!chr || pos <= 0) return undefined
 
               onVariantClickRef.current({
                 chr,
@@ -177,17 +233,12 @@ const IgvBrowser = forwardRef<IgvBrowserHandle, IgvBrowserProps>(
 
       return () => {
         cancelled = true
-        if (browserRef.current) {
-          igv.removeBrowser(browserRef.current)
+        if (browserRef.current && igvModule) {
+          igvModule.removeBrowser(browserRef.current)
           browserRef.current = null
         }
       }
-      // retryCount forces re-initialization on retry click
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [locus, retryCount])
-
-    // Keep retryCountRef in sync for the retry handler
-    retryCountRef.current = retryCount
+    }, [locus, stableTracks, retryCount])
 
     return (
       <div className={className}>
