@@ -7,3 +7,10 @@ export type {
   IgvBrowserInstance,
 } from "./IgvBrowser"
 export { __setIgvForTesting } from "./igv-test-utils"
+export {
+  buildDefaultTracks,
+  createClinVarTrack,
+  createSampleVariantsTrack,
+  createGnomadTrack,
+  createEncodeCcresTrack,
+} from "./tracks"

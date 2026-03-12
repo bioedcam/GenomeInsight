@@ -1,0 +1,121 @@
+/**
+ * IGV.js track configurations (P2-17).
+ *
+ * Builds track configs for: RefSeq genes (built-in), ClinVar variants,
+ * user sample VCF, gnomAD AF, and ENCODE cCREs — all backed by local
+ * API endpoints with region-based queries.
+ */
+import type { IgvTrack } from "./IgvBrowser"
+
+// ── ClinVar significance colors ────────────────────────────────────
+
+const CLINVAR_COLORS: Record<string, string> = {
+  Pathogenic: "#DC2626",
+  "Likely_pathogenic": "#EF4444",
+  "Pathogenic/Likely_pathogenic": "#DC2626",
+  Uncertain_significance: "#F59E0B",
+  "Likely_benign": "#22C55E",
+  Benign: "#16A34A",
+  "Benign/Likely_benign": "#16A34A",
+  Conflicting_interpretations_of_pathogenicity: "#F97316",
+}
+
+/**
+ * ClinVar variants track — VCF format via service sourceType.
+ * Color-coded by clinical significance.
+ */
+export function createClinVarTrack(): IgvTrack {
+  return {
+    name: "ClinVar Variants",
+    type: "variant",
+    format: "vcf",
+    sourceType: "service",
+    url: "/api/igv-tracks/clinvar?chr=$CHR&start=$START&end=$END",
+    headerURL: "/api/igv-tracks/clinvar/header",
+    visibilityWindow: 1_000_000,
+    displayMode: "expanded",
+    color: (variant: { info?: Record<string, string> }) => {
+      const sig = variant.info?.["CLNSIG"] ?? ""
+      return CLINVAR_COLORS[sig] ?? "#6B7280"
+    },
+  }
+}
+
+/**
+ * User sample variants track — VCF format via service sourceType.
+ */
+export function createSampleVariantsTrack(sampleId: number): IgvTrack {
+  return {
+    name: "Your Variants",
+    type: "variant",
+    format: "vcf",
+    sourceType: "service",
+    url: `/api/igv-tracks/sample/${sampleId}/variants?chr=$CHR&start=$START&end=$END`,
+    headerURL: `/api/igv-tracks/sample/${sampleId}/header`,
+    visibilityWindow: 500_000,
+    displayMode: "collapsed",
+    color: "#0D9488",
+  }
+}
+
+/**
+ * gnomAD allele frequency track — JSON features via custom sourceType.
+ */
+export function createGnomadTrack(): IgvTrack {
+  return {
+    name: "gnomAD AF",
+    type: "annotation",
+    sourceType: "custom",
+    source: {
+      url: "/api/igv-tracks/gnomad?chr=$CHR&start=$START&end=$END",
+      contentType: "application/json",
+    },
+    visibilityWindow: 500_000,
+    displayMode: "collapsed",
+    height: 40,
+    color: "#6366F1",
+  }
+}
+
+/**
+ * ENCODE cCREs track — JSON features via custom sourceType.
+ * Color-coded by cCRE classification (PLS=red, ELS=yellow, CTCF=blue).
+ */
+export function createEncodeCcresTrack(): IgvTrack {
+  return {
+    name: "ENCODE cCREs",
+    type: "annotation",
+    sourceType: "custom",
+    source: {
+      url: "/api/igv-tracks/encode-ccres?chr=$CHR&start=$START&end=$END",
+      contentType: "application/json",
+    },
+    visibilityWindow: 1_000_000,
+    displayMode: "expanded",
+    height: 50,
+    colorBy: "color",
+  }
+}
+
+/**
+ * Build the default set of IGV tracks for a given sample.
+ *
+ * RefSeq genes are included by default when genome is "hg19" —
+ * no explicit track needed.
+ *
+ * @param sampleId - The sample ID for user variant track (omit for no user VCF)
+ */
+export function buildDefaultTracks(sampleId?: number): IgvTrack[] {
+  const tracks: IgvTrack[] = [
+    createClinVarTrack(),
+    createGnomadTrack(),
+    createEncodeCcresTrack(),
+  ]
+
+  if (sampleId !== undefined) {
+    // Insert user variants first so they appear above reference tracks
+    tracks.unshift(createSampleVariantsTrack(sampleId))
+  }
+
+  return tracks
+}
