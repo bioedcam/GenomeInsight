@@ -80,13 +80,13 @@ class TestConflictFlagFires:
             cadd_phred=25.0,
             sift_pred="D",  # deleterious
             polyphen2_hsvar_pred="D",  # deleterious
-            revel=0.6,  # deleterious
+            revel=0.3,  # not deleterious
             metasvm=-0.5,  # not deleterious
         )
         result = detect_evidence_conflict(v)
-        # CADD itself counts as deleterious (> 20) = 4th tool
+        # SIFT + PolyPhen + CADD (> 20) = exactly 3 deleterious
         assert result.flag is True
-        assert result.deleterious_count >= 3
+        assert result.deleterious_count == 3
 
     def test_benign_with_deleterious_predictions(self):
         """Benign + ≥3 tools deleterious + CADD > 20 → flag fires."""
@@ -148,8 +148,6 @@ class TestConflictFlagDoesNotFire:
     def test_absent_clinvar_no_flag(self):
         """No ClinVar (None) → no flag regardless of in-silico."""
         v = _make_conflict_variant(clinvar_significance=None)
-        # Override clinvar_significance to None
-        v["clinvar_significance"] = None
         result = detect_evidence_conflict(v)
         assert result.flag is False
 
