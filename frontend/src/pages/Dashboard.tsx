@@ -7,6 +7,7 @@
 import { useSearchParams } from 'react-router-dom'
 import FileUpload from '@/components/upload/FileUpload'
 import StatusBar from '@/components/dashboard/StatusBar'
+import AnnotationPanel from '@/components/dashboard/AnnotationPanel'
 import ModuleCardsGrid from '@/components/dashboard/ModuleCardsGrid'
 import FindingsPreview from '@/components/dashboard/FindingsPreview'
 import QualityControl from '@/components/dashboard/QualityControl'
@@ -68,6 +69,9 @@ export default function Dashboard() {
         sample={activeSample}
         variantCount={variantCount ?? null}
       />
+
+      {/* Annotation panel */}
+      <AnnotationPanel sampleId={activeSampleId!} variantCount={variantCount ?? null} />
 
       {/* Module cards grid */}
       <ModuleCardsGrid />
