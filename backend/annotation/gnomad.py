@@ -390,9 +390,9 @@ def load_gnomad_from_vcf(
             conn.execute(sa.text("DELETE FROM gnomad_af"))
 
     batch: list[dict] = []
-    stats = LoadStats()
+    final_stats = LoadStats()
 
-    for row, stats in iter_gnomad_vcf(vcf_path, progress_callback=progress_callback):
+    for row, final_stats in iter_gnomad_vcf(vcf_path, progress_callback=progress_callback):
         batch.append(row)
 
         if len(batch) >= BATCH_SIZE:
@@ -408,13 +408,13 @@ def load_gnomad_from_vcf(
 
     logger.info(
         "gnomad_loaded",
-        variants=stats.variants_loaded,
-        skipped_no_rsid=stats.skipped_no_rsid,
-        skipped_invalid_chrom=stats.skipped_invalid_chrom,
-        skipped_multiallelic=stats.skipped_multiallelic,
+        variants=final_stats.variants_loaded,
+        skipped_no_rsid=final_stats.skipped_no_rsid,
+        skipped_invalid_chrom=final_stats.skipped_invalid_chrom,
+        skipped_multiallelic=final_stats.skipped_multiallelic,
     )
 
-    return stats
+    return final_stats
 
 
 def load_gnomad_from_csv(
