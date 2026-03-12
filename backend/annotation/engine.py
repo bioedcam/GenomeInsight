@@ -29,6 +29,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.annotation.dbnsfp import (
+    ENSEMBLE_PATHOGENIC_THRESHOLD,
     DbNSFPAnnotation,
     is_ensemble_pathogenic,
     lookup_dbnsfp_by_positions,
@@ -358,8 +359,6 @@ def _merge_annotations(
 
 # ── Ensemble pathogenicity (P2-13) ───────────────────────────────────────
 
-_ENSEMBLE_THRESHOLD = 3
-
 
 def apply_ensemble_pathogenic(merged: list[dict]) -> None:
     """Set ``ensemble_pathogenic`` flag on merged variant dicts.
@@ -374,7 +373,7 @@ def apply_ensemble_pathogenic(merged: list[dict]) -> None:
     for v in merged:
         dc = v.get("deleterious_count")
         if dc is not None and "ensemble_pathogenic" not in v:
-            v["ensemble_pathogenic"] = dc >= _ENSEMBLE_THRESHOLD
+            v["ensemble_pathogenic"] = dc >= ENSEMBLE_PATHOGENIC_THRESHOLD
 
 
 # ── Bulk upsert ──────────────────────────────────────────────────────────
