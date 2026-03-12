@@ -5,7 +5,6 @@ import AnnotationPanel from "@/components/dashboard/AnnotationPanel"
 // ── Mock fetch ────────────────────────────────────────────────────────
 
 const mockFetch = vi.fn()
-globalThis.fetch = mockFetch
 
 // ── Mock EventSource ──────────────────────────────────────────────────
 
@@ -44,6 +43,7 @@ class MockEventSource {
 beforeEach(() => {
   mockFetch.mockReset()
   MockEventSource.instances = []
+  vi.stubGlobal("fetch", mockFetch)
   vi.stubGlobal("EventSource", MockEventSource)
 })
 

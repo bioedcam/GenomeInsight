@@ -92,7 +92,12 @@ export function useAnnotationProgress(jobId: string | null): AnnotationProgress 
     eventSourceRef.current = es
 
     es.addEventListener("progress", (event: MessageEvent) => {
-      const data: AnnotationProgress = JSON.parse(event.data)
+      let data: AnnotationProgress
+      try {
+        data = JSON.parse(event.data)
+      } catch {
+        return
+      }
       setProgress(data)
 
       if (TERMINAL_STATES.has(data.status)) {

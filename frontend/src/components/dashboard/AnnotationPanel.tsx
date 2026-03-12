@@ -235,7 +235,7 @@ export default function AnnotationPanel({ sampleId, variantCount }: AnnotationPa
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function StatusIcon({ status }: { status: string }) {
+function StatusIcon({ status }: { status: AnnotationProgress["status"] }) {
   switch (status) {
     case "running":
       return <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -250,7 +250,7 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-function statusLabel(status: string): string {
+function statusLabel(status: AnnotationProgress["status"]): string {
   switch (status) {
     case "pending":
       return "Queued..."

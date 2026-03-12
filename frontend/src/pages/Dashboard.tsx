@@ -71,7 +71,7 @@ export default function Dashboard() {
       />
 
       {/* Annotation panel */}
-      <AnnotationPanel sampleId={activeSampleId!} variantCount={variantCount ?? null} />
+      <AnnotationPanel sampleId={activeSample.id} variantCount={variantCount ?? null} />
 
       {/* Module cards grid */}
       <ModuleCardsGrid />
