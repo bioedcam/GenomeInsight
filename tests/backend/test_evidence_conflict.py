@@ -139,9 +139,7 @@ class TestConflictFlagDoesNotFire:
 
     def test_pathogenic_likely_pathogenic_no_flag(self):
         """ClinVar combined P/LP → no flag."""
-        v = _make_conflict_variant(
-            clinvar_significance="Pathogenic/Likely pathogenic"
-        )
+        v = _make_conflict_variant(clinvar_significance="Pathogenic/Likely pathogenic")
         result = detect_evidence_conflict(v)
         assert result.flag is False
 

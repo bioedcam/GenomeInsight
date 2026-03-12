@@ -50,12 +50,8 @@ logger = structlog.get_logger(__name__)
 # pre-built SQLite bundle.  download_and_load_dbnsfp() is designed for the
 # TSV-based pipeline; for the pre-built bundle, use the download manager
 # directly and skip the TSV parse step.
-DBNSFP_TSV_URL = (
-    "https://dbnsfp.s3.amazonaws.com/dbNSFP4.5a.zip"
-)
-DBNSFP_PREBUILT_URL = (
-    "https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz"
-)
+DBNSFP_TSV_URL = "https://dbnsfp.s3.amazonaws.com/dbNSFP4.5a.zip"
+DBNSFP_PREBUILT_URL = "https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz"
 
 # Batch sizes
 BATCH_SIZE = 10_000
@@ -613,27 +609,29 @@ def load_dbnsfp_from_csv(
                 if required not in row:
                     msg = f"Missing required column '{required}' in CSV"
                     raise ValueError(msg)
-            batch.append({
-                "rsid": row.get("rsid") or None,
-                "chrom": row["chrom"],
-                "pos": int(row["pos"]),
-                "ref": row["ref"],
-                "alt": row["alt"],
-                "cadd_phred": _parse_float(row.get("cadd_phred")),
-                "sift_score": _parse_float(row.get("sift_score")),
-                "sift_pred": row.get("sift_pred") or None,
-                "polyphen2_hsvar_score": _parse_float(row.get("polyphen2_hsvar_score")),
-                "polyphen2_hsvar_pred": row.get("polyphen2_hsvar_pred") or None,
-                "revel": _parse_float(row.get("revel")),
-                "mutpred2": _parse_float(row.get("mutpred2")),
-                "vest4": _parse_float(row.get("vest4")),
-                "metasvm": _parse_float(row.get("metasvm")),
-                "metalr": _parse_float(row.get("metalr")),
-                "gerp_rs": _parse_float(row.get("gerp_rs")),
-                "phylop": _parse_float(row.get("phylop")),
-                "mpc": _parse_float(row.get("mpc")),
-                "primateai": _parse_float(row.get("primateai")),
-            })
+            batch.append(
+                {
+                    "rsid": row.get("rsid") or None,
+                    "chrom": row["chrom"],
+                    "pos": int(row["pos"]),
+                    "ref": row["ref"],
+                    "alt": row["alt"],
+                    "cadd_phred": _parse_float(row.get("cadd_phred")),
+                    "sift_score": _parse_float(row.get("sift_score")),
+                    "sift_pred": row.get("sift_pred") or None,
+                    "polyphen2_hsvar_score": _parse_float(row.get("polyphen2_hsvar_score")),
+                    "polyphen2_hsvar_pred": row.get("polyphen2_hsvar_pred") or None,
+                    "revel": _parse_float(row.get("revel")),
+                    "mutpred2": _parse_float(row.get("mutpred2")),
+                    "vest4": _parse_float(row.get("vest4")),
+                    "metasvm": _parse_float(row.get("metasvm")),
+                    "metalr": _parse_float(row.get("metalr")),
+                    "gerp_rs": _parse_float(row.get("gerp_rs")),
+                    "phylop": _parse_float(row.get("phylop")),
+                    "mpc": _parse_float(row.get("mpc")),
+                    "primateai": _parse_float(row.get("primateai")),
+                }
+            )
             stats.variants_loaded += 1
 
             if len(batch) >= BATCH_SIZE:
@@ -717,9 +715,7 @@ def download_dbnsfp(
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         if progress_callback:
-                            progress_callback(
-                                response.num_bytes_downloaded, total_bytes
-                            )
+                            progress_callback(response.num_bytes_downloaded, total_bytes)
 
         # Atomic rename on success
         tmp_path.rename(dest_path)
@@ -803,9 +799,7 @@ def record_dbnsfp_version(
 
     with engine.begin() as conn:
         existing = conn.execute(
-            sa.select(database_versions.c.db_name).where(
-                database_versions.c.db_name == "dbnsfp"
-            )
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == "dbnsfp")
         ).first()
 
         now = datetime.now(UTC)

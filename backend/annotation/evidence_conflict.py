@@ -27,24 +27,28 @@ from typing import Any
 
 # ClinVar significances that trigger conflict detection.
 # P/LP and absent ClinVar → no flag.
-_CONFLICT_ELIGIBLE_SIGNIFICANCES = frozenset({
-    "Uncertain significance",
-    "Benign",
-    "Likely benign",
-    # Handle alternate spellings from ClinVar VCF
-    "Uncertain_significance",
-    "Likely_benign",
-    "VUS",
-})
+_CONFLICT_ELIGIBLE_SIGNIFICANCES = frozenset(
+    {
+        "Uncertain significance",
+        "Benign",
+        "Likely benign",
+        # Handle alternate spellings from ClinVar VCF
+        "Uncertain_significance",
+        "Likely_benign",
+        "VUS",
+    }
+)
 
 # ClinVar significances where conflict is never flagged (authoritative).
-_AUTHORITATIVE_SIGNIFICANCES = frozenset({
-    "Pathogenic",
-    "Likely pathogenic",
-    "Likely_pathogenic",
-    "Pathogenic/Likely pathogenic",
-    "Pathogenic/Likely_pathogenic",
-})
+_AUTHORITATIVE_SIGNIFICANCES = frozenset(
+    {
+        "Pathogenic",
+        "Likely pathogenic",
+        "Likely_pathogenic",
+        "Pathogenic/Likely pathogenic",
+        "Pathogenic/Likely_pathogenic",
+    }
+)
 
 # CADD PHRED threshold for the CADD-specific gate
 _CADD_THRESHOLD = 20.0
@@ -112,6 +116,7 @@ def count_deleterious_tools(variant: dict[str, Any] | Any) -> tuple[int, int]:
     Returns:
         (deleterious_count, total_assessed) — tools with data that voted.
     """
+
     # Support both dict-style and attribute-style access
     def _get(key: str) -> Any:
         if isinstance(variant, dict):
@@ -120,9 +125,7 @@ def count_deleterious_tools(variant: dict[str, Any] | Any) -> tuple[int, int]:
 
     assessments: list[bool | None] = [
         _is_sift_deleterious(_get("sift_pred"), _get("sift_score")),
-        _is_polyphen_deleterious(
-            _get("polyphen2_hsvar_pred"), _get("polyphen2_hsvar_score")
-        ),
+        _is_polyphen_deleterious(_get("polyphen2_hsvar_pred"), _get("polyphen2_hsvar_score")),
         _is_cadd_deleterious(_get("cadd_phred")),
         _is_revel_deleterious(_get("revel")),
         _is_metasvm_deleterious(_get("metasvm")),
@@ -147,6 +150,7 @@ def detect_evidence_conflict(variant: dict[str, Any] | Any) -> EvidenceConflictR
     Returns:
         :class:`EvidenceConflictResult` with the flag and supporting data.
     """
+
     def _get(key: str) -> Any:
         if isinstance(variant, dict):
             return variant.get(key)

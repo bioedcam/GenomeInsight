@@ -273,8 +273,7 @@ class TestCreateDbnsfpTables:
         with dbnsfp_engine.connect() as conn:
             result = conn.execute(
                 sa.text(
-                    "SELECT name FROM sqlite_master"
-                    " WHERE type='table' AND name='dbnsfp_scores'"
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='dbnsfp_scores'"
                 )
             ).fetchone()
         assert result is not None
@@ -303,9 +302,7 @@ class TestCreateDbnsfpTables:
 class TestLoadDbnsfpFromCsv:
     def test_loads_seed_data(self, dbnsfp_engine_with_data: sa.Engine):
         with dbnsfp_engine_with_data.connect() as conn:
-            count = conn.execute(
-                sa.text("SELECT COUNT(*) FROM dbnsfp_scores")
-            ).scalar()
+            count = conn.execute(sa.text("SELECT COUNT(*) FROM dbnsfp_scores")).scalar()
         assert count == 61  # 62 lines - 1 header = 61 data rows
 
     def test_stats_correct(self, dbnsfp_engine: sa.Engine):
@@ -315,9 +312,7 @@ class TestLoadDbnsfpFromCsv:
 
     def test_clear_existing(self, dbnsfp_engine_with_data: sa.Engine):
         """Loading with clear_existing=True replaces data."""
-        stats = load_dbnsfp_from_csv(
-            DBNSFP_SEED_CSV, dbnsfp_engine_with_data, clear_existing=True
-        )
+        stats = load_dbnsfp_from_csv(DBNSFP_SEED_CSV, dbnsfp_engine_with_data, clear_existing=True)
         assert stats.variants_loaded == 61
 
     def test_known_variant_rs1801133(self, dbnsfp_engine_with_data: sa.Engine):
@@ -393,9 +388,7 @@ class TestLookupDbnsfpByRsids:
 
 class TestLookupDbnsfpByPositions:
     def test_returns_correct_scores(self, dbnsfp_engine_with_data: sa.Engine):
-        results = lookup_dbnsfp_by_positions(
-            [("19", 44908684, "T", "C")], dbnsfp_engine_with_data
-        )
+        results = lookup_dbnsfp_by_positions([("19", 44908684, "T", "C")], dbnsfp_engine_with_data)
         key = ("19", 44908684, "T", "C")
         assert key in results
         annot = results[key]
@@ -407,9 +400,7 @@ class TestLookupDbnsfpByPositions:
         assert len(results) == 0
 
     def test_nonexistent_position(self, dbnsfp_engine_with_data: sa.Engine):
-        results = lookup_dbnsfp_by_positions(
-            [("99", 1, "A", "T")], dbnsfp_engine_with_data
-        )
+        results = lookup_dbnsfp_by_positions([("99", 1, "A", "T")], dbnsfp_engine_with_data)
         assert len(results) == 0
 
     def test_large_position_batch_chunking(self, dbnsfp_engine_with_data: sa.Engine):
@@ -523,9 +514,7 @@ class TestRecordDbnsfpVersion:
         )
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "dbnsfp"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "dbnsfp")
             ).fetchone()
         assert row is not None
         assert row.version == "4.5a"
@@ -537,9 +526,7 @@ class TestRecordDbnsfpVersion:
         record_dbnsfp_version(reference_engine, version="4.5a")
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "dbnsfp"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "dbnsfp")
             ).fetchone()
         assert row.version == "4.5a"
 
