@@ -29,6 +29,11 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.annotation.evidence_conflict import apply_evidence_conflicts
+from backend.annotation.gnomad import (
+    GnomADAnnotation,
+    lookup_gnomad_by_positions,
+    lookup_gnomad_by_rsids,
+)
 from backend.db.tables import annotated_variants, raw_variants
 
 if TYPE_CHECKING:
@@ -148,48 +153,74 @@ def _lookup_clinvar(
     return results
 
 
+def _annot_to_dict(annot: GnomADAnnotation) -> dict:
+    """Convert a GnomADAnnotation dataclass to an engine-compatible dict."""
+    return {
+        "gnomad_af_global": annot.af_global,
+        "gnomad_af_afr": annot.af_afr,
+        "gnomad_af_amr": annot.af_amr,
+        "gnomad_af_eas": annot.af_eas,
+        "gnomad_af_eur": annot.af_eur,
+        "gnomad_af_fin": annot.af_fin,
+        "gnomad_af_sas": annot.af_sas,
+        "gnomad_homozygous_count": annot.homozygous_count,
+        "rare_flag": annot.rare_flag,
+        "ultra_rare_flag": annot.ultra_rare_flag,
+    }
+
+
 def _lookup_gnomad(
     rsids: list[str],
     raw_by_rsid: dict[str, sa.Row],
     gnomad_engine: sa.Engine,
 ) -> dict[str, dict]:
-    """Look up gnomAD allele frequencies for a batch of rsids.
+    """Look up gnomAD allele frequencies by rsid with position-based fallback.
 
-    gnomAD data lives in a separate SQLite DB with a ``gnomad_af`` table.
-    We use sa.text() since the table isn't in SQLAlchemy metadata.
+    Primary strategy: batch rsid lookup via ``lookup_gnomad_by_rsids``.
+    Fallback: for unmatched rsids that have chrom/pos data, attempt
+    position-based lookup via ``lookup_gnomad_by_positions`` using the
+    composite (chrom, pos, ref, alt) index when ref/alt are available,
+    or (chrom, pos) scan otherwise.
+
+    Delegates to :mod:`backend.annotation.gnomad` functions so that
+    threshold constants (RARE_AF_THRESHOLD, ULTRA_RARE_AF_THRESHOLD) and
+    lookup logic are defined in one place.
     """
     if not rsids:
         return {}
 
+    # Primary: rsid-based lookup
+    rsid_matches = lookup_gnomad_by_rsids(rsids, gnomad_engine)
+
     results: dict[str, dict] = {}
-    batch_size = 500  # stay under SQLite 999-variable limit
+    for rsid, annot in rsid_matches.items():
+        results[rsid] = _annot_to_dict(annot)
 
-    with gnomad_engine.connect() as conn:
-        for i in range(0, len(rsids), batch_size):
-            batch = rsids[i : i + batch_size]
-            placeholders = ", ".join(f":r{j}" for j in range(len(batch)))
-            params = {f"r{j}": rsid for j, rsid in enumerate(batch)}
+    # Fallback: position-based lookup for unmatched rsids
+    unmatched = [r for r in rsids if r not in results]
+    if unmatched:
+        # Build position tuples from raw variant data where available
+        positions: list[tuple[str, int, str, str]] = []
+        pos_to_rsid: dict[tuple[str, int, str, str], str] = {}
+        for rsid in unmatched:
+            raw = raw_by_rsid.get(rsid)
+            if raw is None:
+                continue
+            chrom = getattr(raw, "chrom", None)
+            pos = getattr(raw, "pos", None)
+            ref = getattr(raw, "ref", None)
+            alt = getattr(raw, "alt", None)
+            if chrom and pos and ref and alt:
+                key = (chrom, pos, ref, alt)
+                positions.append(key)
+                pos_to_rsid[key] = rsid
 
-            stmt = sa.text(
-                "SELECT rsid, af_global, af_afr, af_amr, af_eas, af_eur, "  # noqa: S608
-                f"af_fin, af_sas, homozygous_count FROM gnomad_af WHERE rsid IN ({placeholders})"
-            )
-            rows = conn.execute(stmt, params).fetchall()
+        if positions:
+            pos_matches = lookup_gnomad_by_positions(positions, gnomad_engine)
+            for key, annot in pos_matches.items():
+                rsid = pos_to_rsid[key]
+                results[rsid] = _annot_to_dict(annot)
 
-            for row in rows:
-                af_global = row.af_global
-                results[row.rsid] = {
-                    "gnomad_af_global": af_global,
-                    "gnomad_af_afr": row.af_afr,
-                    "gnomad_af_amr": row.af_amr,
-                    "gnomad_af_eas": row.af_eas,
-                    "gnomad_af_eur": row.af_eur,
-                    "gnomad_af_fin": row.af_fin,
-                    "gnomad_af_sas": row.af_sas,
-                    "gnomad_homozygous_count": row.homozygous_count,
-                    "rare_flag": af_global is not None and af_global < 0.01,
-                    "ultra_rare_flag": af_global is not None and af_global < 0.0001,
-                }
     return results
 
 
