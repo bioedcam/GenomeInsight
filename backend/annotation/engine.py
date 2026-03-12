@@ -1,9 +1,9 @@
 """Annotation engine orchestrator.
 
-Coordinates all annotation sources (VEP bundle, ClinVar, gnomAD, dbNSFP)
-via the DBRegistry batch lookup pattern.  Processes raw variants in
-10k-variant batches with **concurrent lookups** across sources using
-``ThreadPoolExecutor``, merges results in Python, computes the
+Coordinates all annotation sources (VEP bundle, ClinVar, gnomAD, dbNSFP,
+gene-phenotype) via the DBRegistry batch lookup pattern.  Processes raw
+variants in 10k-variant batches with **concurrent lookups** across sources
+using ``ThreadPoolExecutor``, merges results in Python, computes the
 ``annotation_coverage`` bitmask, and bulk-upserts into the single wide
 ``annotated_variants`` table.
 
@@ -58,9 +58,10 @@ VEP_BIT = 0b000001  # bit 0 = 1
 CLINVAR_BIT = 0b000010  # bit 1 = 2
 GNOMAD_BIT = 0b000100  # bit 2 = 4
 DBNSFP_BIT = 0b001000  # bit 3 = 8
+GENE_PHENOTYPE_BIT = 0b010000  # bit 4 = 16
 
 # Maximum concurrent annotation source lookups
-_MAX_WORKERS = 4
+_MAX_WORKERS = 5
 
 
 # ── Result dataclass ─────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ class AnnotationEngineResult:
     clinvar_matched: int = 0
     gnomad_matched: int = 0
     dbnsfp_matched: int = 0
+    gene_phenotype_matched: int = 0
     rows_written: int = 0
     batches_processed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -306,6 +308,58 @@ def _lookup_dbnsfp(
     return results
 
 
+def _lookup_gene_phenotype(
+    vep_data: dict[str, dict],
+    reference_engine: sa.Engine,
+) -> dict[str, dict]:
+    """Look up gene-phenotype annotations for variants that have VEP gene symbols.
+
+    This adapter collects unique gene symbols from VEP results, queries the
+    gene_phenotype table via :func:`lookup_gene_phenotypes`, and maps results
+    back to rsids.  Each rsid gets the first (most relevant) phenotype record
+    for its gene — typically the primary disease association.
+
+    Must run *after* VEP lookup since it depends on gene_symbol assignments.
+    """
+    import json as _json
+
+    from backend.annotation.mondo_hpo import lookup_gene_phenotypes
+
+    if not vep_data:
+        return {}
+
+    # Collect unique gene symbols and map rsid -> gene_symbol
+    rsid_to_gene: dict[str, str] = {}
+    unique_genes: set[str] = set()
+    for rsid, vep_dict in vep_data.items():
+        gene = vep_dict.get("gene_symbol")
+        if gene:
+            rsid_to_gene[rsid] = gene
+            unique_genes.add(gene)
+
+    if not unique_genes:
+        return {}
+
+    # Batch lookup
+    gene_pheno_map = lookup_gene_phenotypes(list(unique_genes), reference_engine)
+
+    # Map back to rsids — use the first record per gene (primary association)
+    results: dict[str, dict] = {}
+    for rsid, gene in rsid_to_gene.items():
+        annots = gene_pheno_map.get(gene)
+        if annots:
+            primary = annots[0]
+            results[rsid] = {
+                "disease_name": primary.disease_name,
+                "disease_id": primary.disease_id,
+                "phenotype_source": primary.source,
+                "hpo_terms": _json.dumps(primary.hpo_terms) if primary.hpo_terms else None,
+                "inheritance_pattern": primary.inheritance,
+            }
+
+    return results
+
+
 # ── Merge + bitmask ──────────────────────────────────────────────────────
 
 
@@ -315,12 +369,16 @@ def _merge_annotations(
     clinvar_data: dict[str, dict],
     gnomad_data: dict[str, dict],
     dbnsfp_data: dict[str, dict],
+    gene_phenotype_data: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Merge all annotation sources into upsert-ready dicts.
 
     For each raw variant, merges columns from whichever sources matched
     and computes the ``annotation_coverage`` bitmask.
     """
+    if gene_phenotype_data is None:
+        gene_phenotype_data = {}
+
     merged: list[dict] = []
 
     for raw in raw_rows:
@@ -349,6 +407,10 @@ def _merge_annotations(
         if rsid in dbnsfp_data:
             row_data.update(dbnsfp_data[rsid])
             bitmask |= DBNSFP_BIT
+
+        if rsid in gene_phenotype_data:
+            row_data.update(gene_phenotype_data[rsid])
+            bitmask |= GENE_PHENOTYPE_BIT
 
         if bitmask > 0:
             row_data["annotation_coverage"] = bitmask
@@ -422,6 +484,12 @@ _UPSERT_COLUMNS = [
     "primateai",
     "deleterious_count",
     "ensemble_pathogenic",
+    # Gene-phenotype
+    "disease_name",
+    "disease_id",
+    "phenotype_source",
+    "hpo_terms",
+    "inheritance_pattern",
     # Evidence conflict
     "evidence_conflict",
 ]
@@ -512,9 +580,10 @@ def run_annotation(
 ) -> AnnotationEngineResult:
     """Run the full annotation engine on a sample.
 
-    Coordinates VEP bundle, ClinVar, gnomAD, and dbNSFP lookups in
-    parallel via ThreadPoolExecutor, merges results, computes the
-    annotation_coverage bitmask, and bulk-upserts into annotated_variants.
+    Coordinates VEP bundle, ClinVar, gnomAD, dbNSFP, and gene-phenotype
+    lookups in parallel via ThreadPoolExecutor, merges results, computes
+    the annotation_coverage bitmask, and bulk-upserts into
+    annotated_variants.
 
     Crash recovery: deletes all existing annotations before starting,
     then re-annotates from scratch.
@@ -609,8 +678,23 @@ def run_annotation(
                     )
                     result.errors.append(msg)
 
+        # 5b. Gene-phenotype lookup (depends on VEP gene_symbol results)
+        gene_phenotype_data: dict[str, dict] = {}
+        if vep_data:
+            try:
+                gene_phenotype_data = _lookup_gene_phenotype(vep_data, reference_engine)
+            except Exception as exc:
+                msg = f"gene_phenotype lookup failed: {exc}"
+                logger.warning(
+                    "annotation_source_error",
+                    extra={"source": "gene_phenotype", "error": str(exc)},
+                )
+                result.errors.append(msg)
+
         # 6. Merge results and compute bitmask
-        merged = _merge_annotations(batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data)
+        merged = _merge_annotations(
+            batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data, gene_phenotype_data
+        )
 
         # 6b. Ensemble pathogenicity flag (P2-13)
         apply_ensemble_pathogenic(merged)
@@ -627,6 +711,7 @@ def run_annotation(
         result.clinvar_matched += len(clinvar_data)
         result.gnomad_matched += len(gnomad_data)
         result.dbnsfp_matched += len(dbnsfp_data)
+        result.gene_phenotype_matched += len(gene_phenotype_data)
         result.batches_processed += 1
 
         # 8. Progress callback
@@ -647,6 +732,7 @@ def run_annotation(
             "clinvar": result.clinvar_matched,
             "gnomad": result.gnomad_matched,
             "dbnsfp": result.dbnsfp_matched,
+            "gene_phenotype": result.gene_phenotype_matched,
             "written": result.rows_written,
             "batches": result.batches_processed,
             "errors": result.errors,

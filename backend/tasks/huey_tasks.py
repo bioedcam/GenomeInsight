@@ -202,7 +202,8 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
             message=(
                 f"Annotated {result.rows_written:,} variants "
                 f"(VEP: {result.vep_matched}, ClinVar: {result.clinvar_matched}, "
-                f"gnomAD: {result.gnomad_matched}, dbNSFP: {result.dbnsfp_matched})"
+                f"gnomAD: {result.gnomad_matched}, dbNSFP: {result.dbnsfp_matched}, "
+                f"GenePhenotype: {result.gene_phenotype_matched})"
             ),
             error=error_summary,
         )
