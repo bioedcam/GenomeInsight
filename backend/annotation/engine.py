@@ -1,0 +1,564 @@
+"""Annotation engine orchestrator.
+
+Coordinates all annotation sources (VEP bundle, ClinVar, gnomAD, dbNSFP)
+via the DBRegistry batch lookup pattern.  Processes raw variants in
+10k-variant batches with **concurrent lookups** across sources using
+``ThreadPoolExecutor``, merges results in Python, computes the
+``annotation_coverage`` bitmask, and bulk-upserts into the single wide
+``annotated_variants`` table.
+
+WAL checkpoint runs after completion.  Crash recovery is full restart:
+delete partial results, re-run from scratch.
+
+Usage::
+
+    from backend.annotation.engine import run_annotation
+
+    result = run_annotation(sample_engine, registry)
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+import sqlalchemy as sa
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+from backend.db.tables import annotated_variants, raw_variants
+
+if TYPE_CHECKING:
+    from backend.db.connection import DBRegistry
+
+logger = logging.getLogger(__name__)
+
+# ── Constants ─────────────────────────────────────────────────────────────
+
+# Batch size for reading raw variants and writing annotations
+ENGINE_BATCH_SIZE = 10_000
+
+# Annotation source bitmask bits (must match individual modules)
+VEP_BIT = 0b000001  # bit 0 = 1
+CLINVAR_BIT = 0b000010  # bit 1 = 2
+GNOMAD_BIT = 0b000100  # bit 2 = 4
+DBNSFP_BIT = 0b001000  # bit 3 = 8
+
+# Maximum concurrent annotation source lookups
+_MAX_WORKERS = 4
+
+
+# ── Result dataclass ─────────────────────────────────────────────────────
+
+
+@dataclass
+class AnnotationEngineResult:
+    """Statistics from a full annotation engine run."""
+
+    total_variants: int = 0
+    vep_matched: int = 0
+    clinvar_matched: int = 0
+    gnomad_matched: int = 0
+    dbnsfp_matched: int = 0
+    rows_written: int = 0
+    batches_processed: int = 0
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def total_matched(self) -> int:
+        """Variants matched by at least one source (any bit set)."""
+        return self.rows_written
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _wal_checkpoint(engine: sa.Engine) -> None:
+    """Run WAL checkpoint if the engine is file-backed (not in-memory)."""
+    url = str(engine.url)
+    if url == "sqlite://" or ":memory:" in url:
+        return
+    with engine.connect() as conn:
+        conn.execute(sa.text("PRAGMA wal_checkpoint(TRUNCATE)"))
+        conn.commit()
+
+
+def _delete_all_annotations(sample_engine: sa.Engine) -> None:
+    """Delete all rows in annotated_variants for crash recovery.
+
+    Called at the start of each run so partial results from a previous
+    crashed run are cleaned up before re-annotating.
+    """
+    with sample_engine.begin() as conn:
+        conn.execute(annotated_variants.delete())
+
+
+# ── Source lookup adapters ────────────────────────────────────────────────
+# Each adapter takes a batch of raw variant rows and an engine, and returns
+# a dict mapping rsid -> dict of column values to merge.
+
+
+def _lookup_vep(
+    rsids: list[str],
+    raw_by_rsid: dict[str, sa.Row],
+    vep_engine: sa.Engine,
+) -> dict[str, dict]:
+    """Look up VEP annotations for a batch of rsids."""
+    from backend.annotation.vep_bundle import lookup_vep_by_rsids
+
+    matches = lookup_vep_by_rsids(rsids, vep_engine)
+
+    results: dict[str, dict] = {}
+    for rsid, annot in matches.items():
+        results[rsid] = {
+            "gene_symbol": annot.gene_symbol,
+            "transcript_id": annot.transcript_id,
+            "consequence": annot.consequence,
+            "hgvs_coding": annot.hgvs_coding,
+            "hgvs_protein": annot.hgvs_protein,
+            "strand": annot.strand,
+            "exon_number": annot.exon_number,
+            "intron_number": annot.intron_number,
+            "mane_select": annot.mane_select,
+        }
+    return results
+
+
+def _lookup_clinvar(
+    rsids: list[str],
+    raw_by_rsid: dict[str, sa.Row],
+    reference_engine: sa.Engine,
+) -> dict[str, dict]:
+    """Look up ClinVar annotations for a batch of rsids."""
+    from backend.annotation.clinvar import lookup_clinvar_by_rsids
+
+    matches = lookup_clinvar_by_rsids(rsids, reference_engine)
+
+    results: dict[str, dict] = {}
+    for rsid, annot in matches.items():
+        results[rsid] = {
+            "clinvar_significance": annot.clinvar_significance,
+            "clinvar_review_stars": annot.clinvar_review_stars,
+            "clinvar_accession": annot.clinvar_accession,
+            "clinvar_conditions": annot.clinvar_conditions,
+        }
+    return results
+
+
+def _lookup_gnomad(
+    rsids: list[str],
+    raw_by_rsid: dict[str, sa.Row],
+    gnomad_engine: sa.Engine,
+) -> dict[str, dict]:
+    """Look up gnomAD allele frequencies for a batch of rsids.
+
+    gnomAD data lives in a separate SQLite DB with a ``gnomad_af`` table.
+    We use sa.text() since the table isn't in SQLAlchemy metadata.
+    """
+    if not rsids:
+        return {}
+
+    results: dict[str, dict] = {}
+    batch_size = 500  # stay under SQLite 999-variable limit
+
+    with gnomad_engine.connect() as conn:
+        for i in range(0, len(rsids), batch_size):
+            batch = rsids[i : i + batch_size]
+            placeholders = ", ".join(f":r{j}" for j in range(len(batch)))
+            params = {f"r{j}": rsid for j, rsid in enumerate(batch)}
+
+            stmt = sa.text(
+                "SELECT rsid, af_global, af_afr, af_amr, af_eas, af_eur, "  # noqa: S608
+                f"af_fin, af_sas, homozygous_count FROM gnomad_af WHERE rsid IN ({placeholders})"
+            )
+            rows = conn.execute(stmt, params).fetchall()
+
+            for row in rows:
+                af_global = row.af_global
+                results[row.rsid] = {
+                    "gnomad_af_global": af_global,
+                    "gnomad_af_afr": row.af_afr,
+                    "gnomad_af_amr": row.af_amr,
+                    "gnomad_af_eas": row.af_eas,
+                    "gnomad_af_eur": row.af_eur,
+                    "gnomad_af_fin": row.af_fin,
+                    "gnomad_af_sas": row.af_sas,
+                    "gnomad_homozygous_count": row.homozygous_count,
+                    "rare_flag": af_global is not None and af_global < 0.01,
+                    "ultra_rare_flag": af_global is not None and af_global < 0.0001,
+                }
+    return results
+
+
+def _lookup_dbnsfp(
+    rsids: list[str],
+    raw_by_rsid: dict[str, sa.Row],
+    dbnsfp_engine: sa.Engine,
+) -> dict[str, dict]:
+    """Look up dbNSFP in-silico prediction scores for a batch of rsids.
+
+    dbNSFP data lives in a separate SQLite DB with a ``dbnsfp_scores`` table.
+    We use sa.text() since the table isn't in SQLAlchemy metadata.
+    """
+    if not rsids:
+        return {}
+
+    results: dict[str, dict] = {}
+    batch_size = 500
+
+    with dbnsfp_engine.connect() as conn:
+        for i in range(0, len(rsids), batch_size):
+            batch = rsids[i : i + batch_size]
+            placeholders = ", ".join(f":r{j}" for j in range(len(batch)))
+            params = {f"r{j}": rsid for j, rsid in enumerate(batch)}
+
+            stmt = sa.text(
+                "SELECT rsid, cadd_phred, sift_score, sift_pred, "  # noqa: S608
+                "polyphen2_hsvar_score, polyphen2_hsvar_pred, "
+                "revel, mutpred2, vest4, metasvm, metalr, "
+                "gerp_rs, phylop, mpc, primateai "
+                f"FROM dbnsfp_scores WHERE rsid IN ({placeholders})"
+            )
+            rows = conn.execute(stmt, params).fetchall()
+
+            for row in rows:
+                results[row.rsid] = {
+                    "cadd_phred": row.cadd_phred,
+                    "sift_score": row.sift_score,
+                    "sift_pred": row.sift_pred,
+                    "polyphen2_hsvar_score": row.polyphen2_hsvar_score,
+                    "polyphen2_hsvar_pred": row.polyphen2_hsvar_pred,
+                    "revel": row.revel,
+                    "mutpred2": row.mutpred2,
+                    "vest4": row.vest4,
+                    "metasvm": row.metasvm,
+                    "metalr": row.metalr,
+                    "gerp_rs": row.gerp_rs,
+                    "phylop": row.phylop,
+                    "mpc": row.mpc,
+                    "primateai": row.primateai,
+                }
+    return results
+
+
+# ── Merge + bitmask ──────────────────────────────────────────────────────
+
+
+def _merge_annotations(
+    raw_rows: list[sa.Row],
+    vep_data: dict[str, dict],
+    clinvar_data: dict[str, dict],
+    gnomad_data: dict[str, dict],
+    dbnsfp_data: dict[str, dict],
+) -> list[dict]:
+    """Merge all annotation sources into upsert-ready dicts.
+
+    For each raw variant, merges columns from whichever sources matched
+    and computes the ``annotation_coverage`` bitmask.
+    """
+    merged: list[dict] = []
+
+    for raw in raw_rows:
+        rsid = raw.rsid
+        bitmask = 0
+
+        row_data: dict = {
+            "rsid": rsid,
+            "chrom": raw.chrom,
+            "pos": raw.pos,
+            "genotype": raw.genotype,
+        }
+
+        if rsid in vep_data:
+            row_data.update(vep_data[rsid])
+            bitmask |= VEP_BIT
+
+        if rsid in clinvar_data:
+            row_data.update(clinvar_data[rsid])
+            bitmask |= CLINVAR_BIT
+
+        if rsid in gnomad_data:
+            row_data.update(gnomad_data[rsid])
+            bitmask |= GNOMAD_BIT
+
+        if rsid in dbnsfp_data:
+            row_data.update(dbnsfp_data[rsid])
+            bitmask |= DBNSFP_BIT
+
+        if bitmask > 0:
+            row_data["annotation_coverage"] = bitmask
+            merged.append(row_data)
+
+    return merged
+
+
+# ── Bulk upsert ──────────────────────────────────────────────────────────
+
+_UPSERT_COLUMNS = [
+    # VEP
+    "gene_symbol",
+    "transcript_id",
+    "consequence",
+    "hgvs_coding",
+    "hgvs_protein",
+    "strand",
+    "exon_number",
+    "intron_number",
+    "mane_select",
+    # ClinVar
+    "clinvar_significance",
+    "clinvar_review_stars",
+    "clinvar_accession",
+    "clinvar_conditions",
+    # gnomAD
+    "gnomad_af_global",
+    "gnomad_af_afr",
+    "gnomad_af_amr",
+    "gnomad_af_eas",
+    "gnomad_af_eur",
+    "gnomad_af_fin",
+    "gnomad_af_sas",
+    "gnomad_homozygous_count",
+    "rare_flag",
+    "ultra_rare_flag",
+    # dbNSFP
+    "cadd_phred",
+    "sift_score",
+    "sift_pred",
+    "polyphen2_hsvar_score",
+    "polyphen2_hsvar_pred",
+    "revel",
+    "mutpred2",
+    "vest4",
+    "metasvm",
+    "metalr",
+    "gerp_rs",
+    "phylop",
+    "mpc",
+    "primateai",
+]
+
+
+def _bulk_upsert(
+    sample_engine: sa.Engine,
+    rows: list[dict],
+) -> int:
+    """Upsert merged annotation rows into annotated_variants.
+
+    Uses SQLite INSERT ... ON CONFLICT DO UPDATE to merge columns.
+    The annotation_coverage bitmask is ORed with existing values.
+
+    Returns:
+        Number of rows written.
+    """
+    if not rows:
+        return 0
+
+    written = 0
+    upsert_batch_size = 5_000
+
+    # Normalise all rows to the same set of keys so multi-row INSERT works.
+    all_keys = {"rsid", "chrom", "pos", "genotype", "annotation_coverage"}
+    all_keys.update(_UPSERT_COLUMNS)
+    normalised = [{k: row.get(k) for k in all_keys} for row in rows]
+
+    with sample_engine.begin() as conn:
+        for i in range(0, len(normalised), upsert_batch_size):
+            batch = normalised[i : i + upsert_batch_size]
+
+            stmt = sqlite_insert(annotated_variants).values(batch)
+
+            # Build the SET clause: update all annotation columns from incoming row
+            set_clause: dict = {}
+            for col in _UPSERT_COLUMNS:
+                set_clause[col] = getattr(stmt.excluded, col)
+
+            # OR the bitmask into existing coverage
+            set_clause["annotation_coverage"] = sa.case(
+                (
+                    annotated_variants.c.annotation_coverage.is_(None),
+                    stmt.excluded.annotation_coverage,
+                ),
+                else_=(
+                    annotated_variants.c.annotation_coverage.op("|")(
+                        stmt.excluded.annotation_coverage
+                    )
+                ),
+            )
+
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["rsid"],
+                set_=set_clause,
+            )
+            conn.execute(stmt)
+            written += len(batch)
+
+    return written
+
+
+# ── Engine availability checks ───────────────────────────────────────────
+
+
+def _check_engine_available(engine_getter: Callable, name: str) -> sa.Engine | None:
+    """Try to get an engine, returning None if the DB file doesn't exist."""
+    try:
+        engine = engine_getter()
+        # Quick connectivity check
+        with engine.connect() as conn:
+            conn.execute(sa.text("SELECT 1"))
+        return engine
+    except Exception:
+        logger.info("annotation_source_unavailable", extra={"source": name})
+        return None
+
+
+# ── Main entry point ─────────────────────────────────────────────────────
+
+
+def run_annotation(
+    sample_engine: sa.Engine,
+    registry: DBRegistry,
+    *,
+    progress_callback: Callable[[int, int], None] | None = None,
+    batch_size: int = ENGINE_BATCH_SIZE,
+) -> AnnotationEngineResult:
+    """Run the full annotation engine on a sample.
+
+    Coordinates VEP bundle, ClinVar, gnomAD, and dbNSFP lookups in
+    parallel via ThreadPoolExecutor, merges results, computes the
+    annotation_coverage bitmask, and bulk-upserts into annotated_variants.
+
+    Crash recovery: deletes all existing annotations before starting,
+    then re-annotates from scratch.
+
+    Args:
+        sample_engine: SQLAlchemy engine for the per-sample database.
+        registry: DBRegistry providing engines for all annotation sources.
+        progress_callback: Optional callable ``(variants_done, total)``
+            for SSE progress reporting.
+        batch_size: Number of variants per batch (default 10k).
+
+    Returns:
+        :class:`AnnotationEngineResult` with match statistics.
+    """
+    result = AnnotationEngineResult()
+
+    # 1. Read all raw variants
+    with sample_engine.connect() as conn:
+        raw_rows = conn.execute(
+            sa.select(
+                raw_variants.c.rsid,
+                raw_variants.c.chrom,
+                raw_variants.c.pos,
+                raw_variants.c.genotype,
+            )
+        ).fetchall()
+
+    result.total_variants = len(raw_rows)
+    if not raw_rows:
+        return result
+
+    # 2. Crash recovery: delete partial results from any previous run
+    _delete_all_annotations(sample_engine)
+
+    # 3. Detect available annotation sources
+    vep_engine = _check_engine_available(lambda: registry.vep_engine, "vep")
+    reference_engine = registry.reference_engine  # always available
+    gnomad_engine = _check_engine_available(lambda: registry.gnomad_engine, "gnomad")
+    dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp")
+
+    # 4. Process in batches
+    total_written = 0
+
+    for batch_start in range(0, len(raw_rows), batch_size):
+        batch_rows = raw_rows[batch_start : batch_start + batch_size]
+        batch_rsids = [r.rsid for r in batch_rows]
+        raw_by_rsid = {r.rsid: r for r in batch_rows}
+
+        # 5. Concurrent lookups across annotation sources
+        vep_data: dict[str, dict] = {}
+        clinvar_data: dict[str, dict] = {}
+        gnomad_data: dict[str, dict] = {}
+        dbnsfp_data: dict[str, dict] = {}
+
+        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+            futures = {}
+
+            if vep_engine is not None:
+                futures[executor.submit(_lookup_vep, batch_rsids, raw_by_rsid, vep_engine)] = "vep"
+
+            futures[
+                executor.submit(_lookup_clinvar, batch_rsids, raw_by_rsid, reference_engine)
+            ] = "clinvar"
+
+            if gnomad_engine is not None:
+                futures[
+                    executor.submit(_lookup_gnomad, batch_rsids, raw_by_rsid, gnomad_engine)
+                ] = "gnomad"
+
+            if dbnsfp_engine is not None:
+                futures[
+                    executor.submit(_lookup_dbnsfp, batch_rsids, raw_by_rsid, dbnsfp_engine)
+                ] = "dbnsfp"
+
+            for future in as_completed(futures):
+                source = futures[future]
+                try:
+                    data = future.result()
+                    if source == "vep":
+                        vep_data = data
+                    elif source == "clinvar":
+                        clinvar_data = data
+                    elif source == "gnomad":
+                        gnomad_data = data
+                    elif source == "dbnsfp":
+                        dbnsfp_data = data
+                except Exception as exc:
+                    msg = f"{source} lookup failed: {exc}"
+                    logger.warning(
+                        "annotation_source_error",
+                        extra={"source": source, "error": str(exc)},
+                    )
+                    result.errors.append(msg)
+
+        # 6. Merge results and compute bitmask
+        merged = _merge_annotations(batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data)
+
+        # 7. Bulk upsert
+        written = _bulk_upsert(sample_engine, merged)
+        total_written += written
+
+        # Update per-source match counts
+        result.vep_matched += len(vep_data)
+        result.clinvar_matched += len(clinvar_data)
+        result.gnomad_matched += len(gnomad_data)
+        result.dbnsfp_matched += len(dbnsfp_data)
+        result.batches_processed += 1
+
+        # 8. Progress callback
+        variants_done = min(batch_start + batch_size, len(raw_rows))
+        if progress_callback is not None:
+            progress_callback(variants_done, len(raw_rows))
+
+    result.rows_written = total_written
+
+    # 9. WAL checkpoint
+    _wal_checkpoint(sample_engine)
+
+    logger.info(
+        "annotation_engine_complete",
+        extra={
+            "total": result.total_variants,
+            "vep": result.vep_matched,
+            "clinvar": result.clinvar_matched,
+            "gnomad": result.gnomad_matched,
+            "dbnsfp": result.dbnsfp_matched,
+            "written": result.rows_written,
+            "batches": result.batches_processed,
+            "errors": result.errors,
+        },
+    )
+
+    return result
