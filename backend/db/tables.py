@@ -382,6 +382,8 @@ annotated_variants = sa.Table(
         sa.Text,
         comment="valid | merged | i_prefix | invalid",
     ),
+    # Ensemble pathogenicity (dbNSFP-derived)
+    sa.Column("deleterious_count", sa.Integer),
     # Evidence & conflict
     sa.Column("evidence_conflict", sa.Boolean, server_default=sa.text("0")),
     sa.Column("ensemble_pathogenic", sa.Boolean, server_default=sa.text("0")),
