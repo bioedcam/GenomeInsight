@@ -147,7 +147,7 @@ def vep_engine_inmemory() -> sa.Engine:
             )
         )
         conn.execute(sa.text("CREATE INDEX idx_vep_rsid ON vep_annotations(rsid)"))
-        with open(VEP_SEED_CSV) as f:
+        with open(VEP_SEED_CSV, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 conn.execute(
@@ -219,7 +219,7 @@ def gnomad_engine() -> sa.Engine:
             )
         )
         conn.execute(sa.text("CREATE INDEX idx_gnomad_rsid ON gnomad_af(rsid)"))
-        with open(GNOMAD_SEED_CSV) as f:
+        with open(GNOMAD_SEED_CSV, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 conn.execute(
@@ -271,7 +271,7 @@ def dbnsfp_engine() -> sa.Engine:
             )
         )
         conn.execute(sa.text("CREATE INDEX idx_dbnsfp_rsid ON dbnsfp_scores(rsid)"))
-        with open(DBNSFP_SEED_CSV) as f:
+        with open(DBNSFP_SEED_CSV, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 conn.execute(

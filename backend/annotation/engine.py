@@ -370,7 +370,7 @@ def _bulk_upsert(
 
             stmt = sqlite_insert(annotated_variants).values(batch)
 
-            # Build the SET clause: update only columns present in the data
+            # Build the SET clause: update all annotation columns from incoming row
             set_clause: dict = {}
             for col in _UPSERT_COLUMNS:
                 set_clause[col] = getattr(stmt.excluded, col)
