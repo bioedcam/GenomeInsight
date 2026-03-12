@@ -42,6 +42,7 @@ class DBRegistry:
         self._vep_engine: sa.Engine | None = None
         self._gnomad_engine: sa.Engine | None = None
         self._dbnsfp_engine: sa.Engine | None = None
+        self._encode_ccres_engine: sa.Engine | None = None
 
     @property
     def settings(self) -> Settings:
@@ -96,6 +97,15 @@ class DBRegistry:
             )
         return self._dbnsfp_engine
 
+    @property
+    def encode_ccres_engine(self) -> sa.Engine:
+        """Lazy-loaded ENCODE cCREs engine (read-only, ~30 MB)."""
+        if self._encode_ccres_engine is None:
+            self._encode_ccres_engine = self._create_engine(
+                self._settings.encode_ccres_db_path, wal=self._settings.wal_mode
+            )
+        return self._encode_ccres_engine
+
     def get_sample_engine(self, sample_db_path: str | Path) -> sa.Engine:
         """Get or create an engine for a per-sample database.
 
@@ -137,6 +147,9 @@ class DBRegistry:
         if self._dbnsfp_engine is not None:
             self._dbnsfp_engine.dispose()
             self._dbnsfp_engine = None
+        if self._encode_ccres_engine is not None:
+            self._encode_ccres_engine.dispose()
+            self._encode_ccres_engine = None
 
 
 _registry: DBRegistry | None = None

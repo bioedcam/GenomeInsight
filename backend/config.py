@@ -96,6 +96,10 @@ class Settings(BaseSettings):
     def dbnsfp_db_path(self) -> Path:
         return self.data_dir / "dbnsfp.db"
 
+    @property
+    def encode_ccres_db_path(self) -> Path:
+        return self.data_dir / "encode_ccres.db"
+
     @classmethod
     def settings_customise_sources(
         cls,

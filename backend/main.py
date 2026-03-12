@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.column_presets import router as column_presets_router
 from backend.api.routes.databases import router as databases_router
+from backend.api.routes.encode_ccres import router as encode_ccres_router
 from backend.api.routes.ingest import router as ingest_router
 from backend.api.routes.samples import router as samples_router
 from backend.api.routes.setup import router as setup_router
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     api_router.include_router(annotation_router)
     api_router.include_router(column_presets_router)
     api_router.include_router(databases_router)
+    api_router.include_router(encode_ccres_router)
     api_router.include_router(ingest_router)
     api_router.include_router(samples_router)
     api_router.include_router(setup_router)
