@@ -1,4 +1,4 @@
-"""Tests for VEP bundle lookup client (P2-02).
+"""Tests for VEP bundle lookup client (P2-02, P2-03).
 
 Covers:
 - lookup_vep_by_rsids: batch rsid matching against VEP bundle
@@ -24,8 +24,8 @@ from backend.annotation.vep_bundle import (
     CONSEQUENCE_SEVERITY,
     VEP_BITMASK,
     VEPAnnotationResult,
-    _consequence_severity,
     annotate_sample_vep,
+    consequence_severity,
     lookup_vep_by_positions,
     lookup_vep_by_rsids,
 )
@@ -163,25 +163,25 @@ class TestConsequenceSeverity:
     """Tests for the consequence severity helper."""
 
     def test_stop_gained_more_severe_than_missense(self) -> None:
-        assert _consequence_severity("stop_gained") > _consequence_severity("missense_variant")
+        assert consequence_severity("stop_gained") > consequence_severity("missense_variant")
 
     def test_missense_more_severe_than_synonymous(self) -> None:
-        assert _consequence_severity("missense_variant") > _consequence_severity(
+        assert consequence_severity("missense_variant") > consequence_severity(
             "synonymous_variant"
         )
 
     def test_compound_consequence_uses_max(self) -> None:
         compound = "missense_variant&splice_region_variant"
-        assert _consequence_severity(compound) == CONSEQUENCE_SEVERITY["missense_variant"]
+        assert consequence_severity(compound) == CONSEQUENCE_SEVERITY["missense_variant"]
 
     def test_none_returns_negative(self) -> None:
-        assert _consequence_severity(None) == -1
+        assert consequence_severity(None) == -1
 
     def test_empty_string_returns_negative(self) -> None:
-        assert _consequence_severity("") == -1
+        assert consequence_severity("") == -1
 
     def test_unknown_term_returns_zero(self) -> None:
-        assert _consequence_severity("totally_unknown_term") == 0
+        assert consequence_severity("totally_unknown_term") == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
