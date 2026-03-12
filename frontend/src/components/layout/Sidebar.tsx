@@ -10,6 +10,7 @@ import {
   Brain,
   Baby,
   Globe,
+  Dna,
   FileText,
   Settings,
   PanelLeftClose,
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/apoe', icon: Brain, label: 'APOE' },
   { to: '/carrier-status', icon: Baby, label: 'Carrier Status' },
   { to: '/ancestry', icon: Globe, label: 'Ancestry' },
+  { to: '/genome-browser', icon: Dna, label: 'Genome Browser' },
   { to: '/reports', icon: FileText, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
