@@ -1234,9 +1234,10 @@ class TestDbnsfpAnnotationIntegration:
                 )
             ).fetchone()
 
-        # rs1801133 (MTHFR C677T) has known scores from seed data
-        if row is not None and row.deleterious_count is not None:
-            assert 0 <= row.deleterious_count <= 5
+        # rs1801133 (MTHFR C677T) is in seed data for all sources
+        assert row is not None
+        assert row.deleterious_count is not None
+        assert 0 <= row.deleterious_count <= 5
 
     def test_known_variant_rs1801133_scores(
         self,
