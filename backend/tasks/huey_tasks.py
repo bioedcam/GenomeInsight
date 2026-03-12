@@ -94,7 +94,7 @@ def _update_job(
 
     registry = get_registry()
     with registry.reference_engine.begin() as conn:
-        conn.execute(
+        result = conn.execute(
             jobs.update()
             .where(jobs.c.job_id == job_id)
             .values(
@@ -105,6 +105,26 @@ def _update_job(
                 updated_at=datetime.now(UTC),
             )
         )
+        if result.rowcount == 0:
+            logger.warning("_update_job: no job found", extra={"job_id": job_id})
+
+
+def _is_job_cancelled(job_id: str) -> bool:
+    """Check if a job has been cancelled by the user."""
+    import sqlalchemy as sa
+
+    from backend.db.connection import get_registry
+    from backend.db.tables import jobs
+
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        row = conn.execute(sa.select(jobs.c.status).where(jobs.c.job_id == job_id)).fetchone()
+
+    return row is not None and row.status == "cancelled"
+
+
+class AnnotationCancelledError(Exception):
+    """Raised when an annotation job is cancelled by the user."""
 
 
 def _get_sample_db_path(sample_id: int) -> str:
@@ -150,6 +170,8 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
         _update_job(job_id, status="running", message="Starting annotation")
 
         def progress_callback(variants_done: int, total: int) -> None:
+            if _is_job_cancelled(job_id):
+                raise AnnotationCancelledError(f"Job {job_id} cancelled by user")
             pct = (variants_done / total * 100) if total > 0 else 0.0
             _update_job(
                 job_id,
@@ -194,6 +216,13 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
                 "total_variants": result.total_variants,
             },
         )
+
+    except AnnotationCancelledError:
+        logger.info(
+            "annotation_task_cancelled",
+            extra={"job_id": job_id, "sample_id": sample_id},
+        )
+        # Status already set to "cancelled" by the cancel endpoint
 
     except Exception as exc:
         logger.exception(

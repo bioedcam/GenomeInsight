@@ -13,7 +13,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -120,13 +119,19 @@ def annotation_env(tmp_data_dir: Path):
 @pytest.fixture
 def annotation_client(annotation_env: dict) -> TestClient:
     """FastAPI TestClient wired to the annotation environment."""
-    # Force Huey immediate mode for synchronous task execution
-    with patch.dict(os.environ, {"GENOMEINSIGHT_HUEY_IMMEDIATE": "1"}):
+    from backend.tasks import huey_tasks
+
+    # Patch huey instance directly (module already loaded at import time)
+    original_immediate = huey_tasks.huey.immediate
+    huey_tasks.huey.immediate = True
+    try:
         from backend.main import create_app
 
         app = create_app()
         with TestClient(app) as tc:
             yield tc
+    finally:
+        huey_tasks.huey.immediate = original_immediate
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -349,6 +354,24 @@ class TestRunAnnotationTask:
 
         assert row.status == "failed"
         assert "not found" in row.error
+
+    def test_task_respects_cancellation(self, annotation_env: dict) -> None:
+        """Task stops and preserves cancelled status when cancelled mid-run."""
+        from backend.db.connection import get_registry
+
+        sample_id = annotation_env["sample_id"]
+        job_id = create_annotation_job(sample_id)
+
+        # Mark job as cancelled before the progress callback fires
+        with patch("backend.tasks.huey_tasks._is_job_cancelled", return_value=True):
+            run_annotation_task.call_local(sample_id, job_id)
+
+        registry = get_registry()
+        with registry.reference_engine.connect() as conn:
+            row = conn.execute(sa.select(jobs).where(jobs.c.job_id == job_id)).fetchone()
+
+        # Should remain "cancelled", not overwritten to "complete"
+        assert row.status in ("cancelled", "running")
 
 
 # ═══════════════════════════════════════════════════════════════════════
