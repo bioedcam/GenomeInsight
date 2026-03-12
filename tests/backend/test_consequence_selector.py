@@ -316,3 +316,4 @@ class TestManeSelectSchema:
 
         col = annotated_variants.c.mane_select
         assert col.server_default is not None
+        assert str(col.server_default.arg) == "0"
