@@ -29,7 +29,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.annotation.dbnsfp import (
+    ENSEMBLE_PATHOGENIC_THRESHOLD,
     DbNSFPAnnotation,
+    is_ensemble_pathogenic,
     lookup_dbnsfp_by_positions,
     lookup_dbnsfp_by_rsids,
 )
@@ -247,6 +249,7 @@ def _dbnsfp_annot_to_dict(annot: DbNSFPAnnotation) -> dict:
         "mpc": annot.mpc,
         "primateai": annot.primateai,
         "deleterious_count": annot.deleterious_count,
+        "ensemble_pathogenic": is_ensemble_pathogenic(annot),
     }
 
 
@@ -354,6 +357,25 @@ def _merge_annotations(
     return merged
 
 
+# ── Ensemble pathogenicity (P2-13) ───────────────────────────────────────
+
+
+def apply_ensemble_pathogenic(merged: list[dict]) -> None:
+    """Set ``ensemble_pathogenic`` flag on merged variant dicts.
+
+    For variants that already have ``ensemble_pathogenic`` set (e.g. from
+    ``_dbnsfp_annot_to_dict``), this is a no-op.  For any variant with a
+    ``deleterious_count`` but no ``ensemble_pathogenic`` key, the flag is
+    computed here.
+
+    Mutates *merged* in place (same pattern as ``apply_evidence_conflicts``).
+    """
+    for v in merged:
+        dc = v.get("deleterious_count")
+        if dc is not None and "ensemble_pathogenic" not in v:
+            v["ensemble_pathogenic"] = dc >= ENSEMBLE_PATHOGENIC_THRESHOLD
+
+
 # ── Bulk upsert ──────────────────────────────────────────────────────────
 
 _UPSERT_COLUMNS = [
@@ -399,6 +421,7 @@ _UPSERT_COLUMNS = [
     "mpc",
     "primateai",
     "deleterious_count",
+    "ensemble_pathogenic",
     # Evidence conflict
     "evidence_conflict",
 ]
@@ -589,7 +612,10 @@ def run_annotation(
         # 6. Merge results and compute bitmask
         merged = _merge_annotations(batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data)
 
-        # 6b. Evidence conflict detection (P2-07)
+        # 6b. Ensemble pathogenicity flag (P2-13)
+        apply_ensemble_pathogenic(merged)
+
+        # 6c. Evidence conflict detection (P2-07)
         apply_evidence_conflicts(merged)
 
         # 7. Bulk upsert

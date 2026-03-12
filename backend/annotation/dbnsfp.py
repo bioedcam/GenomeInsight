@@ -242,12 +242,15 @@ def count_deleterious(annot: DbNSFPAnnotation) -> int:
     return count
 
 
+ENSEMBLE_PATHOGENIC_THRESHOLD = 3
+
+
 def is_ensemble_pathogenic(annot: DbNSFPAnnotation) -> bool:
     """Check if ≥3 tools predict deleterious (ensemble pathogenicity flag).
 
     Per PRD P2-13: "≥3 tools predict deleterious → flag set".
     """
-    return annot.deleterious_count >= 3
+    return annot.deleterious_count >= ENSEMBLE_PATHOGENIC_THRESHOLD
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

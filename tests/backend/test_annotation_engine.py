@@ -1,4 +1,4 @@
-"""Tests for the annotation engine orchestrator (P2-04, P2-09, P2-12).
+"""Tests for the annotation engine orchestrator (P2-04, P2-09, P2-12, P2-13).
 
 Covers:
 - T2-04: Annotation engine processes 1000 variants end-to-end, all fields
@@ -1226,3 +1226,216 @@ class TestDbnsfpAnnotationIntegration:
         """Empty rsid list returns empty dict."""
         result = _lookup_dbnsfp([], {}, dbnsfp_engine)
         assert len(result) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-13: Ensemble pathogenicity flag (≥3 tools deleterious)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestEnsemblePathogenicIntegration:
+    """P2-13 / T2-12: Ensemble pathogenicity flag fires when ≥3 tools deleterious.
+
+    Verifies:
+    - _dbnsfp_annot_to_dict includes ensemble_pathogenic
+    - apply_ensemble_pathogenic sets flag on merged dicts
+    - Flag flows through full pipeline into annotated_variants
+    - Variants with <3 deleterious tools are NOT flagged
+    - Variants with ≥3 deleterious tools ARE flagged
+    """
+
+    def test_dbnsfp_annot_to_dict_includes_ensemble_flag(self) -> None:
+        """_dbnsfp_annot_to_dict returns ensemble_pathogenic=True when ≥3 deleterious."""
+        annot = DbNSFPAnnotation(
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            cadd_phred=28.0,
+            sift_score=0.001,
+            sift_pred="D",
+            polyphen2_hsvar_score=0.998,
+            polyphen2_hsvar_pred="D",
+            revel=0.8,
+            metasvm=0.9,
+        )
+        d = _dbnsfp_annot_to_dict(annot)
+        assert d["deleterious_count"] == 5
+        assert d["ensemble_pathogenic"] is True
+
+    def test_dbnsfp_annot_to_dict_not_pathogenic_under_threshold(self) -> None:
+        """_dbnsfp_annot_to_dict returns ensemble_pathogenic=False when <3 deleterious."""
+        annot = DbNSFPAnnotation(
+            rsid="rs2",
+            chrom="1",
+            pos=200,
+            ref="A",
+            alt="G",
+            sift_score=0.001,
+            sift_pred="D",
+            polyphen2_hsvar_score=0.5,
+            polyphen2_hsvar_pred="D",
+            # Only 2 tools predict deleterious (SIFT + PP2)
+            cadd_phred=10.0,  # Below 20 threshold
+            revel=0.3,  # Below 0.5 threshold
+            metasvm=-0.5,  # Below 0 threshold
+        )
+        d = _dbnsfp_annot_to_dict(annot)
+        assert d["deleterious_count"] == 2
+        assert d["ensemble_pathogenic"] is False
+
+    def test_dbnsfp_annot_to_dict_null_scores_not_pathogenic(self) -> None:
+        """All-null scores yield ensemble_pathogenic=False."""
+        annot = DbNSFPAnnotation(
+            rsid="rs3",
+            chrom="1",
+            pos=300,
+            ref="A",
+            alt="G",
+        )
+        d = _dbnsfp_annot_to_dict(annot)
+        assert d["deleterious_count"] == 0
+        assert d["ensemble_pathogenic"] is False
+
+    def test_apply_ensemble_pathogenic_on_merged(self) -> None:
+        """apply_ensemble_pathogenic sets flag on merged dicts without it."""
+        from backend.annotation.engine import apply_ensemble_pathogenic
+
+        merged = [
+            {"rsid": "rs1", "deleterious_count": 4},
+            {"rsid": "rs2", "deleterious_count": 2},
+            {"rsid": "rs3", "deleterious_count": 3},
+            {"rsid": "rs4"},  # No deleterious_count at all
+        ]
+        apply_ensemble_pathogenic(merged)
+
+        assert merged[0]["ensemble_pathogenic"] is True
+        assert merged[1]["ensemble_pathogenic"] is False
+        assert merged[2]["ensemble_pathogenic"] is True
+        assert "ensemble_pathogenic" not in merged[3]
+
+    def test_apply_ensemble_pathogenic_does_not_overwrite(self) -> None:
+        """apply_ensemble_pathogenic skips dicts that already have the key."""
+        from backend.annotation.engine import apply_ensemble_pathogenic
+
+        merged = [
+            {"rsid": "rs1", "deleterious_count": 4, "ensemble_pathogenic": True},
+        ]
+        apply_ensemble_pathogenic(merged)
+        assert merged[0]["ensemble_pathogenic"] is True
+
+    def test_ensemble_flag_in_annotated_variants_true(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-13: Variant with ≥3 deleterious tools has ensemble_pathogenic=True in DB."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            # rs429358: SIFT=D, PP2=D, CADD=28.3, REVEL=0.812, MetaSVM=0.920 → 5 deleterious
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs429358")
+            ).fetchone()
+
+        assert row is not None
+        assert row.deleterious_count == 5
+        assert row.ensemble_pathogenic in (True, 1)
+
+    def test_ensemble_flag_in_annotated_variants_false(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-13: Variant with <3 deleterious tools has ensemble_pathogenic=False."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            # rs4680: SIFT=0.082(T), PP2=0.451(B), CADD=15.2(<20), REVEL=0.312(<0.5),
+            # MetaSVM=0.380(D) → only 1 deleterious (MetaSVM)
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs4680")
+            ).fetchone()
+
+        assert row is not None
+        assert row.deleterious_count == 1
+        assert row.ensemble_pathogenic in (False, 0)
+
+    def test_ensemble_flag_exactly_three(
+        self,
+        sample_engine: sa.Engine,
+        dbnsfp_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """P2-13: Variant with exactly 3 deleterious tools is flagged."""
+        # Insert a custom variant with exactly 3 deleterious predictions:
+        # SIFT=0.01(D), PP2=0.5(D>0.453), CADD=25(D≥20), REVEL=0.3(<0.5), MetaSVM=-0.5(<0)
+        with sample_engine.begin() as conn:
+            conn.execute(
+                raw_variants.insert().values(
+                    rsid="rs_three_del", chrom="1", pos=99999, genotype="AG"
+                )
+            )
+        with dbnsfp_engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO dbnsfp_scores "
+                    "(rsid, chrom, pos, ref, alt, cadd_phred, sift_score, sift_pred, "
+                    "polyphen2_hsvar_score, polyphen2_hsvar_pred, revel, metasvm) "
+                    "VALUES ('rs_three_del', '1', 99999, 'A', 'G', 25.0, 0.01, 'D', "
+                    "0.5, 'D', 0.3, -0.5)"
+                )
+            )
+
+        registry = MagicMock()
+        registry.reference_engine = reference_engine
+        type(registry).vep_engine = property(
+            lambda self: (_ for _ in ()).throw(FileNotFoundError("no VEP"))
+        )
+        type(registry).gnomad_engine = property(
+            lambda self: (_ for _ in ()).throw(FileNotFoundError("no gnomAD"))
+        )
+        type(registry).dbnsfp_engine = property(lambda s: dbnsfp_engine)
+
+        run_annotation(sample_engine, registry)
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs_three_del")
+            ).fetchone()
+
+        assert row is not None
+        assert row.deleterious_count == 3
+        assert row.ensemble_pathogenic in (True, 1)
+
+    def test_all_dbnsfp_variants_have_ensemble_flag(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-13: Every variant with dbNSFP data has ensemble_pathogenic set."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            rows = conn.execute(
+                sa.select(annotated_variants).where(
+                    annotated_variants.c.annotation_coverage.op("&")(DBNSFP_BIT) == DBNSFP_BIT
+                )
+            ).fetchall()
+
+        assert len(rows) > 0
+        for row in rows:
+            assert row.ensemble_pathogenic is not None
+            assert row.deleterious_count is not None
+            # Verify consistency: flag matches threshold
+            if row.deleterious_count >= 3:
+                assert row.ensemble_pathogenic in (True, 1)
+            else:
+                assert row.ensemble_pathogenic in (False, 0)
+
+    def test_ensemble_pathogenic_in_upsert_columns(self) -> None:
+        """ensemble_pathogenic is in _UPSERT_COLUMNS list."""
+        from backend.annotation.engine import _UPSERT_COLUMNS
+
+        assert "ensemble_pathogenic" in _UPSERT_COLUMNS
