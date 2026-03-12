@@ -74,6 +74,7 @@ GNOMAD_BITMASK = 0b000100
 # Rare variant AF thresholds
 RARE_AF_THRESHOLD = 0.01
 ULTRA_RARE_AF_THRESHOLD = 0.001
+LOW_FREQUENCY_AF_THRESHOLD = 0.05
 
 # ── SQL for gnomad_af table creation ──────────────────────────────────────
 
@@ -161,11 +162,11 @@ def classify_variant_rarity(af_global: float | None) -> str:
     Returns one of: ``"ultra_rare"``, ``"rare"``, ``"low_frequency"``,
     ``"common"``, or ``"unknown"`` (when AF is None/not available).
 
-    Thresholds:
-        - ultra_rare:    AF < 0.001
-        - rare:          0.001 <= AF < 0.01
-        - low_frequency: 0.01 <= AF < 0.05
-        - common:        AF >= 0.05
+    Thresholds (module-level constants):
+        - ultra_rare:    AF < ULTRA_RARE_AF_THRESHOLD (0.001)
+        - rare:          ULTRA_RARE_AF_THRESHOLD <= AF < RARE_AF_THRESHOLD (0.01)
+        - low_frequency: RARE_AF_THRESHOLD <= AF < LOW_FREQUENCY_AF_THRESHOLD (0.05)
+        - common:        AF >= LOW_FREQUENCY_AF_THRESHOLD
         - unknown:       AF is None
 
     Args:
@@ -180,7 +181,7 @@ def classify_variant_rarity(af_global: float | None) -> str:
         return "ultra_rare"
     if af_global < RARE_AF_THRESHOLD:
         return "rare"
-    if af_global < 0.05:
+    if af_global < LOW_FREQUENCY_AF_THRESHOLD:
         return "low_frequency"
     return "common"
 

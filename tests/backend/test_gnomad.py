@@ -27,6 +27,7 @@ from sqlalchemy.pool import StaticPool
 from backend.annotation.gnomad import (
     GNOMAD_BITMASK,
     LOOKUP_BATCH_SIZE,
+    LOW_FREQUENCY_AF_THRESHOLD,
     RARE_AF_THRESHOLD,
     ULTRA_RARE_AF_THRESHOLD,
     GnomADAnnotation,
@@ -487,6 +488,7 @@ class TestRareVariantFlags:
         """Threshold constants match PRD specs."""
         assert RARE_AF_THRESHOLD == 0.01
         assert ULTRA_RARE_AF_THRESHOLD == 0.001
+        assert LOW_FREQUENCY_AF_THRESHOLD == 0.05
 
     def test_position_lookup_returns_rare_flags(self, gnomad_engine_with_data: sa.Engine):
         """Position-based lookup also computes rare flags correctly."""
@@ -716,59 +718,37 @@ class TestComputeRareFlags:
 class TestRareFlagIndexes:
     """Test that rare_flag and ultra_rare_flag indexes exist in sample DB (P2-10)."""
 
-    def test_rare_flag_index_exists(self):
-        """Index on rare_flag column exists in annotated_variants."""
+    @pytest.fixture
+    def sample_engine(self) -> sa.Engine:
+        """In-memory sample engine with all tables created."""
         engine = sa.create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
         sample_metadata_obj.create_all(engine)
+        return engine
 
-        with engine.connect() as conn:
+    @pytest.fixture
+    def index_names(self, sample_engine: sa.Engine) -> set[str]:
+        """All index names on annotated_variants."""
+        with sample_engine.connect() as conn:
             indexes = conn.execute(
                 sa.text(
                     "SELECT name FROM sqlite_master "
                     "WHERE type='index' AND tbl_name='annotated_variants'"
                 )
             ).fetchall()
-        index_names = {r[0] for r in indexes}
+        return {r[0] for r in indexes}
+
+    def test_rare_flag_index_exists(self, index_names: set[str]):
+        """Index on rare_flag column exists in annotated_variants."""
         assert "idx_annot_rare_flag" in index_names
 
-    def test_ultra_rare_flag_index_exists(self):
+    def test_ultra_rare_flag_index_exists(self, index_names: set[str]):
         """Index on ultra_rare_flag column exists in annotated_variants."""
-        engine = sa.create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        sample_metadata_obj.create_all(engine)
-
-        with engine.connect() as conn:
-            indexes = conn.execute(
-                sa.text(
-                    "SELECT name FROM sqlite_master "
-                    "WHERE type='index' AND tbl_name='annotated_variants'"
-                )
-            ).fetchall()
-        index_names = {r[0] for r in indexes}
         assert "idx_annot_ultra_rare_flag" in index_names
 
-    def test_gnomad_af_global_index_exists(self):
+    def test_gnomad_af_global_index_exists(self, index_names: set[str]):
         """Index on gnomad_af_global column exists for AF range queries."""
-        engine = sa.create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        sample_metadata_obj.create_all(engine)
-
-        with engine.connect() as conn:
-            indexes = conn.execute(
-                sa.text(
-                    "SELECT name FROM sqlite_master "
-                    "WHERE type='index' AND tbl_name='annotated_variants'"
-                )
-            ).fetchall()
-        index_names = {r[0] for r in indexes}
         assert "idx_annot_gnomad_af" in index_names
