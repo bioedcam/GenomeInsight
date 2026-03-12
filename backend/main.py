@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.column_presets import router as column_presets_router
 from backend.api.routes.databases import router as databases_router
 from backend.api.routes.ingest import router as ingest_router
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": VERSION}
 
     # API routes (must be included BEFORE static mount)
+    api_router.include_router(annotation_router)
     api_router.include_router(column_presets_router)
     api_router.include_router(databases_router)
     api_router.include_router(ingest_router)
