@@ -1,4 +1,4 @@
-"""Tests for the annotation engine orchestrator (P2-04, P2-09, P2-12, P2-13).
+"""Tests for the annotation engine orchestrator (P2-04, P2-09, P2-12, P2-13, P2-15).
 
 Covers:
 - T2-04: Annotation engine processes 1000 variants end-to-end, all fields
@@ -7,6 +7,7 @@ Covers:
   position-based fallback, correct rare/ultra-rare thresholds
 - P2-12: dbNSFP annotation integrated into engine — rsid primary,
   position-based fallback, all 14 score fields, deleterious_count
+- P2-15: Gene-phenotype annotation via MONDO/HPO lookup, joined by gene symbol
 - Concurrent lookup orchestration across VEP, ClinVar, gnomAD, dbNSFP
 - Bitmask computation (annotation_coverage)
 - Crash recovery (delete partial, re-run)
@@ -34,6 +35,7 @@ from backend.annotation.dbnsfp import (
 from backend.annotation.engine import (
     CLINVAR_BIT,
     DBNSFP_BIT,
+    GENE_PHENOTYPE_BIT,
     GNOMAD_BIT,
     VEP_BIT,
     AnnotationEngineResult,
@@ -43,6 +45,7 @@ from backend.annotation.engine import (
     _delete_all_annotations,
     _lookup_clinvar,
     _lookup_dbnsfp,
+    _lookup_gene_phenotype,
     _lookup_gnomad,
     _lookup_vep,
     _merge_annotations,
@@ -55,6 +58,7 @@ from backend.annotation.gnomad import (
     create_gnomad_tables,
     lookup_gnomad_by_rsids,
 )
+from backend.annotation.mondo_hpo import load_mondo_hpo_from_csv
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
     annotated_variants,
@@ -69,6 +73,7 @@ FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 VEP_SEED_CSV = FIXTURES_DIR / "seed_csvs" / "vep_seed.csv"
 GNOMAD_SEED_CSV = FIXTURES_DIR / "seed_csvs" / "gnomad_seed.csv"
 DBNSFP_SEED_CSV = FIXTURES_DIR / "seed_csvs" / "dbnsfp_seed.csv"
+GENE_PHENOTYPE_SEED_CSV = FIXTURES_DIR / "seed_csvs" / "gene_phenotype_seed.csv"
 
 SEED_CLINVAR = [
     {
@@ -205,7 +210,7 @@ def vep_engine_inmemory() -> sa.Engine:
 
 @pytest.fixture
 def reference_engine() -> sa.Engine:
-    """In-memory reference engine with ClinVar data."""
+    """In-memory reference engine with ClinVar and gene-phenotype data."""
     engine = sa.create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -214,6 +219,8 @@ def reference_engine() -> sa.Engine:
     reference_metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(clinvar_variants.insert(), SEED_CLINVAR)
+    # Load gene-phenotype seed data
+    load_mondo_hpo_from_csv(GENE_PHENOTYPE_SEED_CSV, engine)
     return engine
 
 
@@ -582,8 +589,10 @@ class TestRunAnnotation:
         assert row.cadd_phred is not None
         assert row.cadd_phred == pytest.approx(28.3)
         assert row.sift_pred == "D"
-        # Bitmask: all 4 sources
-        assert row.annotation_coverage == VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT
+        # Bitmask: all 5 sources (APOE is in gene_phenotype seed)
+        assert row.annotation_coverage == (
+            VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT | GENE_PHENOTYPE_BIT
+        )
 
     def test_bitmask_partial_coverage(
         self,
@@ -601,7 +610,10 @@ class TestRunAnnotation:
             assert coverage is not None
             assert coverage > 0
             # At least one bit must be set
-            assert coverage & (VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT) > 0
+            assert (
+                coverage & (VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT | GENE_PHENOTYPE_BIT)
+                > 0
+            )
 
     def test_unmatched_variants_excluded(
         self,
@@ -754,7 +766,9 @@ class TestIntegration1000Variants:
         assert row.clinvar_significance is not None
         assert row.gnomad_af_global is not None
         assert row.cadd_phred is not None
-        assert row.annotation_coverage == VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT
+        assert row.annotation_coverage == (
+            VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT | GENE_PHENOTYPE_BIT
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1439,3 +1453,179 @@ class TestEnsemblePathogenicIntegration:
         from backend.annotation.engine import _UPSERT_COLUMNS
 
         assert "ensemble_pathogenic" in _UPSERT_COLUMNS
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-15: Gene-phenotype annotation
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGenePhenotypeAnnotation:
+    """P2-15: Gene-phenotype annotation via MONDO/HPO + optional OMIM.
+
+    Verifies:
+    - _lookup_gene_phenotype maps VEP gene symbols to phenotype records
+    - Gene-phenotype data flows through _merge_annotations with bitmask bit 4
+    - Full pipeline writes disease_name, disease_id, hpo_terms, phenotype_source,
+      inheritance_pattern to annotated_variants
+    - Variants without gene_symbol (no VEP match) get no phenotype data
+    - gene_phenotype_matched count is tracked in AnnotationEngineResult
+    """
+
+    def test_lookup_gene_phenotype_returns_fields(self, reference_engine: sa.Engine) -> None:
+        """_lookup_gene_phenotype returns phenotype fields keyed by rsid."""
+        vep_data = {
+            "rs1": {"gene_symbol": "BRCA1", "consequence": "missense_variant"},
+            "rs2": {"gene_symbol": "CFTR", "consequence": "missense_variant"},
+        }
+        result = _lookup_gene_phenotype(vep_data, reference_engine)
+
+        assert "rs1" in result
+        assert result["rs1"]["disease_name"] == "Hereditary breast and ovarian cancer syndrome"
+        assert result["rs1"]["disease_id"] == "MONDO:0011450"
+        assert result["rs1"]["phenotype_source"] == "mondo_hpo"
+        assert result["rs1"]["inheritance_pattern"] == "Autosomal dominant"
+        assert result["rs1"]["hpo_terms"] is not None  # JSON string
+
+        assert "rs2" in result
+        assert result["rs2"]["disease_name"] == "Cystic fibrosis"
+        assert result["rs2"]["inheritance_pattern"] == "Autosomal recessive"
+
+    def test_lookup_gene_phenotype_no_gene_symbol(self, reference_engine: sa.Engine) -> None:
+        """Variants without gene_symbol in VEP data are skipped."""
+        vep_data = {"rs1": {"consequence": "intergenic_variant"}}
+        result = _lookup_gene_phenotype(vep_data, reference_engine)
+        assert len(result) == 0
+
+    def test_lookup_gene_phenotype_unmatched_gene(self, reference_engine: sa.Engine) -> None:
+        """Gene not in gene_phenotype table returns no result."""
+        vep_data = {"rs1": {"gene_symbol": "NONEXISTENT_GENE"}}
+        result = _lookup_gene_phenotype(vep_data, reference_engine)
+        assert "rs1" not in result
+
+    def test_lookup_gene_phenotype_empty_vep(self, reference_engine: sa.Engine) -> None:
+        """Empty VEP data returns empty dict."""
+        result = _lookup_gene_phenotype({}, reference_engine)
+        assert len(result) == 0
+
+    def test_merge_includes_gene_phenotype_bit(self) -> None:
+        """Gene-phenotype data in merge produces GENE_PHENOTYPE_BIT in bitmask."""
+        engine = sa.create_engine("sqlite://")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("CREATE TABLE t (rsid TEXT, chrom TEXT, pos INTEGER, genotype TEXT)")
+            )
+            conn.execute(sa.text("INSERT INTO t VALUES ('rs1', '1', 100, 'AG')"))
+            row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
+
+        vep = {"rs1": {"gene_symbol": "BRCA1"}}
+        gp = {"rs1": {"disease_name": "HBOC", "phenotype_source": "mondo_hpo"}}
+
+        merged = _merge_annotations([row], vep, {}, {}, {}, gp)
+        assert len(merged) == 1
+        assert merged[0]["annotation_coverage"] == VEP_BIT | GENE_PHENOTYPE_BIT
+        assert merged[0]["disease_name"] == "HBOC"
+
+    def test_gene_phenotype_fields_in_annotated_variants(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-15: Full pipeline writes gene-phenotype fields for known gene."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs429358")
+            ).fetchone()
+
+        assert row is not None
+        # rs429358 → APOE gene → "Alzheimer disease susceptibility" in seed CSV
+        assert row.disease_name == "Alzheimer disease susceptibility"
+        assert row.disease_id == "MONDO:0004975"
+        assert row.phenotype_source == "mondo_hpo"
+        assert row.hpo_terms is not None
+        # APOE has no inheritance in seed CSV
+        # Bitmask has GENE_PHENOTYPE_BIT set
+        assert row.annotation_coverage & GENE_PHENOTYPE_BIT == GENE_PHENOTYPE_BIT
+
+    def test_brca1_phenotype_in_pipeline(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-15: BRCA1 variant gets correct disease name and inheritance."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs80357906")
+            ).fetchone()
+
+        assert row is not None
+        assert row.gene_symbol == "BRCA1"
+        assert row.disease_name == "Hereditary breast and ovarian cancer syndrome"
+        assert row.inheritance_pattern == "Autosomal dominant"
+
+    def test_mthfr_phenotype_in_pipeline(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-15: MTHFR variant gets correct phenotype data."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs1801133")
+            ).fetchone()
+
+        assert row is not None
+        assert row.disease_name is not None
+        assert row.phenotype_source == "mondo_hpo"
+        assert row.inheritance_pattern == "Autosomal recessive"
+
+    def test_gene_phenotype_matched_count(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """P2-15: gene_phenotype_matched is tracked in result."""
+        result = run_annotation(sample_with_variants, mock_registry)
+        assert result.gene_phenotype_matched > 0
+
+    def test_gene_phenotype_columns_in_upsert(self) -> None:
+        """P2-15: Gene-phenotype columns are in _UPSERT_COLUMNS."""
+        from backend.annotation.engine import _UPSERT_COLUMNS
+
+        assert "disease_name" in _UPSERT_COLUMNS
+        assert "disease_id" in _UPSERT_COLUMNS
+        assert "phenotype_source" in _UPSERT_COLUMNS
+        assert "hpo_terms" in _UPSERT_COLUMNS
+        assert "inheritance_pattern" in _UPSERT_COLUMNS
+
+    def test_gene_phenotype_bit_constant(self) -> None:
+        """P2-15: GENE_PHENOTYPE_BIT is bit 4 (value 16)."""
+        assert GENE_PHENOTYPE_BIT == 0b010000
+        assert GENE_PHENOTYPE_BIT == 16
+
+    def test_no_phenotype_for_unmatched_gene(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """Variants whose gene is not in gene_phenotype table get no phenotype data."""
+        run_annotation(sample_with_variants, mock_registry)
+
+        with sample_with_variants.connect() as conn:
+            rows = conn.execute(
+                sa.select(annotated_variants).where(annotated_variants.c.disease_name.is_(None))
+            ).fetchall()
+
+        # Some variants should have no phenotype data (gene not in seed CSV
+        # or no VEP gene_symbol)
+        # At minimum, rs_nomatch should not appear at all (no annotations)
+        # but rs12913832 (HERC2) IS in seed CSV, so most VEP-matched variants
+        # will have gene-phenotype data
+        for row in rows:
+            assert row.annotation_coverage & GENE_PHENOTYPE_BIT == 0

@@ -382,6 +382,12 @@ annotated_variants = sa.Table(
         sa.Text,
         comment="valid | merged | i_prefix | invalid",
     ),
+    # Gene-phenotype (bitmask bit 4)
+    sa.Column("disease_name", sa.Text),
+    sa.Column("disease_id", sa.Text, comment="MONDO or OMIM ID"),
+    sa.Column("phenotype_source", sa.Text, comment="mondo_hpo | omim"),
+    sa.Column("hpo_terms", sa.Text, comment="JSON array of HPO term IDs"),
+    sa.Column("inheritance_pattern", sa.Text),
     # Ensemble pathogenicity (dbNSFP-derived)
     sa.Column("deleterious_count", sa.Integer),
     # Evidence & conflict
