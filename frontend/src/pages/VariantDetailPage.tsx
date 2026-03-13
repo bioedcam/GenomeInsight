@@ -6,7 +6,7 @@
  * Tabs: Overview | Population | Protein (stub) | Clinical | Literature (stub) | Genome
  */
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useCallback } from "react"
 import { useParams, useSearchParams, Link } from "react-router-dom"
 import {
   ArrowLeft,
@@ -535,7 +535,7 @@ function GenomeTab({ variant, sampleId }: { variant: VariantDetail; sampleId: nu
       </div>
       <div className="mt-3">
         <Link
-          to={`/genome-browser?locus=chr${variant.chrom}:${variant.pos}&sampleId=${sampleId ?? ""}`}
+          to={`/genome-browser?locus=chr${variant.chrom}:${variant.pos}${sampleId != null ? `&sampleId=${sampleId}` : ""}`}
           className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
         >
           Open full browser <ExternalLink className="h-3.5 w-3.5" />
@@ -666,8 +666,28 @@ export default function VariantDetailPage() {
   const sampleId = Number.isFinite(parsed) ? parsed : null
 
   const [activeTab, setActiveTab] = useState<TabId>("overview")
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const { data: variant, isLoading, error } = useVariantDetail(rsid ?? null, sampleId)
+
+  const handleTabKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+    const count = TABS.length
+    let nextIndex: number | null = null
+    if (e.key === "ArrowRight") {
+      nextIndex = (index + 1) % count
+    } else if (e.key === "ArrowLeft") {
+      nextIndex = (index - 1 + count) % count
+    } else if (e.key === "Home") {
+      nextIndex = 0
+    } else if (e.key === "End") {
+      nextIndex = count - 1
+    }
+    if (nextIndex != null) {
+      e.preventDefault()
+      setActiveTab(TABS[nextIndex].id)
+      tabRefs.current[nextIndex]?.focus()
+    }
+  }, [])
 
   if (isLoading) {
     return (
@@ -742,18 +762,21 @@ export default function VariantDetailPage() {
       {/* Tabs */}
       <div className="border-b border-border px-4" role="tablist" aria-label="Variant detail tabs">
         <div className="flex gap-0 -mb-px overflow-x-auto">
-          {TABS.map((tab) => {
+          {TABS.map((tab, index) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
             return (
               <button
                 key={tab.id}
+                ref={(el) => { tabRefs.current[index] = el }}
                 type="button"
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={isActive}
                 aria-controls={`tabpanel-${tab.id}`}
+                tabIndex={isActive ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(e) => handleTabKeyDown(e, index)}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
                   isActive
