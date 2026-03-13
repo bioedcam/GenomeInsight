@@ -247,8 +247,14 @@ class TestVariantDensity:
         data = response.json()
         b = data["bins"][0]
         expected_fields = (
-            "chrom", "bin_start", "bin_end", "high",
-            "moderate", "low", "modifier", "total",
+            "chrom",
+            "bin_start",
+            "bin_end",
+            "high",
+            "moderate",
+            "low",
+            "modifier",
+            "total",
         )
         for field in expected_fields:
             assert field in b
@@ -269,7 +275,7 @@ class TestVariantDensity:
         assert b["chrom"] == "1"
         assert b["bin_start"] == 0
         assert b["moderate"] == 1  # missense
-        assert b["low"] == 1       # synonymous
+        assert b["low"] == 1  # synonymous
         assert b["high"] == 0
         assert b["modifier"] == 0
         assert b["total"] == 2

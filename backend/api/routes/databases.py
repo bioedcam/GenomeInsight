@@ -347,9 +347,7 @@ async def list_sessions() -> list[SessionResponse]:
                 session_id=row.session_id,
                 status=row.status,
                 created_at=row.created_at.isoformat() if row.created_at else "",
-                databases=[
-                    DownloadJobInfo(db_name=name, job_id=jid) for name, jid in job_entries
-                ],
+                databases=[DownloadJobInfo(db_name=name, job_id=jid) for name, jid in job_entries],
             )
         )
     return result
@@ -385,9 +383,7 @@ async def delete_session(session_id: str) -> None:
 
     with engine.begin() as conn:
         conn.execute(
-            download_session_jobs.delete().where(
-                download_session_jobs.c.session_id == session_id
-            )
+            download_session_jobs.delete().where(download_session_jobs.c.session_id == session_id)
         )
         conn.execute(
             download_sessions.delete().where(download_sessions.c.session_id == session_id)
@@ -468,9 +464,7 @@ def _persist_session(
             )
 
 
-def _load_session_jobs(
-    engine: sa.Engine, session_id: str
-) -> list[tuple[str, str]] | None:
+def _load_session_jobs(engine: sa.Engine, session_id: str) -> list[tuple[str, str]] | None:
     """Load session job entries from the database. Returns None if not found."""
     with engine.connect() as conn:
         # Check session exists
