@@ -1,12 +1,13 @@
-"""Variant table API endpoints (P1-14, P1-15d, P2-23).
+"""Variant table API endpoints (P1-14, P1-15d, P2-23, P2-25).
 
 Cursor-based keyset pagination on (chrom, pos) for raw_variants and
 annotated_variants tables in per-sample databases.
 
-GET  /api/variants              — Paginated variant list
-GET  /api/variants/count        — Total count (async, separate query)
-GET  /api/variants/chromosomes  — Per-chromosome counts
-GET  /api/variants/density      — Per 1 Mb bin density by consequence tier (P2-23)
+GET  /api/variants                    — Paginated variant list
+GET  /api/variants/count              — Total count (async, separate query)
+GET  /api/variants/chromosomes        — Per-chromosome counts
+GET  /api/variants/density            — Per 1 Mb bin density by consequence tier (P2-23)
+GET  /api/variants/consequence-summary — Per-consequence-type counts (P2-25)
 """
 
 from __future__ import annotations
@@ -642,3 +643,69 @@ def variant_density(
     )
 
     return DensityResponse(bins=bins)
+
+
+# ── Consequence summary (P2-25) ──────────────────────────────────
+
+
+class ConsequenceCount(BaseModel):
+    """Single consequence type with its count and tier."""
+
+    consequence: str
+    count: int
+    tier: str
+
+
+class ConsequenceSummaryResponse(BaseModel):
+    """Per-consequence-type variant counts for the donut chart (P2-25)."""
+
+    items: list[ConsequenceCount]
+    total: int
+
+
+@router.get("/consequence-summary")
+def consequence_summary(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> ConsequenceSummaryResponse:
+    """Return variant counts grouped by VEP consequence type.
+
+    Each item includes the SO consequence term, its count, and impact tier
+    (HIGH / MODERATE / LOW / MODIFIER). Used by the consequence donut chart.
+    Results are sorted by count descending.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    has_consequence = hasattr(table.c, "consequence")
+
+    if has_consequence:
+        query = (
+            sa.select(
+                table.c.consequence,
+                sa.func.count().label("cnt"),
+            )
+            .select_from(table)
+            .group_by(table.c.consequence)
+        )
+    else:
+        # raw_variants: no consequence column, everything is unknown
+        query = sa.select(
+            sa.literal(None).label("consequence"),
+            sa.func.count().label("cnt"),
+        ).select_from(table)
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    items: list[ConsequenceCount] = []
+    total = 0
+    for row in rows:
+        consequence = row.consequence or "unknown"
+        tier = _consequence_to_tier(row.consequence)
+        items.append(ConsequenceCount(consequence=consequence, count=row.cnt, tier=tier))
+        total += row.cnt
+
+    # Sort by count descending
+    items.sort(key=lambda x: x.count, reverse=True)
+
+    return ConsequenceSummaryResponse(items=items, total=total)

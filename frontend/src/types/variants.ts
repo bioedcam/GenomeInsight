@@ -98,6 +98,19 @@ export interface DensityResponse {
   bin_size: number
 }
 
+/** Single consequence type with count and tier (P2-25). */
+export interface ConsequenceCount {
+  consequence: string
+  count: number
+  tier: string
+}
+
+/** Per-consequence-type variant counts for the donut chart (P2-25). */
+export interface ConsequenceSummaryResponse {
+  items: ConsequenceCount[]
+  total: number
+}
+
 /** Column preset profile (P1-15c). */
 export interface ColumnPreset {
   name: string
