@@ -5,9 +5,12 @@ Personal genomics analysis platform for 23andMe raw data.
 ## Quick Start
 
 ```bash
-make setup    # Install Python + frontend dependencies
-make run      # Start the API server
-make test     # Run tests
+git clone https://github.com/bioedcam/GenomeInsight.git
+cd GenomeInsight
+conda activate GI        # Python 3.12+ environment
+make setup               # Install Python + frontend dependencies
+make test                 # Run all tests (~10 s)
+make dev                  # Start backend (port 8000) + frontend (port 5173)
 ```
 
 ## Requirements
@@ -20,19 +23,36 @@ make test     # Run tests
 **Backend only:**
 
 ```bash
-cd backend && uvicorn main:app --reload
+make run-api
+# or: uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 **Frontend only:**
 
 ```bash
-cd frontend && npm run dev
+make run-frontend
+# or: cd frontend && npm run dev
 ```
 
-**Full stack:**
+**Full stack (backend + frontend):**
 
 ```bash
 make dev
+```
+
+**Run tests:**
+
+```bash
+make test              # All tests (backend + frontend)
+make test-backend      # Backend only (pytest)
+make test-frontend     # Frontend only (vitest)
+```
+
+**Lint / format:**
+
+```bash
+make lint              # Check with Ruff
+make format            # Auto-fix with Ruff
 ```
 
 ### Python environment
