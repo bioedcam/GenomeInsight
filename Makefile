@@ -30,7 +30,7 @@ run: run-api  ## Start the API server (default)
 
 dev:  ## Start backend + frontend dev servers concurrently
 	@echo "Starting API server (port 8000) and Vite dev server (port 5173)..."
-	@$(MAKE) run-api & $(MAKE) run-frontend & wait
+	@trap 'kill 0' INT TERM; $(MAKE) run-api & $(MAKE) run-frontend & wait
 
 run-api:  ## Start FastAPI dev server
 	uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
