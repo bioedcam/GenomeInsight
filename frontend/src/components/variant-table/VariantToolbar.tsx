@@ -1,6 +1,6 @@
-/** Variant table toolbar: search + unannotated toggle + preset selector + filter badge (P1-15a, P1-15c, P1-15e). */
+/** Variant table toolbar: search + unannotated toggle + conflicts-only toggle + preset selector + filter badge (P1-15a, P1-15c, P1-15e, P2-22). */
 
-import { Search, Eye, EyeOff, X } from "lucide-react"
+import { Search, Eye, EyeOff, AlertTriangle, X } from "lucide-react"
 import ColumnPresets from "./ColumnPresets"
 import { filterLabel } from "./filterSuggestions"
 
@@ -9,6 +9,8 @@ interface VariantToolbarProps {
   onSearchChange: (query: string) => void
   showUnannotated: boolean
   onToggleUnannotated: () => void
+  showConflictsOnly: boolean
+  onToggleConflictsOnly: () => void
   unannotatedCount: number | undefined
   totalCount: number | undefined
   totalCountLoading: boolean
@@ -24,6 +26,8 @@ export default function VariantToolbar({
   onSearchChange,
   showUnannotated,
   onToggleUnannotated,
+  showConflictsOnly,
+  onToggleConflictsOnly,
   unannotatedCount,
   totalCount,
   totalCountLoading,
@@ -69,6 +73,22 @@ export default function VariantToolbar({
           {showUnannotated ? "Showing" : "Show"} unannotated
           {unannotatedCount != null && ` (${unannotatedCount.toLocaleString()})`}
         </span>
+      </button>
+
+      {/* Conflicts only toggle (P2-22) */}
+      <button
+        type="button"
+        onClick={onToggleConflictsOnly}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+          showConflictsOnly
+            ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : "border-input bg-background text-muted-foreground hover:text-foreground"
+        }`}
+        aria-pressed={showConflictsOnly}
+        aria-label={showConflictsOnly ? "Show all variants" : "Show conflicts only"}
+      >
+        <AlertTriangle className="h-4 w-4" />
+        <span>Conflicts only</span>
       </button>
 
       {/* Active filter badge (P1-15e) */}
