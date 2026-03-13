@@ -1,8 +1,11 @@
+import PlaceholderPage from "@/components/PlaceholderPage"
+
 export default function APOEView() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">APOE</h1>
-      <p className="text-muted-foreground mt-2">APOE genotype analysis will appear here.</p>
-    </div>
+    <PlaceholderPage
+      moduleName="APOE"
+      phase={3}
+      description="APOE genotype determination with Alzheimer's risk, cardiovascular, and longevity findings — includes opt-in disclosure gate."
+    />
   )
 }

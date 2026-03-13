@@ -1,8 +1,11 @@
+import PlaceholderPage from "@/components/PlaceholderPage"
+
 export default function CancerView() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Cancer Risk</h1>
-      <p className="text-muted-foreground mt-2">Cancer gene panel analysis will appear here.</p>
-    </div>
+    <PlaceholderPage
+      moduleName="Cancer"
+      phase={3}
+      description="Cancer gene panel analysis — BRCA1/2, TP53, PALB2, and more with monogenic and polygenic risk scoring."
+    />
   )
 }
