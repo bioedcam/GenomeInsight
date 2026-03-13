@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ci": "bash -c 'vitest run 2>&1 | tee /dev/stderr | (grep -q \"not wrapped in act\" && exit 1 || exit 0)'"
+    "test:ci": "bash -c 'set -o pipefail; vitest run 2>&1 | tee /tmp/vitest.log; VITEST_EXIT=$?; grep -q \"not wrapped in act\" /tmp/vitest.log && exit 1; exit $VITEST_EXIT'"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
