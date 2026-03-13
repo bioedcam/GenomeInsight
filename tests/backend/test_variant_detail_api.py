@@ -449,6 +449,138 @@ class TestEvidenceConflictDetail:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+VEP_TRANSCRIPT_ROWS = [
+    {
+        "rsid": "rs80357906",
+        "gene": "BRCA1",
+        "tid": "NM_007294.4",
+        "csq": "frameshift_variant",
+        "hgvsc": "c.5266dupC",
+        "hgvsp": "p.Gln1756Profs*74",
+        "strand": "+",
+        "exon": 11,
+        "intron": None,
+        "mane": 1,
+        "chrom": "17",
+        "pos": 43094464,
+    },
+    {
+        "rsid": "rs80357906",
+        "gene": "BRCA1",
+        "tid": "NM_007300.4",
+        "csq": "frameshift_variant",
+        "hgvsc": "c.5100dupC",
+        "hgvsp": "p.Gln1701Profs*74",
+        "strand": "+",
+        "exon": 10,
+        "intron": None,
+        "mane": 0,
+        "chrom": "17",
+        "pos": 43094464,
+    },
+    {
+        "rsid": "rs80357906",
+        "gene": "BRCA1",
+        "tid": "ENST00000357654.9",
+        "csq": "frameshift_variant",
+        "hgvsc": "c.5266dupC",
+        "hgvsp": "p.Gln1756Profs*74",
+        "strand": "+",
+        "exon": 11,
+        "intron": None,
+        "mane": 0,
+        "chrom": "17",
+        "pos": 43094464,
+    },
+]
+
+
+def _setup_vep_client(tmp_data_dir: Path, transcript_rows: list[dict]):
+    """Create TestClient with VEP bundle configured."""
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+
+    ref_engine = sa.create_engine(f"sqlite:///{settings.reference_db_path}")
+    reference_metadata.create_all(ref_engine)
+    with ref_engine.begin() as conn:
+        result = conn.execute(
+            samples.insert().values(
+                name="test_vep",
+                db_path="samples/sample_1.db",
+                file_format="23andme_v5",
+                file_hash="vep_hash",
+            )
+        )
+        sample_id = result.lastrowid
+    ref_engine.dispose()
+
+    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+    create_sample_tables(sample_engine)
+    all_cols = {col.name for col in annotated_variants.c}
+    with sample_engine.begin() as conn:
+        conn.execute(
+            annotated_variants.insert(),
+            [{k: SAMPLE_VARIANT_BRCA1.get(k) for k in all_cols}],
+        )
+    sample_engine.dispose()
+
+    vep_db_path = tmp_data_dir / "vep_bundle.db"
+    vep_engine = sa.create_engine(f"sqlite:///{vep_db_path}")
+    with vep_engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "CREATE TABLE vep_annotations ("
+                "  rsid TEXT, gene_symbol TEXT, transcript_id TEXT,"
+                "  consequence TEXT, hgvs_coding TEXT, hgvs_protein TEXT,"
+                "  strand TEXT, exon_number INTEGER, intron_number INTEGER,"
+                "  mane_select INTEGER, chrom TEXT, pos INTEGER"
+                ")"
+            )
+        )
+        conn.execute(
+            sa.text(
+                "INSERT INTO vep_annotations VALUES "
+                "(:rsid, :gene, :tid, :csq, :hgvsc, :hgvsp,"
+                " :strand, :exon, :intron, :mane, :chrom, :pos)"
+            ),
+            transcript_rows,
+        )
+
+    with (
+        patch("backend.main.get_settings", return_value=settings),
+        patch("backend.db.connection.get_settings", return_value=settings),
+        patch("backend.api.routes.variant_detail.get_registry") as mock_reg,
+        patch("backend.api.routes.annotations_api.get_registry") as mock_reg2,
+        patch("backend.api.routes.variants.get_registry") as mock_reg3,
+        patch("backend.api.routes.ingest.get_registry") as mock_reg4,
+        patch("backend.api.routes.samples.get_registry") as mock_reg5,
+    ):
+        reset_registry()
+        registry = DBRegistry(settings)
+        registry._vep_engine = vep_engine
+        mock_reg.return_value = registry
+        mock_reg2.return_value = registry
+        mock_reg3.return_value = registry
+        mock_reg4.return_value = registry
+        mock_reg5.return_value = registry
+
+        from backend.main import create_app
+
+        app = create_app()
+        with TestClient(app) as tc:
+            yield tc, sample_id
+
+        registry.dispose_all()
+        reset_registry()
+    vep_engine.dispose()
+
+
+@pytest.fixture
+def vep_client(tmp_data_dir: Path):
+    """Client with VEP bundle containing multiple transcripts."""
+    yield from _setup_vep_client(tmp_data_dir, VEP_TRANSCRIPT_ROWS)
+
+
 class TestTranscripts:
     def test_transcripts_empty_when_vep_unavailable(self, client):
         """When VEP bundle is not available, transcripts list is empty."""
@@ -457,256 +589,47 @@ class TestTranscripts:
         # VEP bundle is not set up in test env, so transcripts should be []
         assert data["transcripts"] == []
 
-    def test_transcripts_returned_from_vep_bundle(self, tmp_data_dir):
+    def test_transcripts_returned_from_vep_bundle(self, vep_client):
         """When VEP bundle is available, all transcripts are returned."""
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+        tc, sample_id = vep_client
+        resp = tc.get(f"/api/variants/rs80357906?sample_id={sample_id}")
+        assert resp.status_code == 200
+        data = resp.json()
 
-        # Set up reference DB
-        ref_engine = sa.create_engine(f"sqlite:///{settings.reference_db_path}")
-        reference_metadata.create_all(ref_engine)
-        with ref_engine.begin() as conn:
-            result = conn.execute(
-                samples.insert().values(
-                    name="test_vep",
-                    db_path="samples/sample_1.db",
-                    file_format="23andme_v5",
-                    file_hash="vep_hash",
-                )
-            )
-            sample_id = result.lastrowid
-        ref_engine.dispose()
+        assert len(data["transcripts"]) == 3
 
-        # Set up sample DB
-        sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
-        sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
-        create_sample_tables(sample_engine)
-        all_cols = {col.name for col in annotated_variants.c}
-        with sample_engine.begin() as conn:
-            conn.execute(
-                annotated_variants.insert(),
-                [{k: SAMPLE_VARIANT_BRCA1.get(k) for k in all_cols}],
-            )
-        sample_engine.dispose()
+        # Check MANE Select transcript is flagged
+        mane = [t for t in data["transcripts"] if t["mane_select"]]
+        assert len(mane) == 1
+        assert mane[0]["transcript_id"] == "NM_007294.4"
 
-        # Create a mock VEP bundle DB with multiple transcripts
-        vep_db_path = tmp_data_dir / "vep_bundle.db"
-        vep_engine = sa.create_engine(f"sqlite:///{vep_db_path}")
-        with vep_engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "CREATE TABLE vep_annotations ("
-                    "  rsid TEXT, gene_symbol TEXT, transcript_id TEXT,"
-                    "  consequence TEXT, hgvs_coding TEXT, hgvs_protein TEXT,"
-                    "  strand TEXT, exon_number INTEGER, intron_number INTEGER,"
-                    "  mane_select INTEGER, chrom TEXT, pos INTEGER"
-                    ")"
-                )
-            )
-            conn.execute(
-                sa.text(
-                    "INSERT INTO vep_annotations VALUES "
-                    "(:rsid, :gene, :tid, :csq, :hgvsc, :hgvsp,"
-                    " :strand, :exon, :intron, :mane, :chrom, :pos)"
-                ),
-                [
-                    {
-                        "rsid": "rs80357906",
-                        "gene": "BRCA1",
-                        "tid": "NM_007294.4",
-                        "csq": "frameshift_variant",
-                        "hgvsc": "c.5266dupC",
-                        "hgvsp": "p.Gln1756Profs*74",
-                        "strand": "+",
-                        "exon": 11,
-                        "intron": None,
-                        "mane": 1,
-                        "chrom": "17",
-                        "pos": 43094464,
-                    },
-                    {
-                        "rsid": "rs80357906",
-                        "gene": "BRCA1",
-                        "tid": "NM_007300.4",
-                        "csq": "frameshift_variant",
-                        "hgvsc": "c.5100dupC",
-                        "hgvsp": "p.Gln1701Profs*74",
-                        "strand": "+",
-                        "exon": 10,
-                        "intron": None,
-                        "mane": 0,
-                        "chrom": "17",
-                        "pos": 43094464,
-                    },
-                    {
-                        "rsid": "rs80357906",
-                        "gene": "BRCA1",
-                        "tid": "ENST00000357654.9",
-                        "csq": "frameshift_variant",
-                        "hgvsc": "c.5266dupC",
-                        "hgvsp": "p.Gln1756Profs*74",
-                        "strand": "+",
-                        "exon": 11,
-                        "intron": None,
-                        "mane": 0,
-                        "chrom": "17",
-                        "pos": 43094464,
-                    },
-                ],
-            )
+        # Check non-MANE transcripts
+        non_mane = [t for t in data["transcripts"] if not t["mane_select"]]
+        assert len(non_mane) == 2
+        tids = {t["transcript_id"] for t in non_mane}
+        assert "NM_007300.4" in tids
+        assert "ENST00000357654.9" in tids
 
-        with (
-            patch("backend.main.get_settings", return_value=settings),
-            patch("backend.db.connection.get_settings", return_value=settings),
-            patch("backend.api.routes.variant_detail.get_registry") as mock_reg,
-            patch("backend.api.routes.annotations_api.get_registry") as mock_reg2,
-            patch("backend.api.routes.variants.get_registry") as mock_reg3,
-            patch("backend.api.routes.ingest.get_registry") as mock_reg4,
-            patch("backend.api.routes.samples.get_registry") as mock_reg5,
-        ):
-            reset_registry()
-            registry = DBRegistry(settings)
-            # Manually set VEP engine
-            registry._vep_engine = vep_engine
-            mock_reg.return_value = registry
-            mock_reg2.return_value = registry
-            mock_reg3.return_value = registry
-            mock_reg4.return_value = registry
-            mock_reg5.return_value = registry
-
-            from backend.main import create_app
-
-            app = create_app()
-            with TestClient(app) as tc:
-                resp = tc.get(f"/api/variants/rs80357906?sample_id={sample_id}")
-                assert resp.status_code == 200
-                data = resp.json()
-
-                assert len(data["transcripts"]) == 3
-
-                # Check MANE Select transcript is flagged
-                mane = [t for t in data["transcripts"] if t["mane_select"]]
-                assert len(mane) == 1
-                assert mane[0]["transcript_id"] == "NM_007294.4"
-
-                # Check non-MANE transcripts
-                non_mane = [t for t in data["transcripts"] if not t["mane_select"]]
-                assert len(non_mane) == 2
-                tids = {t["transcript_id"] for t in non_mane}
-                assert "NM_007300.4" in tids
-                assert "ENST00000357654.9" in tids
-
-            registry.dispose_all()
-            reset_registry()
-        vep_engine.dispose()
-
-    def test_transcripts_contain_expected_fields(self, tmp_data_dir):
+    def test_transcripts_contain_expected_fields(self, vep_client):
         """Each transcript entry has the correct fields."""
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-
-        ref_engine = sa.create_engine(f"sqlite:///{settings.reference_db_path}")
-        reference_metadata.create_all(ref_engine)
-        with ref_engine.begin() as conn:
-            result = conn.execute(
-                samples.insert().values(
-                    name="test_fields",
-                    db_path="samples/sample_1.db",
-                    file_format="23andme_v5",
-                    file_hash="hash_fields",
-                )
-            )
-            sample_id = result.lastrowid
-        ref_engine.dispose()
-
-        sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
-        sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
-        create_sample_tables(sample_engine)
-        all_cols = {col.name for col in annotated_variants.c}
-        with sample_engine.begin() as conn:
-            conn.execute(
-                annotated_variants.insert(),
-                [{k: SAMPLE_VARIANT_BRCA1.get(k) for k in all_cols}],
-            )
-        sample_engine.dispose()
-
-        vep_db_path = tmp_data_dir / "vep_bundle.db"
-        vep_engine = sa.create_engine(f"sqlite:///{vep_db_path}")
-        with vep_engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "CREATE TABLE vep_annotations ("
-                    "  rsid TEXT, gene_symbol TEXT, transcript_id TEXT,"
-                    "  consequence TEXT, hgvs_coding TEXT, hgvs_protein TEXT,"
-                    "  strand TEXT, exon_number INTEGER, intron_number INTEGER,"
-                    "  mane_select INTEGER, chrom TEXT, pos INTEGER"
-                    ")"
-                )
-            )
-            conn.execute(
-                sa.text(
-                    "INSERT INTO vep_annotations VALUES "
-                    "(:rsid, :gene, :tid, :csq, :hgvsc, :hgvsp,"
-                    " :strand, :exon, :intron, :mane, :chrom, :pos)"
-                ),
-                [
-                    {
-                        "rsid": "rs80357906",
-                        "gene": "BRCA1",
-                        "tid": "NM_007294.4",
-                        "csq": "frameshift_variant",
-                        "hgvsc": "c.5266dupC",
-                        "hgvsp": "p.Gln1756Profs*74",
-                        "strand": "+",
-                        "exon": 11,
-                        "intron": None,
-                        "mane": 1,
-                        "chrom": "17",
-                        "pos": 43094464,
-                    },
-                ],
-            )
-
-        with (
-            patch("backend.main.get_settings", return_value=settings),
-            patch("backend.db.connection.get_settings", return_value=settings),
-            patch("backend.api.routes.variant_detail.get_registry") as mock_reg,
-            patch("backend.api.routes.annotations_api.get_registry") as mock_reg2,
-            patch("backend.api.routes.variants.get_registry") as mock_reg3,
-            patch("backend.api.routes.ingest.get_registry") as mock_reg4,
-            patch("backend.api.routes.samples.get_registry") as mock_reg5,
-        ):
-            reset_registry()
-            registry = DBRegistry(settings)
-            registry._vep_engine = vep_engine
-            mock_reg.return_value = registry
-            mock_reg2.return_value = registry
-            mock_reg3.return_value = registry
-            mock_reg4.return_value = registry
-            mock_reg5.return_value = registry
-
-            from backend.main import create_app
-
-            app = create_app()
-            with TestClient(app) as tc:
-                data = tc.get(f"/api/variants/rs80357906?sample_id={sample_id}").json()
-                t = data["transcripts"][0]
-                expected_keys = {
-                    "transcript_id",
-                    "gene_symbol",
-                    "consequence",
-                    "hgvs_coding",
-                    "hgvs_protein",
-                    "strand",
-                    "exon_number",
-                    "intron_number",
-                    "mane_select",
-                }
-                assert expected_keys <= set(t.keys())
-                assert t["transcript_id"] == "NM_007294.4"
-                assert t["gene_symbol"] == "BRCA1"
-
-            registry.dispose_all()
-            reset_registry()
-        vep_engine.dispose()
+        tc, sample_id = vep_client
+        data = tc.get(f"/api/variants/rs80357906?sample_id={sample_id}").json()
+        t = data["transcripts"][0]
+        expected_keys = {
+            "transcript_id",
+            "gene_symbol",
+            "consequence",
+            "hgvs_coding",
+            "hgvs_protein",
+            "strand",
+            "exon_number",
+            "intron_number",
+            "mane_select",
+        }
+        assert expected_keys <= set(t.keys())
+        # At least one transcript should be BRCA1
+        brca1 = [t for t in data["transcripts"] if t["gene_symbol"] == "BRCA1"]
+        assert len(brca1) > 0
 
 
 # ═══════════════════════════════════════════════════════════════════════

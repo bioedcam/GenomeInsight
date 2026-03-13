@@ -193,8 +193,8 @@ def _fetch_all_transcripts(rsid: str) -> list[TranscriptAnnotation]:
     registry = get_registry()
     try:
         vep_engine = registry.vep_engine
-    except Exception:
-        logger.debug("VEP bundle not available for transcript lookup")
+    except Exception as exc:
+        logger.debug("VEP bundle not available for transcript lookup: %s", exc)
         return []
 
     try:
@@ -204,8 +204,8 @@ def _fetch_all_transcripts(rsid: str) -> list[TranscriptAnnotation]:
                 f"WHERE rsid = :rsid"
             )
             rows = conn.execute(stmt, {"rsid": rsid}).fetchall()
-    except Exception:
-        logger.debug("VEP bundle query failed for %s", rsid)
+    except Exception as exc:
+        logger.debug("VEP bundle query failed for %s: %s", rsid, exc)
         return []
 
     return [
@@ -321,7 +321,7 @@ def _build_evidence_conflict_detail(
     if has_conflict:
         sig_text = clinvar_sig or "unknown"
         stars_text = f" ({clinvar_stars}-star review)" if clinvar_stars is not None else ""
-        n_del = len(deleterious_tools)
+        n_del = deleterious_count if deleterious_count else len(deleterious_tools)
         tools_text = f"{n_del} of {total_assessed} in-silico tools predict deleterious"
         cadd_text = f" (CADD: {cadd})" if cadd is not None else ""
         summary = (
