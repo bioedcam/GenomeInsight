@@ -106,11 +106,16 @@ def _count_alt_alleles(genotype: str, ref: str, alt: str) -> int | None:
     return count
 
 
+_SQLITE_BATCH = 500  # Stay well under SQLITE_MAX_VARIABLE_NUMBER (999)
+
+
 def _fetch_sample_genotypes(
     rsids: list[str],
     sample_engine: sa.Engine,
 ) -> dict[str, str]:
     """Fetch raw genotypes for a list of rsids from the sample database.
+
+    Batches the IN clause to stay under SQLite's variable limit.
 
     Args:
         rsids: List of rsid strings to look up.
@@ -122,16 +127,20 @@ def _fetch_sample_genotypes(
     if not rsids:
         return {}
 
+    results: dict[str, str] = {}
+
     with sample_engine.connect() as conn:
-        # Batch query with IN clause
-        stmt = sa.select(
-            raw_variants.c.rsid,
-            raw_variants.c.genotype,
-        ).where(raw_variants.c.rsid.in_(rsids))
+        for i in range(0, len(rsids), _SQLITE_BATCH):
+            batch = rsids[i : i + _SQLITE_BATCH]
+            stmt = sa.select(
+                raw_variants.c.rsid,
+                raw_variants.c.genotype,
+            ).where(raw_variants.c.rsid.in_(batch))
 
-        rows = conn.execute(stmt).fetchall()
+            for row in conn.execute(stmt).fetchall():
+                results[row.rsid] = row.genotype
 
-    return {row.rsid: row.genotype for row in rows}
+    return results
 
 
 def _fetch_alleles_for_gene(
