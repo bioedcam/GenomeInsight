@@ -1,9 +1,18 @@
 """Pharmacogenomics star-allele calling via CPIC lookup tables.
 
-Implements P3-02: pure SQLite joins — rsid genotype → star allele component
-→ diplotype inference → phenotype lookup. No PyPGx dependency.
+Implements P3-02 and P3-03: pure SQLite joins — rsid genotype → star allele
+component → diplotype inference → phenotype lookup → three-state calling
+confidence. No PyPGx dependency.
 
 Supported genes: CYP2D6, CYP2C19, CYP2C9, CYP3A5, SLCO1B1, DPYD, TPMT, UGT1A1.
+
+Three-state calling model (P3-03):
+    Complete   ✅ — All defining rsids present and genotyped, no structural
+                    variant ambiguity.
+    Partial    ⚠️ — SNP-based alleles called, but structural variants
+                    (copy number, gene conversion) cannot be excluded from
+                    array data. Phenotype shown as provisional.
+    Insufficient ❌ — Key defining rsids not on the 23andMe array.
 
 Algorithm:
     1. For each CPIC gene, load allele definitions from reference.db
@@ -13,6 +22,7 @@ Algorithm:
        most defining variants take priority — handles phasing ambiguity
        per CPIC unphased-data guidelines)
     5. Look up the resulting diplotype in cpic_diplotypes → phenotype
+    6. Assign call confidence (Complete/Partial/Insufficient)
 
 Usage::
 
@@ -20,11 +30,12 @@ Usage::
 
     results = call_all_star_alleles(reference_engine, sample_engine)
     for r in results:
-        print(f"{r.gene}: {r.diplotype} → {r.phenotype}")
+        print(f"{r.gene}: {r.diplotype} → {r.phenotype} ({r.call_confidence})")
 """
 
 from __future__ import annotations
 
+import enum
 import json
 import re
 from dataclasses import dataclass, field
@@ -38,6 +49,28 @@ from backend.db.tables import cpic_alleles, cpic_diplotypes, raw_variants
 logger = structlog.get_logger(__name__)
 
 _STAR_ALLELE_RE = re.compile(r"^\*?(\d+)(.*)")
+
+# Genes with known structural variant complexity (copy number variation,
+# gene conversion, hybrid alleles) that array genotyping cannot resolve.
+# These always receive "Partial" confidence at best.
+STRUCTURAL_VARIANT_GENES: frozenset[str] = frozenset({"CYP2D6", "CYP2B6"})
+
+
+class CallConfidence(enum.Enum):
+    """Three-state calling confidence for pharmacogenomics (P3-03).
+
+    Complete:     All defining rsids present and genotyped; no structural
+                  variant ambiguity. Safe to report as definitive.
+    Partial:      SNP-based alleles called, but structural variants (copy
+                  number, gene conversion) cannot be excluded from array
+                  data. Phenotype shown as provisional.
+    Insufficient: Key defining rsids not on the array or could not be
+                  genotyped. Call is unreliable.
+    """
+
+    COMPLETE = "Complete"
+    PARTIAL = "Partial"
+    INSUFFICIENT = "Insufficient"
 
 
 def _allele_sort_key(name: str) -> tuple[int, str]:
@@ -66,6 +99,8 @@ class StarAlleleResult:
     involved_rsids: set[str] = field(default_factory=set)
     missing_rsids: set[str] = field(default_factory=set)
     uncalled_rsids: set[str] = field(default_factory=set)
+    call_confidence: CallConfidence = CallConfidence.COMPLETE
+    confidence_note: str = ""
 
 
 def _count_alt_alleles(genotype: str, ref: str, alt: str) -> int | None:
@@ -225,6 +260,72 @@ def _fetch_diplotype_phenotype(
     }
 
 
+def _assess_call_confidence(
+    gene: str,
+    all_defining_rsids: set[str],
+    missing_rsids: set[str],
+    uncalled_rsids: set[str],
+) -> tuple[CallConfidence, str]:
+    """Determine three-state calling confidence for a gene (P3-03).
+
+    Args:
+        gene: Gene symbol.
+        all_defining_rsids: All rsids that define non-reference alleles.
+        missing_rsids: Rsids not present in the sample at all.
+        uncalled_rsids: Rsids present but with invalid/no-call genotypes.
+
+    Returns:
+        Tuple of (CallConfidence, human-readable note).
+    """
+    unusable = missing_rsids | uncalled_rsids
+    total = len(all_defining_rsids)
+
+    # No defining rsids means reference-only gene — trivially complete
+    if total == 0:
+        if gene in STRUCTURAL_VARIANT_GENES:
+            return (
+                CallConfidence.PARTIAL,
+                f"{gene} has structural variant complexity (copy number "
+                "variation, gene conversion) that cannot be resolved from "
+                "array data. Phenotype is provisional.",
+            )
+        return (CallConfidence.COMPLETE, "All defining positions assessed.")
+
+    unusable_fraction = len(unusable) / total
+
+    # Insufficient: >50% of defining rsids missing/uncalled
+    if unusable_fraction > 0.5:
+        missing_list = ", ".join(sorted(unusable)[:5])
+        suffix = f" (and {len(unusable) - 5} more)" if len(unusable) > 5 else ""
+        return (
+            CallConfidence.INSUFFICIENT,
+            f"{len(unusable)}/{total} defining positions for {gene} are "
+            f"missing or uncalled: {missing_list}{suffix}. "
+            "Star-allele call is unreliable.",
+        )
+
+    # Partial: structural variant genes always partial (even if all SNPs ok)
+    if gene in STRUCTURAL_VARIANT_GENES:
+        return (
+            CallConfidence.PARTIAL,
+            f"{gene} has structural variant complexity (copy number "
+            "variation, gene conversion) that cannot be resolved from "
+            "array data. Phenotype is provisional.",
+        )
+
+    # Partial: some (≤50%) defining rsids missing/uncalled
+    if unusable:
+        missing_list = ", ".join(sorted(unusable))
+        return (
+            CallConfidence.PARTIAL,
+            f"{len(unusable)}/{total} defining positions for {gene} are "
+            f"missing or uncalled ({missing_list}). Call may be incomplete.",
+        )
+
+    # Complete: all defining rsids present and genotyped
+    return (CallConfidence.COMPLETE, "All defining positions assessed.")
+
+
 def call_star_alleles_for_gene(
     gene: str,
     alleles: list[dict],
@@ -332,6 +433,11 @@ def call_star_alleles_for_gene(
     # Look up diplotype → phenotype
     diplo_data = _fetch_diplotype_phenotype(gene, diplotype, reference_engine)
 
+    # Assess three-state call confidence (P3-03)
+    call_confidence, confidence_note = _assess_call_confidence(
+        gene, all_defining_rsids, missing_rsids, uncalled_rsids
+    )
+
     return StarAlleleResult(
         gene=gene,
         allele1=allele1,
@@ -343,6 +449,8 @@ def call_star_alleles_for_gene(
         involved_rsids=involved_rsids,
         missing_rsids=missing_rsids,
         uncalled_rsids=uncalled_rsids,
+        call_confidence=call_confidence,
+        confidence_note=confidence_note,
     )
 
 
@@ -399,6 +507,7 @@ def call_all_star_alleles(
             gene=gene,
             diplotype=result.diplotype,
             phenotype=result.phenotype,
+            call_confidence=result.call_confidence.value,
             involved_rsids=sorted(result.involved_rsids),
             missing_rsids=sorted(result.missing_rsids),
         )
