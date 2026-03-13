@@ -111,6 +111,18 @@ export interface ConsequenceSummaryResponse {
   total: number
 }
 
+/** Single ClinVar significance category with count (P2-26). */
+export interface ClinvarSignificanceCount {
+  significance: string
+  count: number
+}
+
+/** ClinVar significance breakdown for bar chart (P2-26). */
+export interface ClinvarSummaryResponse {
+  items: ClinvarSignificanceCount[]
+  total: number
+}
+
 /** Column preset profile (P1-15c). */
 export interface ColumnPreset {
   name: string

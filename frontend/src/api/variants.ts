@@ -9,6 +9,7 @@ import type {
   QCStats,
   DensityResponse,
   ConsequenceSummaryResponse,
+  ClinvarSummaryResponse,
 } from "@/types/variants"
 
 const PAGE_SIZE = 100
@@ -200,6 +201,27 @@ export function useConsequenceSummary(sampleId: number | null) {
       if (!res.ok) {
         const text = await res.text().catch(() => "")
         throw new Error(`Consequence summary failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * ClinVar significance breakdown — per-significance counts for the bar chart (P2-26).
+ * Cached with staleTime: Infinity since variant data doesn't change.
+ */
+export function useClinvarSummary(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["variants-clinvar-summary", sampleId],
+    queryFn: async (): Promise<ClinvarSummaryResponse> => {
+      const params = new URLSearchParams({ sample_id: String(sampleId!) })
+      const res = await fetch(`/api/variants/clinvar-summary?${params}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`ClinVar summary failed: ${res.status}${text ? ` - ${text}` : ""}`)
       }
       return res.json()
     },

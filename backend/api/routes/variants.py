@@ -1,4 +1,4 @@
-"""Variant table API endpoints (P1-14, P1-15d, P2-23, P2-25).
+"""Variant table API endpoints (P1-14, P1-15d, P2-23, P2-25, P2-26).
 
 Cursor-based keyset pagination on (chrom, pos) for raw_variants and
 annotated_variants tables in per-sample databases.
@@ -8,6 +8,7 @@ GET  /api/variants/count              — Total count (async, separate query)
 GET  /api/variants/chromosomes        — Per-chromosome counts
 GET  /api/variants/density            — Per 1 Mb bin density by consequence tier (P2-23)
 GET  /api/variants/consequence-summary — Per-consequence-type counts (P2-25)
+GET  /api/variants/clinvar-summary    — ClinVar significance breakdown (P2-26)
 """
 
 from __future__ import annotations
@@ -709,3 +710,69 @@ def consequence_summary(
     items.sort(key=lambda x: x.count, reverse=True)
 
     return ConsequenceSummaryResponse(items=items, total=total)
+
+
+# ── ClinVar significance breakdown (P2-26) ──────────────────────
+
+
+class ClinvarSignificanceCount(BaseModel):
+    """Single ClinVar significance category with its count."""
+
+    significance: str
+    count: int
+
+
+class ClinvarSummaryResponse(BaseModel):
+    """ClinVar significance breakdown for bar chart (P2-26)."""
+
+    items: list[ClinvarSignificanceCount]
+    total: int
+
+
+@router.get("/clinvar-summary")
+def clinvar_summary(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> ClinvarSummaryResponse:
+    """Return variant counts grouped by ClinVar significance.
+
+    Each item includes the ClinVar significance string and its count.
+    Used by the ClinVar significance breakdown bar chart.
+    Results are sorted by count descending.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    has_clinvar = hasattr(table.c, "clinvar_significance")
+
+    if not has_clinvar:
+        # raw_variants table has no clinvar column
+        return ClinvarSummaryResponse(items=[], total=0)
+
+    query = (
+        sa.select(
+            table.c.clinvar_significance,
+            sa.func.count().label("cnt"),
+        )
+        .select_from(table)
+        .where(table.c.clinvar_significance.isnot(None))
+        .group_by(table.c.clinvar_significance)
+    )
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    items: list[ClinvarSignificanceCount] = []
+    total = 0
+    for row in rows:
+        items.append(
+            ClinvarSignificanceCount(
+                significance=row.clinvar_significance,
+                count=row.cnt,
+            )
+        )
+        total += row.cnt
+
+    # Sort by count descending
+    items.sort(key=lambda x: x.count, reverse=True)
+
+    return ClinvarSummaryResponse(items=items, total=total)
