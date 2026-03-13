@@ -32,9 +32,11 @@ from backend.analysis.pharmacogenomics import (
     call_star_alleles_for_gene,
     generate_prescribing_alerts,
     store_prescribing_alerts,
+    update_annotation_coverage_cpic,
 )
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
+    annotated_variants,
     cpic_alleles,
     cpic_diplotypes,
     cpic_guidelines,
@@ -1648,8 +1650,6 @@ class TestUpdateAnnotationCoverageCpic:
         annotated: list[dict],
     ) -> sa.Engine:
         """Create sample engine with raw_variants and pre-populated annotated_variants."""
-        from backend.db.tables import annotated_variants
-
         engine = sa.create_engine("sqlite://")
         create_sample_tables(engine)
         if raw:
@@ -1662,8 +1662,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_sets_bit4_on_involved_variants(self):
         """Variants involved in star-allele calls get bit 4 (16) set."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
-        from backend.db.tables import annotated_variants
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1722,8 +1720,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_null_annotation_coverage_gets_cpic_bit(self):
         """Variant with NULL annotation_coverage gets CPIC bit set to 16."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
-        from backend.db.tables import annotated_variants
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1765,7 +1761,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_no_involved_rsids_returns_zero(self):
         """Star-allele results with no involved rsids → 0 updates."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
 
         sample = self._make_sample_with_annotated(raw=[], annotated=[])
 
@@ -1786,7 +1781,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_empty_results_returns_zero(self):
         """Empty star-allele results list → 0 updates."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
 
         sample = self._make_sample_with_annotated(raw=[], annotated=[])
         updated = update_annotation_coverage_cpic([], sample)
@@ -1794,8 +1788,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_multiple_genes_involved_rsids_combined(self):
         """Rsids from multiple genes are combined and all get bit 4."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
-        from backend.db.tables import annotated_variants
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1860,8 +1852,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_idempotent_or(self):
         """ORing bit 4 when already set is idempotent."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
-        from backend.db.tables import annotated_variants
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1902,7 +1892,6 @@ class TestUpdateAnnotationCoverageCpic:
 
     def test_variant_not_in_annotated_table_skipped(self):
         """Rsids in involved_rsids but not in annotated_variants → not counted."""
-        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
 
         sample = self._make_sample_with_annotated(
             raw=[
