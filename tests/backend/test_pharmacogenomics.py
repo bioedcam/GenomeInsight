@@ -1632,3 +1632,296 @@ class TestPrescribingAlertIntegration:
 
         count = store_prescribing_alerts(alerts, sample)
         assert count == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# update_annotation_coverage_cpic (P3-04a)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestUpdateAnnotationCoverageCpic:
+    """Test that CPIC bitmask bit 4 (value 16) is ORed into annotation_coverage."""
+
+    def _make_sample_with_annotated(
+        self,
+        raw: list[dict],
+        annotated: list[dict],
+    ) -> sa.Engine:
+        """Create sample engine with raw_variants and pre-populated annotated_variants."""
+        from backend.db.tables import annotated_variants
+
+        engine = sa.create_engine("sqlite://")
+        create_sample_tables(engine)
+        if raw:
+            with engine.begin() as conn:
+                conn.execute(raw_variants.insert(), raw)
+        if annotated:
+            with engine.begin() as conn:
+                conn.execute(annotated_variants.insert(), annotated)
+        return engine
+
+    def test_sets_bit4_on_involved_variants(self):
+        """Variants involved in star-allele calls get bit 4 (16) set."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+        from backend.db.tables import annotated_variants
+
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs9999999", "chrom": "1", "pos": 100, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs4244285",
+                    "chrom": "10",
+                    "pos": 96541616,
+                    "genotype": "GA",
+                    "annotation_coverage": 0b001111,
+                },  # bits 0-3 set (VEP+ClinVar+gnomAD+dbNSFP)
+                {
+                    "rsid": "rs9999999",
+                    "chrom": "1",
+                    "pos": 100,
+                    "genotype": "CC",
+                    "annotation_coverage": 0b000011,
+                },  # bits 0-1 set
+            ],
+        )
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                phenotype="Intermediate Metabolizer",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+                involved_rsids={"rs4244285"},
+            ),
+        ]
+
+        updated = update_annotation_coverage_cpic(results, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            rows = {
+                r.rsid: r.annotation_coverage
+                for r in conn.execute(
+                    sa.select(
+                        annotated_variants.c.rsid,
+                        annotated_variants.c.annotation_coverage,
+                    )
+                ).fetchall()
+            }
+
+        # rs4244285: 0b001111 | 0b010000 = 0b011111 = 31
+        assert rows["rs4244285"] == 0b011111
+        # rs9999999: unchanged (not involved in CPIC)
+        assert rows["rs9999999"] == 0b000011
+
+    def test_null_annotation_coverage_gets_cpic_bit(self):
+        """Variant with NULL annotation_coverage gets CPIC bit set to 16."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+        from backend.db.tables import annotated_variants
+
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs4244285",
+                    "chrom": "10",
+                    "pos": 96541616,
+                    "genotype": "GA",
+                    "annotation_coverage": None,
+                },
+            ],
+        )
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                involved_rsids={"rs4244285"},
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="",
+            ),
+        ]
+
+        updated = update_annotation_coverage_cpic(results, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            row = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs4244285"
+                )
+            ).scalar()
+        assert row == 16  # CPIC_BIT only
+
+    def test_no_involved_rsids_returns_zero(self):
+        """Star-allele results with no involved rsids → 0 updates."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+
+        sample = self._make_sample_with_annotated(raw=[], annotated=[])
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*1",
+                diplotype="*1/*1",
+                involved_rsids=set(),
+                call_confidence=CallConfidence.INSUFFICIENT,
+                confidence_note="All missing.",
+            ),
+        ]
+
+        updated = update_annotation_coverage_cpic(results, sample)
+        assert updated == 0
+
+    def test_empty_results_returns_zero(self):
+        """Empty star-allele results list → 0 updates."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+
+        sample = self._make_sample_with_annotated(raw=[], annotated=[])
+        updated = update_annotation_coverage_cpic([], sample)
+        assert updated == 0
+
+    def test_multiple_genes_involved_rsids_combined(self):
+        """Rsids from multiple genes are combined and all get bit 4."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+        from backend.db.tables import annotated_variants
+
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs3892097", "chrom": "22", "pos": 42524947, "genotype": "TT"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs4244285",
+                    "chrom": "10",
+                    "pos": 96541616,
+                    "genotype": "GA",
+                    "annotation_coverage": 1,
+                },
+                {
+                    "rsid": "rs3892097",
+                    "chrom": "22",
+                    "pos": 42524947,
+                    "genotype": "TT",
+                    "annotation_coverage": 3,
+                },
+            ],
+        )
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                involved_rsids={"rs4244285"},
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="",
+            ),
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*4",
+                allele2="*4",
+                diplotype="*4/*4",
+                involved_rsids={"rs3892097"},
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="SV.",
+            ),
+        ]
+
+        updated = update_annotation_coverage_cpic(results, sample)
+        assert updated == 2
+
+        with sample.connect() as conn:
+            rows = {
+                r.rsid: r.annotation_coverage
+                for r in conn.execute(
+                    sa.select(
+                        annotated_variants.c.rsid,
+                        annotated_variants.c.annotation_coverage,
+                    )
+                ).fetchall()
+            }
+
+        assert rows["rs4244285"] == 1 | 16  # 17
+        assert rows["rs3892097"] == 3 | 16  # 19
+
+    def test_idempotent_or(self):
+        """ORing bit 4 when already set is idempotent."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+        from backend.db.tables import annotated_variants
+
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs4244285",
+                    "chrom": "10",
+                    "pos": 96541616,
+                    "genotype": "GA",
+                    "annotation_coverage": 0b011111,
+                },  # bit 4 already set
+            ],
+        )
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                involved_rsids={"rs4244285"},
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="",
+            ),
+        ]
+
+        update_annotation_coverage_cpic(results, sample)
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs4244285"
+                )
+            ).scalar()
+        assert val == 0b011111  # unchanged
+
+    def test_variant_not_in_annotated_table_skipped(self):
+        """Rsids in involved_rsids but not in annotated_variants → not counted."""
+        from backend.analysis.pharmacogenomics import update_annotation_coverage_cpic
+
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+            ],
+            annotated=[],  # no annotated_variants rows
+        )
+
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                involved_rsids={"rs4244285"},
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="",
+            ),
+        ]
+
+        updated = update_annotation_coverage_cpic(results, sample)
+        assert updated == 0
