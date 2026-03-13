@@ -1,9 +1,11 @@
 """Setup wizard API routes for database management (P1-18).
 
 Endpoints:
-    GET  /api/databases          — List all databases with download status
-    POST /api/databases/download — Trigger parallel download of selected databases
-    GET  /api/databases/progress — SSE stream with per-database progress events
+    GET    /api/databases                       — List all databases with download status
+    POST   /api/databases/download              — Trigger parallel download of selected databases
+    GET    /api/databases/progress/{session_id}  — SSE stream with per-database progress events
+    GET    /api/databases/sessions               — List all download sessions
+    DELETE /api/databases/sessions/{session_id}  — Delete a download session
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import asyncio
 import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -31,11 +34,33 @@ from backend.db.database_registry import (
     get_database_status,
 )
 from backend.db.download_manager import DownloadManager
-from backend.db.tables import jobs
+from backend.db.tables import download_session_jobs, download_sessions, jobs
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/databases", tags=["databases"])
+
+
+# ── Module-level download executor (singleton) ──────────────────────
+# Bounded to 4 workers. Shut down via shutdown_executor() in lifespan.
+
+_download_executor: ThreadPoolExecutor | None = None
+
+
+def get_download_executor() -> ThreadPoolExecutor:
+    """Return the module-level download executor, creating it if needed."""
+    global _download_executor  # noqa: PLW0603
+    if _download_executor is None:
+        _download_executor = ThreadPoolExecutor(max_workers=4)
+    return _download_executor
+
+
+def shutdown_executor() -> None:
+    """Shut down the download executor. Called from FastAPI lifespan."""
+    global _download_executor  # noqa: PLW0603
+    if _download_executor is not None:
+        _download_executor.shutdown(wait=False)
+        _download_executor = None
 
 
 # ── Response models ──────────────────────────────────────────────────
@@ -84,7 +109,16 @@ class DownloadJobInfo(BaseModel):
     job_id: str
 
 
-# ── Active download sessions ────────────────────────────────────────
+class SessionResponse(BaseModel):
+    """Status of a single download session."""
+
+    session_id: str
+    status: str
+    created_at: str
+    databases: list[DownloadJobInfo]
+
+
+# ── Active download sessions (in-memory cache) ──────────────────────
 # Maps session_id -> list of (db_name, job_id) pairs for SSE progress.
 
 _active_sessions: dict[str, list[tuple[str, str]]] = {}
@@ -161,7 +195,7 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
     session_entries: list[tuple[str, str]] = []
 
     dm = DownloadManager(engine, settings.downloads_dir)
-    executor = ThreadPoolExecutor(max_workers=min(len(to_download), 4))
+    executor = get_download_executor()
 
     for name in to_download:
         db_info = get_database(name)
@@ -184,12 +218,12 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
             job_id=job_id,
             engine=engine,
             settings=settings,
+            session_id=session_id,
         )
 
+    # Persist session in-memory and in database
     _active_sessions[session_id] = session_entries
-
-    # Don't block — executor threads run in background
-    # (ThreadPoolExecutor is not shut down; threads are daemon-like)
+    _persist_session(engine, session_id, session_entries)
 
     logger.info(
         "database_download_started",
@@ -213,11 +247,17 @@ async def download_progress(session_id: str) -> StreamingResponse:
     Emits ``progress`` events with per-database status until all downloads
     in the session reach a terminal state (complete/failed).
     """
-    if session_id not in _active_sessions:
+    # Try in-memory first, fall back to DB lookup
+    entries = _active_sessions.get(session_id)
+    if entries is None:
+        entries = _load_session_jobs(get_registry().reference_engine, session_id)
+        if entries is not None:
+            _active_sessions[session_id] = entries
+
+    if entries is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     engine = get_registry().reference_engine
-    entries = _active_sessions[session_id]
 
     async def event_stream():
         terminal_states = {"complete", "failed", "cancelled"}
@@ -264,8 +304,9 @@ async def download_progress(session_id: str) -> StreamingResponse:
             )
 
             if all_terminal:
-                # Clean up session
+                # Update session status and clean up in-memory cache
                 _active_sessions.pop(session_id, None)
+                _update_session_status(engine, session_id, "complete")
                 return
 
             await asyncio.sleep(poll_interval)
@@ -281,13 +322,186 @@ async def download_progress(session_id: str) -> StreamingResponse:
     )
 
 
+# ── GET /api/databases/sessions ───────────────────────────────────────
+
+
+@router.get("/sessions", response_model=list[SessionResponse])
+async def list_sessions() -> list[SessionResponse]:
+    """List all download sessions with their status."""
+    engine = get_registry().reference_engine
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(
+                download_sessions.c.session_id,
+                download_sessions.c.status,
+                download_sessions.c.created_at,
+            ).order_by(download_sessions.c.created_at.desc())
+        ).fetchall()
+
+    result = []
+    for row in rows:
+        job_entries = _load_session_jobs(engine, row.session_id) or []
+        result.append(
+            SessionResponse(
+                session_id=row.session_id,
+                status=row.status,
+                created_at=row.created_at.isoformat() if row.created_at else "",
+                databases=[
+                    DownloadJobInfo(db_name=name, job_id=jid) for name, jid in job_entries
+                ],
+            )
+        )
+    return result
+
+
+# ── DELETE /api/databases/sessions/{session_id} ───────────────────────
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> None:
+    """Delete a download session record.
+
+    Only sessions in terminal states (complete, failed, interrupted, stale)
+    can be deleted. In-progress sessions must finish or be interrupted first.
+    """
+    engine = get_registry().reference_engine
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa.select(download_sessions.c.status).where(
+                download_sessions.c.session_id == session_id
+            )
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    if row.status == "in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete an in-progress session. "
+            "Wait for it to finish or restart the server.",
+        )
+
+    with engine.begin() as conn:
+        conn.execute(
+            download_session_jobs.delete().where(
+                download_session_jobs.c.session_id == session_id
+            )
+        )
+        conn.execute(
+            download_sessions.delete().where(download_sessions.c.session_id == session_id)
+        )
+
+    _active_sessions.pop(session_id, None)
+    logger.info("download_session_deleted", session_id=session_id)
+
+
+# ── Session lifecycle (startup cleanup) ──────────────────────────────
+
+
+def cleanup_interrupted_sessions(engine: sa.Engine) -> int:
+    """Mark in-progress sessions as interrupted/stale on server startup.
+
+    Called from the FastAPI lifespan hook. Returns the number of sessions
+    that were marked as interrupted or stale.
+    """
+    now = datetime.now(UTC)
+    one_hour_ago = now.replace(hour=max(now.hour - 1, 0)) if now.hour > 0 else now
+
+    count = 0
+    with engine.begin() as conn:
+        # Mark recent in-progress sessions as interrupted
+        result = conn.execute(
+            download_sessions.update()
+            .where(
+                download_sessions.c.status == "in_progress",
+                download_sessions.c.created_at > one_hour_ago,
+            )
+            .values(status="interrupted", updated_at=now)
+        )
+        count += result.rowcount
+
+        # Mark old in-progress sessions (> 1 hour) as stale
+        result = conn.execute(
+            download_sessions.update()
+            .where(
+                download_sessions.c.status == "in_progress",
+                download_sessions.c.created_at <= one_hour_ago,
+            )
+            .values(status="stale", updated_at=now)
+        )
+        count += result.rowcount
+
+    if count > 0:
+        logger.info("download_sessions_cleaned_up", count=count)
+
+    return count
+
+
 # ── Internal helpers ─────────────────────────────────────────────────
+
+
+def _persist_session(
+    engine: sa.Engine,
+    session_id: str,
+    entries: list[tuple[str, str]],
+) -> None:
+    """Persist a download session and its jobs to the database."""
+    now = datetime.now(UTC)
+    with engine.begin() as conn:
+        conn.execute(
+            download_sessions.insert().values(
+                session_id=session_id,
+                status="in_progress",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        for db_name, job_id in entries:
+            conn.execute(
+                download_session_jobs.insert().values(
+                    session_id=session_id,
+                    db_name=db_name,
+                    job_id=job_id,
+                )
+            )
+
+
+def _load_session_jobs(
+    engine: sa.Engine, session_id: str
+) -> list[tuple[str, str]] | None:
+    """Load session job entries from the database. Returns None if not found."""
+    with engine.connect() as conn:
+        # Check session exists
+        session = conn.execute(
+            sa.select(download_sessions.c.session_id).where(
+                download_sessions.c.session_id == session_id
+            )
+        ).fetchone()
+        if session is None:
+            return None
+
+        rows = conn.execute(
+            sa.select(download_session_jobs.c.db_name, download_session_jobs.c.job_id).where(
+                download_session_jobs.c.session_id == session_id
+            )
+        ).fetchall()
+
+    return [(row.db_name, row.job_id) for row in rows]
+
+
+def _update_session_status(engine: sa.Engine, session_id: str, status: str) -> None:
+    """Update session status in the database."""
+    with engine.begin() as conn:
+        conn.execute(
+            download_sessions.update()
+            .where(download_sessions.c.session_id == session_id)
+            .values(status=status, updated_at=datetime.now(UTC))
+        )
 
 
 def _create_job_record(engine: sa.Engine, job_id: str, db_name: str) -> None:
     """Create a job record for SSE tracking before download starts."""
-    from datetime import UTC, datetime
-
     now = datetime.now(UTC)
     with engine.begin() as conn:
         conn.execute(
@@ -311,6 +525,7 @@ def _run_download(
     job_id: str,
     engine: sa.Engine,
     settings: Settings,
+    session_id: str,
 ) -> None:
     """Execute a single database download in a background thread.
 
@@ -397,8 +612,6 @@ def _update_job(
     error: str | None = None,
 ) -> None:
     """Update a job record."""
-    from datetime import UTC, datetime
-
     with engine.begin() as conn:
         conn.execute(
             jobs.update()

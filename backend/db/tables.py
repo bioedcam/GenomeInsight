@@ -113,6 +113,37 @@ downloads = sa.Table(
     sa.Column("updated_at", sa.DateTime),
 )
 
+# ── Download Sessions ─────────────────────────────────────────────────
+
+download_sessions = sa.Table(
+    "download_sessions",
+    reference_metadata,
+    sa.Column("session_id", sa.Text, primary_key=True),
+    sa.Column(
+        "status",
+        sa.Text,
+        nullable=False,
+        server_default="in_progress",
+        comment="in_progress | complete | failed | interrupted | stale",
+    ),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+download_session_jobs = sa.Table(
+    "download_session_jobs",
+    reference_metadata,
+    sa.Column(
+        "session_id",
+        sa.Text,
+        sa.ForeignKey("download_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    ),
+    sa.Column("db_name", sa.Text, nullable=False, primary_key=True),
+    sa.Column("job_id", sa.Text, nullable=False),
+)
+
 # ── ClinVar Variants ──────────────────────────────────────────────────
 
 clinvar_variants = sa.Table(
