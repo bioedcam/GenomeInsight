@@ -98,97 +98,105 @@ SEED_CLINVAR = [
 def _create_vep_bundle(db_path: Path) -> None:
     """Build a mini VEP bundle SQLite from the seed CSV."""
     engine = sa.create_engine(f"sqlite:///{db_path}")
-    with engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                "CREATE TABLE vep_annotations ("
-                "  rsid TEXT, chrom TEXT, pos INTEGER,"
-                "  ref TEXT, alt TEXT, gene_symbol TEXT,"
-                "  transcript_id TEXT, consequence TEXT,"
-                "  hgvs_coding TEXT, hgvs_protein TEXT,"
-                "  strand TEXT, exon_number INTEGER,"
-                "  intron_number INTEGER, mane_select INTEGER"
-                ")"
-            )
-        )
-        conn.execute(sa.text("CREATE INDEX idx_vep_rsid ON vep_annotations(rsid)"))
-        with open(VEP_SEED_CSV, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                conn.execute(
-                    sa.text(
-                        "INSERT INTO vep_annotations "
-                        "(rsid, chrom, pos, ref, alt, gene_symbol, "
-                        "transcript_id, consequence, hgvs_coding, "
-                        "hgvs_protein, strand, exon_number, "
-                        "intron_number, mane_select) "
-                        "VALUES (:rsid, :chrom, :pos, :ref, :alt, "
-                        ":gene_symbol, :transcript_id, :consequence, "
-                        ":hgvs_coding, :hgvs_protein, :strand, "
-                        ":exon_number, :intron_number, :mane_select)"
-                    ),
-                    {
-                        "rsid": row["rsid"],
-                        "chrom": row["chrom"],
-                        "pos": int(row["pos"]),
-                        "ref": row["ref"],
-                        "alt": row["alt"],
-                        "gene_symbol": row["gene_symbol"],
-                        "transcript_id": row["transcript_id"],
-                        "consequence": row["consequence"],
-                        "hgvs_coding": row["hgvs_coding"] or None,
-                        "hgvs_protein": row["hgvs_protein"] or None,
-                        "strand": row["strand"],
-                        "exon_number": (int(row["exon_number"]) if row["exon_number"] else None),
-                        "intron_number": (
-                            int(row["intron_number"]) if row["intron_number"] else None
-                        ),
-                        "mane_select": int(row["mane_select"]),
-                    },
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE vep_annotations ("
+                    "  rsid TEXT, chrom TEXT, pos INTEGER,"
+                    "  ref TEXT, alt TEXT, gene_symbol TEXT,"
+                    "  transcript_id TEXT, consequence TEXT,"
+                    "  hgvs_coding TEXT, hgvs_protein TEXT,"
+                    "  strand TEXT, exon_number INTEGER,"
+                    "  intron_number INTEGER, mane_select INTEGER"
+                    ")"
                 )
-    engine.dispose()
+            )
+            conn.execute(sa.text("CREATE INDEX idx_vep_rsid ON vep_annotations(rsid)"))
+            with open(VEP_SEED_CSV, encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    conn.execute(
+                        sa.text(
+                            "INSERT INTO vep_annotations "
+                            "(rsid, chrom, pos, ref, alt, gene_symbol, "
+                            "transcript_id, consequence, hgvs_coding, "
+                            "hgvs_protein, strand, exon_number, "
+                            "intron_number, mane_select) "
+                            "VALUES (:rsid, :chrom, :pos, :ref, :alt, "
+                            ":gene_symbol, :transcript_id, :consequence, "
+                            ":hgvs_coding, :hgvs_protein, :strand, "
+                            ":exon_number, :intron_number, :mane_select)"
+                        ),
+                        {
+                            "rsid": row["rsid"],
+                            "chrom": row["chrom"],
+                            "pos": int(row["pos"]),
+                            "ref": row["ref"],
+                            "alt": row["alt"],
+                            "gene_symbol": row["gene_symbol"],
+                            "transcript_id": row["transcript_id"],
+                            "consequence": row["consequence"],
+                            "hgvs_coding": row["hgvs_coding"] or None,
+                            "hgvs_protein": row["hgvs_protein"] or None,
+                            "strand": row["strand"],
+                            "exon_number": (
+                                int(row["exon_number"]) if row["exon_number"] else None
+                            ),
+                            "intron_number": (
+                                int(row["intron_number"]) if row["intron_number"] else None
+                            ),
+                            "mane_select": int(row["mane_select"]),
+                        },
+                    )
+    finally:
+        engine.dispose()
 
 
 def _create_gnomad_db(db_path: Path) -> None:
     """Build a mini gnomAD SQLite from the seed CSV."""
     engine = sa.create_engine(f"sqlite:///{db_path}")
-    create_gnomad_tables(engine)
-    with engine.begin() as conn:
-        with open(GNOMAD_SEED_CSV, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                conn.execute(
-                    sa.text(
-                        "INSERT INTO gnomad_af VALUES "
-                        "(:rsid, :chrom, :pos, :ref, :alt, :af_global, "
-                        ":af_afr, :af_amr, :af_eas, :af_eur, :af_fin, "
-                        ":af_sas, :homozygous_count)"
-                    ),
-                    {
-                        "rsid": row["rsid"],
-                        "chrom": row["chrom"],
-                        "pos": int(row["pos"]),
-                        "ref": row["ref"],
-                        "alt": row["alt"],
-                        "af_global": float(row["af_global"]),
-                        "af_afr": float(row["af_afr"]),
-                        "af_amr": float(row["af_amr"]),
-                        "af_eas": float(row["af_eas"]),
-                        "af_eur": float(row["af_eur"]),
-                        "af_fin": float(row["af_fin"]),
-                        "af_sas": float(row["af_sas"]),
-                        "homozygous_count": int(row["homozygous_count"]),
-                    },
-                )
-    engine.dispose()
+    try:
+        create_gnomad_tables(engine)
+        with engine.begin() as conn:
+            with open(GNOMAD_SEED_CSV, encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    conn.execute(
+                        sa.text(
+                            "INSERT INTO gnomad_af VALUES "
+                            "(:rsid, :chrom, :pos, :ref, :alt, :af_global, "
+                            ":af_afr, :af_amr, :af_eas, :af_eur, :af_fin, "
+                            ":af_sas, :homozygous_count)"
+                        ),
+                        {
+                            "rsid": row["rsid"],
+                            "chrom": row["chrom"],
+                            "pos": int(row["pos"]),
+                            "ref": row["ref"],
+                            "alt": row["alt"],
+                            "af_global": float(row["af_global"]),
+                            "af_afr": float(row["af_afr"]),
+                            "af_amr": float(row["af_amr"]),
+                            "af_eas": float(row["af_eas"]),
+                            "af_eur": float(row["af_eur"]),
+                            "af_fin": float(row["af_fin"]),
+                            "af_sas": float(row["af_sas"]),
+                            "homozygous_count": int(row["homozygous_count"]),
+                        },
+                    )
+    finally:
+        engine.dispose()
 
 
 def _create_dbnsfp_db(db_path: Path) -> None:
     """Build a mini dbNSFP SQLite from the seed CSV."""
     engine = sa.create_engine(f"sqlite:///{db_path}")
-    create_dbnsfp_tables(engine)
-    load_dbnsfp_from_csv(DBNSFP_SEED_CSV, engine, clear_existing=False)
-    engine.dispose()
+    try:
+        create_dbnsfp_tables(engine)
+        load_dbnsfp_from_csv(DBNSFP_SEED_CSV, engine, clear_existing=False)
+    finally:
+        engine.dispose()
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────
@@ -356,13 +364,14 @@ class TestE2EPipeline:
 
         # rs1801133 (MTHFR) should have ClinVar drug_response
         resp = e2e_client.get(
-            f"/api/variants/{sample_id}/rs1801133",
+            "/api/variants/rs1801133",
+            params={"sample_id": sample_id},
         )
-        if resp.status_code == 200:
-            detail = resp.json()
-            assert detail["clinvar_significance"] == "drug_response"
-            assert detail["clinvar_review_stars"] == 2
-            assert "Homocysteinemia" in (detail.get("clinvar_conditions") or "")
+        assert resp.status_code == 200, f"Expected rs1801133 in sample: {resp.text}"
+        detail = resp.json()
+        assert detail["clinvar_significance"] == "drug_response"
+        assert detail["clinvar_review_stars"] == 2
+        assert "Homocysteinemia" in (detail.get("clinvar_conditions") or "")
 
     def test_vep_annotation_present(self, e2e_client: TestClient) -> None:
         """VEP annotation populates gene_symbol and consequence."""
