@@ -113,7 +113,7 @@ class CPICGuideline:
     guideline_url: str | None = None
 
 
-def _parse_float(value: str) -> float | None:
+def _parse_float(value: str | None) -> float | None:
     """Safely parse a float from a CSV field."""
     if not value or value.strip() == "":
         return None
@@ -448,6 +448,7 @@ def load_cpic_from_csvs(
     engine: sa.Engine,
     *,
     clear_existing: bool = True,
+    version: str | None = None,
 ) -> CPICLoadStats:
     """Full pipeline: parse all three CPIC CSVs and load into reference.db.
 
@@ -457,6 +458,7 @@ def load_cpic_from_csvs(
         guidelines_csv: Path to drug guidelines CSV.
         engine: SQLAlchemy engine for reference.db.
         clear_existing: Whether to DELETE existing rows first.
+        version: Optional version string. Defaults to current date (YYYYMMDD).
 
     Returns:
         CPICLoadStats with counts and metadata.
@@ -484,11 +486,11 @@ def load_cpic_from_csvs(
     stats.sha256 = combined_hash.hexdigest()
 
     # Record version
-    version = datetime.now(UTC).strftime("%Y%m%d")
-    stats.version = version
+    resolved_version = version or datetime.now(UTC).strftime("%Y%m%d")
+    stats.version = resolved_version
     record_cpic_version(
         engine,
-        version=version,
+        version=resolved_version,
         checksum=stats.sha256,
     )
 
@@ -498,10 +500,6 @@ def load_cpic_from_csvs(
 # ═══════════════════════════════════════════════════════════════════════
 # CPIC Lookup Functions (for star-allele calling in P3-02)
 # ═══════════════════════════════════════════════════════════════════════
-
-# Lookup batch size (stay under SQLite 999-variable limit)
-LOOKUP_BATCH_SIZE = 500
-
 
 def lookup_alleles_by_gene(
     gene: str,
