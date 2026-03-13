@@ -116,9 +116,7 @@ def upgrade() -> None:
         sa.Column("gene_symbol", sa.Text),
         sa.Column("variation_id", sa.Integer),
     )
-    op.create_index(
-        "idx_clinvar_chrom_pos", "clinvar_variants", ["chrom", "pos"]
-    )
+    op.create_index("idx_clinvar_chrom_pos", "clinvar_variants", ["chrom", "pos"])
 
     # ── MONDO/HPO Gene-Phenotype ─────────────────────────────────────
     op.create_table(
@@ -192,9 +190,7 @@ def upgrade() -> None:
         sa.Column("year", sa.Integer),
         sa.Column("fetched_at", sa.DateTime, server_default=sa.func.now()),
     )
-    op.create_index(
-        "idx_literature_gene_pmid", "literature_cache", ["gene", "pmid"], unique=True
-    )
+    op.create_index("idx_literature_gene_pmid", "literature_cache", ["gene", "pmid"], unique=True)
 
     # ── UniProt Cache ────────────────────────────────────────────────
     op.create_table(
@@ -231,9 +227,7 @@ def upgrade() -> None:
         sa.Column("dismissed", sa.Boolean, server_default=sa.text("0")),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
     )
-    op.create_index(
-        "idx_reannotation_sample", "reannotation_prompts", ["sample_id"]
-    )
+    op.create_index("idx_reannotation_sample", "reannotation_prompts", ["sample_id"])
 
     # ── GWAS Catalog ─────────────────────────────────────────────────
     op.create_table(

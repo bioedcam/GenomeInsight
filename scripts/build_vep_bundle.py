@@ -79,9 +79,20 @@ CREATE TABLE IF NOT EXISTS bundle_metadata (
 
 # Column names for INSERT
 COLUMNS = [
-    "rsid", "chrom", "pos", "ref", "alt", "gene_symbol",
-    "transcript_id", "consequence", "hgvs_coding", "hgvs_protein",
-    "strand", "exon_number", "intron_number", "mane_select",
+    "rsid",
+    "chrom",
+    "pos",
+    "ref",
+    "alt",
+    "gene_symbol",
+    "transcript_id",
+    "consequence",
+    "hgvs_coding",
+    "hgvs_protein",
+    "strand",
+    "exon_number",
+    "intron_number",
+    "mane_select",
 ]
 
 INSERT_SQL = (
@@ -385,7 +396,11 @@ def parse_vep_vcf(
                 key = (rsid, alt)
                 if key not in best_by_variant:
                     best_by_variant[key] = VEPRecord(
-                        rsid=rsid, chrom=chrom, pos=pos, ref=ref, alt=alt,
+                        rsid=rsid,
+                        chrom=chrom,
+                        pos=pos,
+                        ref=ref,
+                        alt=alt,
                     )
                     best_severity[key] = -1
                 continue
@@ -465,9 +480,7 @@ def parse_vep_vcf(
         if record.consequence:
             # Count the primary (first) consequence term
             primary = record.consequence.split("&")[0]
-            stats.consequence_counts[primary] = (
-                stats.consequence_counts.get(primary, 0) + 1
-            )
+            stats.consequence_counts[primary] = stats.consequence_counts.get(primary, 0) + 1
         if record.mane_select:
             stats.mane_select_count += 1
 
@@ -506,9 +519,7 @@ def load_seed_csv(csv_path: Path, stats: BuildStats) -> list[dict]:
                 stats.unique_genes.add(row["gene_symbol"])
             if row.get("consequence"):
                 primary = row["consequence"].split("&")[0]
-                stats.consequence_counts[primary] = (
-                    stats.consequence_counts.get(primary, 0) + 1
-                )
+                stats.consequence_counts[primary] = stats.consequence_counts.get(primary, 0) + 1
             if row.get("mane_select"):
                 stats.mane_select_count += 1
 
@@ -571,6 +582,7 @@ def build_bundle_db(
         # Store metadata
         if build_date is None:
             from datetime import UTC, datetime
+
             build_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
         metadata = {

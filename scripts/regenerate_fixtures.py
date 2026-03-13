@@ -450,14 +450,10 @@ def build_reference_db(
             rows = _load_csv(csv_path, schema)
             table_rows[table_name] = (schema, rows)
             if dry_run:
-                summary.append(
-                    f"  [dry-run] {table_name}: {len(rows)} rows from {csv_name}"
-                )
+                summary.append(f"  [dry-run] {table_name}: {len(rows)} rows from {csv_name}")
         else:
             if dry_run:
-                summary.append(
-                    f"  [dry-run] {table_name}: SKIP (no {csv_name})"
-                )
+                summary.append(f"  [dry-run] {table_name}: SKIP (no {csv_name})")
 
     if dry_run:
         for table_name in REFERENCE_EMPTY_TABLES:
@@ -481,9 +477,7 @@ def build_reference_db(
                     columns = list(rows[0].keys())
                     insert = _insert_sql(table_name, columns)
                     conn.executemany(insert, rows)
-                    summary.append(
-                        f"  {table_name}: {len(rows)} rows"
-                    )
+                    summary.append(f"  {table_name}: {len(rows)} rows")
                 else:
                     summary.append(f"  {table_name}: 0 rows")
             else:
@@ -529,10 +523,7 @@ def build_standalone_db(
     rows = _load_csv(csv_path, schema)
 
     if dry_run:
-        summary.append(
-            f"[dry-run] Would create {db_path}: "
-            f"{table_name} with {len(rows)} rows"
-        )
+        summary.append(f"[dry-run] Would create {db_path}: {table_name} with {len(rows)} rows")
         return summary
 
     # Remove old DB if present
@@ -552,10 +543,7 @@ def build_standalone_db(
             conn.execute(idx_sql)
 
     size = db_path.stat().st_size
-    summary.append(
-        f"Created {db_path} ({_human_size(size)}): "
-        f"{table_name} with {len(rows)} rows"
-    )
+    summary.append(f"Created {db_path} ({_human_size(size)}): {table_name} with {len(rows)} rows")
     return summary
 
 
@@ -613,8 +601,14 @@ def main(argv: list[str] | None = None) -> None:
             continue
         print(f"--- {db_name} ---")
         for line in build_standalone_db(
-            csv_name, db_name, table_name, schema, indexes,
-            seed_dir, output_dir, dry_run=dry_run,
+            csv_name,
+            db_name,
+            table_name,
+            schema,
+            indexes,
+            seed_dir,
+            output_dir,
+            dry_run=dry_run,
         ):
             print(line)
         print()

@@ -161,8 +161,11 @@ export default function ChromosomeIdeogram({ bins }: ChromosomeIdeogramProps) {
             len: 0.5,
             tickfont: { size: 10 },
           },
-          hovertext: hoverText,
-          hovertemplate: '%{hovertext}<extra></extra>',
+          // Plotly.js heatmap supports 2D text arrays, but @types/plotly.js types are too narrow.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          text: hoverText as any,
+          hovertemplate: '%{text}<extra></extra>',
+          hoverinfo: 'text',
           xgap: 0,
           ygap: 1,
           zmin: 0,
