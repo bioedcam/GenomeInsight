@@ -474,7 +474,9 @@ describe("VariantToolbar", () => {
       const variantCalls = calls.filter(
         (url) => url.includes("/api/variants?") && !url.includes("count") && !url.includes("chromosomes"),
       )
-      const conflictCall = variantCalls.find((url) => url.includes("evidence_conflict"))
+      const conflictCall = variantCalls.find(
+        (url) => url.includes("evidence_conflict%3A1") || url.includes("evidence_conflict:1"),
+      )
       expect(conflictCall).toBeDefined()
     })
   })
