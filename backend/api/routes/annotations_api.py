@@ -257,41 +257,6 @@ def _row_to_annotated_variant(row: sa.Row) -> AnnotatedVariantRow:
     return AnnotatedVariantRow(**data)
 
 
-# ── Common filter params ─────────────────────────────────────────────
-
-# Extracted as a helper to avoid repeating query params across endpoints.
-
-
-def _filter_params(
-    chrom: str | None,
-    gene_symbol: str | None,
-    consequence: str | None,
-    clinvar: str | None,
-    af_max: float | None,
-    af_min: float | None,
-    rare: bool | None,
-    ultra_rare: bool | None,
-    evidence_conflict: bool | None,
-    ensemble_pathogenic: bool | None,
-    zygosity: str | None,
-    mane_select: bool | None,
-) -> list[sa.ColumnElement]:
-    return _build_filters(
-        chrom=chrom,
-        gene_symbol=gene_symbol,
-        consequence=consequence,
-        clinvar=clinvar,
-        af_max=af_max,
-        af_min=af_min,
-        rare=rare,
-        ultra_rare=ultra_rare,
-        evidence_conflict=evidence_conflict,
-        ensemble_pathogenic=ensemble_pathogenic,
-        zygosity=zygosity,
-        mane_select=mane_select,
-    )
-
-
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
@@ -330,7 +295,7 @@ def list_annotated_variants(
 
     query = sa.select(_TABLE)
 
-    filter_clauses = _filter_params(
+    filter_clauses = _build_filters(
         chrom=chrom,
         gene_symbol=gene_symbol,
         consequence=consequence,
@@ -401,7 +366,7 @@ def annotated_variant_count(
 
     query = sa.select(sa.func.count()).select_from(_TABLE)
 
-    filter_clauses = _filter_params(
+    filter_clauses = _build_filters(
         chrom=chrom,
         gene_symbol=gene_symbol,
         consequence=consequence,
@@ -450,7 +415,7 @@ def annotated_chromosome_counts(
         .group_by(_TABLE.c.chrom)
     )
 
-    filter_clauses = _filter_params(
+    filter_clauses = _build_filters(
         chrom=chrom,
         gene_symbol=gene_symbol,
         consequence=consequence,
