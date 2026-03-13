@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run run-api run-frontend run-huey build-frontend install uninstall service-status service-start service-stop clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run dev run-api run-frontend run-huey build-frontend install uninstall service-status service-start service-stop clean
 
 # Default Python and Node
 PYTHON ?= python3
@@ -27,6 +27,10 @@ setup-frontend:  ## Install frontend dependencies
 # ──────────────────────────────────────────────
 
 run: run-api  ## Start the API server (default)
+
+dev:  ## Start backend + frontend dev servers concurrently
+	@echo "Starting API server (port 8000) and Vite dev server (port 5173)..."
+	@$(MAKE) run-api & $(MAKE) run-frontend & wait
 
 run-api:  ## Start FastAPI dev server
 	uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
