@@ -20,6 +20,7 @@ from backend.annotation.clinvar import (
     lookup_clinvar_by_rsids,
 )
 from backend.db.tables import annotated_variants, clinvar_variants, raw_variants
+from tests.backend.conftest import SEED_RAW_VARIANTS
 
 # ═══════════════════════════════════════════════════════════════════════
 # lookup_clinvar_by_rsids
@@ -184,7 +185,7 @@ class TestAnnotateSampleClinvar:
         result = annotate_sample_clinvar(sample_with_variants, seeded_reference_engine)
 
         assert isinstance(result, AnnotationResult)
-        assert result.total_variants == 10
+        assert result.total_variants == len(SEED_RAW_VARIANTS)
         # rs429358, rs7412, rs1801133, rs4680, rs12345 match by rsid (5 from SEED_CLINVAR)
         # rs12913832, rs7903146 also match by rsid (in mini_clinvar but also seeded)
         assert result.matched_by_rsid >= 5
@@ -300,10 +301,10 @@ class TestAnnotateSampleClinvar:
     ) -> None:
         """Annotating against an empty ClinVar table produces no matches."""
         result = annotate_sample_clinvar(sample_with_variants, reference_engine)
-        assert result.total_variants == 10
+        assert result.total_variants == len(SEED_RAW_VARIANTS)
         assert result.matched_by_rsid == 0
         assert result.matched_by_position == 0
-        assert result.not_matched == 10
+        assert result.not_matched == len(SEED_RAW_VARIANTS)
         assert result.rows_written == 0
 
     def test_chrom_pos_fallback(

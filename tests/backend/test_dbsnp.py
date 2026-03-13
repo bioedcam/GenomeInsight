@@ -35,6 +35,7 @@ from backend.annotation.dbsnp import (
     validate_rsids,
 )
 from backend.db.tables import annotated_variants, database_versions, dbsnp_merges
+from tests.backend.conftest import SEED_RAW_VARIANTS
 
 # Path to test fixtures
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
@@ -438,18 +439,19 @@ class TestAnnotateSampleDbsnp:
     ):
         result = annotate_sample_dbsnp(sample_with_variants, seeded_reference_engine)
 
-        assert result.total_variants == 10
-        assert result.rows_written == 10
+        num_variants = len(SEED_RAW_VARIANTS)
+        assert result.total_variants == num_variants
+        assert result.rows_written == num_variants
 
         # rs12345 is in SEED_DBSNP_MERGES as a merged rsid
         assert result.merged_rsids >= 1
 
-        # All 10 should have been written
+        # All variants should have been written
         with sample_with_variants.connect() as conn:
             count = conn.execute(
                 sa.select(sa.func.count()).select_from(annotated_variants)
             ).scalar()
-        assert count == 10
+        assert count == num_variants
 
     def test_merged_rsid_annotation(
         self,
@@ -515,7 +517,7 @@ class TestAnnotateSampleDbsnp:
             count = conn.execute(
                 sa.select(sa.func.count()).select_from(annotated_variants)
             ).scalar()
-        assert count == 10
+        assert count == len(SEED_RAW_VARIANTS)
 
     def test_preserves_existing_clinvar_annotation(
         self,

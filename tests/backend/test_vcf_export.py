@@ -19,6 +19,7 @@ from backend.ingestion.vcf_export import (
     export_vcf_from_engine,
     export_vcf_from_rows,
 )
+from tests.backend.conftest import SEED_RAW_VARIANTS
 
 # ═══════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -310,8 +311,8 @@ class TestExportFromEngine:
         assert "##source=GenomeInsight" in vcf
         assert "TestPatient" in vcf
         data = _get_data_lines(vcf)
-        # sample_with_variants has 10 rows, none are no-calls → 10 lines
-        assert len(data) == 10
+        # sample_with_variants rows, none are no-calls
+        assert len(data) == len(SEED_RAW_VARIANTS)
 
     def test_export_to_file(
         self,

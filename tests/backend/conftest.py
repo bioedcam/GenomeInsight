@@ -234,6 +234,20 @@ SEED_CPIC_ALLELES = [
         "function": "Normal function",
         "activity_score": 1.0,
     },
+    {
+        "gene": "CYP2C19",
+        "allele_name": "*2",
+        "defining_variants": json.dumps([{"rsid": "rs4244285", "ref": "G", "alt": "A"}]),
+        "function": "No function",
+        "activity_score": 0.0,
+    },
+    {
+        "gene": "CYP2C19",
+        "allele_name": "*17",
+        "defining_variants": json.dumps([{"rsid": "rs12248560", "ref": "C", "alt": "T"}]),
+        "function": "Increased function",
+        "activity_score": 1.5,
+    },
 ]
 
 SEED_CPIC_DIPLOTYPES = [
@@ -271,6 +285,41 @@ SEED_CPIC_DIPLOTYPES = [
         "phenotype": "Intermediate Metabolizer",
         "ehr_notation": "CYP2D6 Intermediate Metabolizer",
         "activity_score": 1.25,
+    },
+    {
+        "gene": "CYP2C19",
+        "diplotype": "*1/*1",
+        "phenotype": "Normal Metabolizer",
+        "ehr_notation": "CYP2C19 Normal Metabolizer",
+        "activity_score": 2.0,
+    },
+    {
+        "gene": "CYP2C19",
+        "diplotype": "*1/*2",
+        "phenotype": "Intermediate Metabolizer",
+        "ehr_notation": "CYP2C19 Intermediate Metabolizer",
+        "activity_score": 1.0,
+    },
+    {
+        "gene": "CYP2C19",
+        "diplotype": "*2/*2",
+        "phenotype": "Poor Metabolizer",
+        "ehr_notation": "CYP2C19 Poor Metabolizer",
+        "activity_score": 0.0,
+    },
+    {
+        "gene": "CYP2C19",
+        "diplotype": "*1/*17",
+        "phenotype": "Rapid Metabolizer",
+        "ehr_notation": "CYP2C19 Rapid Metabolizer",
+        "activity_score": 2.5,
+    },
+    {
+        "gene": "CYP2C19",
+        "diplotype": "*2/*17",
+        "phenotype": "Intermediate Metabolizer",
+        "ehr_notation": "CYP2C19 Intermediate Metabolizer",
+        "activity_score": 1.5,
     },
 ]
 
@@ -507,6 +556,7 @@ SEED_RAW_VARIANTS = [
     {"rsid": "rs7903146", "chrom": "10", "pos": 114758349, "genotype": "CT"},
     {"rsid": "rs1805007", "chrom": "16", "pos": 89919709, "genotype": "CC"},
     {"rsid": "rs12345", "chrom": "1", "pos": 100000, "genotype": "AA"},
+    {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
 ]
 
 
