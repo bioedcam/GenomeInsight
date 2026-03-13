@@ -421,6 +421,107 @@ describe("VariantToolbar", () => {
       ).toBeInTheDocument()
     })
   })
+
+  it("has Conflicts only toggle button (P2-22)", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /show conflicts only/i })).toBeInTheDocument()
+    })
+  })
+
+  it("toggles Conflicts only on/off (P2-22)", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    const toggle = await waitFor(() =>
+      screen.getByRole("button", { name: /show conflicts only/i }),
+    )
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute("aria-pressed", "true")
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("sends evidence_conflict:1 filter when Conflicts only is active (P2-22)", async () => {
+    const page = makeVariantPage(3)
+    setupFetchMock(page, makeCountResponse(3))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Activate conflicts only toggle
+    const toggle = screen.getByRole("button", { name: /show conflicts only/i })
+    await user.click(toggle)
+
+    // Verify evidence_conflict:1 is in the fetch filter
+    await waitFor(() => {
+      const calls = mockFetch.mock.calls.map((c) => c[0] as string)
+      const variantCalls = calls.filter(
+        (url) => url.includes("/api/variants?") && !url.includes("count") && !url.includes("chromosomes"),
+      )
+      const conflictCall = variantCalls.find(
+        (url) => url.includes("evidence_conflict%3A1") || url.includes("evidence_conflict:1"),
+      )
+      expect(conflictCall).toBeDefined()
+    })
+  })
+})
+
+describe("Evidence conflict indicator (P2-22)", () => {
+  it("renders amber conflict indicator with title", async () => {
+    const page = makeVariantPage(2) // index 0 has evidence_conflict: true
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      const indicator = screen.getByLabelText("Evidence conflict")
+      expect(indicator).toBeInTheDocument()
+      expect(indicator).toHaveAttribute("title", "Evidence conflict: ClinVar disagrees with in-silico predictions")
+      expect(indicator).toHaveClass("text-amber-500")
+    })
+  })
+
+  it("annotation columns visible per selected preset (P2-22)", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Switch to Research preset — should show CADD, SIFT, etc.
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument())
+    await user.click(screen.getByRole("menuitem", { name: /Research/ }))
+
+    await waitFor(() => {
+      expect(screen.getByText("CADD")).toBeInTheDocument()
+      expect(screen.getByText("SIFT")).toBeInTheDocument()
+      expect(screen.getByText("REVEL")).toBeInTheDocument()
+      expect(screen.getByText("Ensemble")).toBeInTheDocument()
+    })
+    // gnomAD AF should NOT be visible in Research preset
+    expect(screen.queryByText("gnomAD AF")).not.toBeInTheDocument()
+  })
 })
 
 describe("ChromosomeNav (P1-15b)", () => {

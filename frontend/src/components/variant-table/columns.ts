@@ -1,11 +1,13 @@
-/** Column definitions for the variant table (P1-15a). */
+/** Column definitions for the variant table (P1-15a, P2-22). */
 
+import { createElement } from "react"
 import { createColumnHelper } from "@tanstack/react-table"
 import type { VariantRow } from "@/types/variants"
 
 const col = createColumnHelper<VariantRow>()
 
-/** Pinned conflict flag column — non-hideable per PRD. */
+/** Pinned conflict flag column — non-hideable per PRD (P2-07, P2-22).
+ *  Amber indicator when ClinVar vs in-silico disagreement fires. */
 export const conflictColumn = col.accessor("evidence_conflict", {
   id: "evidence_conflict",
   header: "",
@@ -15,7 +17,18 @@ export const conflictColumn = col.accessor("evidence_conflict", {
   enableHiding: false,
   cell: (info) => {
     const val = info.getValue()
-    if (val === true) return "\u26A0" // ⚠ amber flag
+    if (val === true) {
+      return createElement(
+        "span",
+        {
+          className: "text-amber-500 dark:text-amber-400",
+          title: "Evidence conflict: ClinVar disagrees with in-silico predictions",
+          "aria-label": "Evidence conflict",
+          role: "img",
+        },
+        "\u26A0",
+      )
+    }
     return ""
   },
 })

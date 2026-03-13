@@ -2,7 +2,8 @@
  *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b).
  *  Column preset profiles (P1-15c).
  *  Contextual empty states (P1-15e).
- *  Variant detail side panel on row click (P2-21). */
+ *  Variant detail side panel on row click (P2-21).
+ *  Annotation columns per presets + evidence conflict indicator + "Conflicts only" toggle (P2-22). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -49,6 +50,7 @@ function presetToVisibility(
 export default function VariantTable({ sampleId }: VariantTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [showUnannotated, setShowUnannotated] = useState(false)
+  const [showConflictsOnly, setShowConflictsOnly] = useState(false)
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [startChrom, setStartChrom] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined)
@@ -104,8 +106,13 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     [allColumnIds],
   )
 
-  // Server-side filter string (set by quick-apply suggestions in P1-15e).
-  const filter = activeFilter
+  // Server-side filter string (set by quick-apply suggestions in P1-15e, P2-22 conflicts toggle).
+  const filter = useMemo(() => {
+    const parts: string[] = []
+    if (activeFilter) parts.push(activeFilter)
+    if (showConflictsOnly) parts.push("evidence_conflict:1")
+    return parts.length > 0 ? parts.join(",") : undefined
+  }, [activeFilter, showConflictsOnly])
 
   const {
     data,
@@ -206,12 +213,12 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   // Detect pre-annotation state (P1-15e): sample has raw variants but none annotated.
   // When showUnannotated is off (default), annotated count = 0 but total > 0.
   const isPreAnnotation = useMemo(() => {
-    if (showUnannotated || searchQuery || activeFilter) return false
+    if (showUnannotated || searchQuery || activeFilter || showConflictsOnly) return false
     if (totalVariants == null || totalVariants === 0) return false
     // countData is filtered by annotation_coverage:notnull — if 0, no annotated variants
     if (countData && countData.total === 0) return true
     return false
-  }, [showUnannotated, searchQuery, activeFilter, totalVariants, countData])
+  }, [showUnannotated, searchQuery, activeFilter, showConflictsOnly, totalVariants, countData])
 
   // Empty states (P1-15e)
   if (sampleId == null) {
@@ -236,6 +243,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         onSearchChange={setSearchQuery}
         showUnannotated={showUnannotated}
         onToggleUnannotated={() => setShowUnannotated((prev) => !prev)}
+        showConflictsOnly={showConflictsOnly}
+        onToggleConflictsOnly={() => setShowConflictsOnly((prev) => !prev)}
         unannotatedCount={totalVariants}
         totalCount={countData?.total}
         totalCountLoading={countLoading}
