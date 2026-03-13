@@ -42,7 +42,6 @@ def _make_engine(tmp_data_dir: Path) -> sa.Engine:
     return engine
 
 
-
 # ── Executor singleton tests ─────────────────────────────────────────
 
 
