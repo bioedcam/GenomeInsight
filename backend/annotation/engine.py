@@ -59,6 +59,8 @@ CLINVAR_BIT = 0b000010  # bit 1 = 2
 GNOMAD_BIT = 0b000100  # bit 2 = 4
 DBNSFP_BIT = 0b001000  # bit 3 = 8
 GENE_PHENOTYPE_BIT = 0b010000  # bit 4 = 16
+CPIC_BIT = 0b010000  # bit 4 = 16 (CPIC/PharmGKB — P3-04a)
+GWAS_BIT = 0b100000  # bit 5 = 32 (GWAS Catalog — P3-09a)
 
 # Maximum concurrent annotation source lookups (VEP, ClinVar, gnomAD, dbNSFP)
 # Gene-phenotype runs sequentially after VEP since it depends on gene_symbol.

@@ -56,7 +56,9 @@ import sqlalchemy as sa
 import structlog
 
 from backend.annotation.cpic import CPIC_GENES
+from backend.annotation.engine import CPIC_BIT
 from backend.db.tables import (
+    annotated_variants,
     cpic_alleles,
     cpic_diplotypes,
     cpic_guidelines,
@@ -770,3 +772,70 @@ def store_prescribing_alerts(
 
     logger.info("pgx_alerts_stored", count=len(rows))
     return len(rows)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Annotation Coverage Bitmask Update (P3-04a)
+# ═══════════════════════════════════════════════════════════════════════
+
+_BITMASK_BATCH = 500  # Stay under SQLITE_MAX_VARIABLE_NUMBER
+
+
+def update_annotation_coverage_cpic(
+    star_allele_results: list[StarAlleleResult],
+    sample_engine: sa.Engine,
+) -> int:
+    """OR bit 4 (CPIC, value 16) into annotation_coverage for involved variants.
+
+    After the pharmacogenomics module runs, every variant that participated
+    in a star-allele call (i.e. its rsid appears in ``involved_rsids`` of
+    any :class:`StarAlleleResult`) gets bit 4 set in its
+    ``annotation_coverage`` column in ``annotated_variants``.
+
+    Variants not involved in any CPIC gene leave bit 4 unset.
+
+    Args:
+        star_allele_results: Output from :func:`call_all_star_alleles`.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of variants updated.
+    """
+    # Collect all unique rsids that participated in star-allele calls
+    involved: set[str] = set()
+    for result in star_allele_results:
+        involved.update(result.involved_rsids)
+
+    if not involved:
+        return 0
+
+    rsid_list = sorted(involved)
+    updated = 0
+
+    with sample_engine.begin() as conn:
+        for i in range(0, len(rsid_list), _BITMASK_BATCH):
+            batch = rsid_list[i : i + _BITMASK_BATCH]
+
+            stmt = (
+                annotated_variants.update()
+                .where(annotated_variants.c.rsid.in_(batch))
+                .values(
+                    annotation_coverage=sa.case(
+                        (
+                            annotated_variants.c.annotation_coverage.is_(None),
+                            CPIC_BIT,
+                        ),
+                        else_=annotated_variants.c.annotation_coverage.op("|")(CPIC_BIT),
+                    )
+                )
+            )
+            result = conn.execute(stmt)
+            updated += result.rowcount
+
+    logger.info(
+        "pgx_annotation_coverage_updated",
+        cpic_bit=CPIC_BIT,
+        involved_rsids=len(involved),
+        rows_updated=updated,
+    )
+    return updated
