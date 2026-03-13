@@ -57,8 +57,11 @@ def _build_encode_ccres_db(raw_bed_path: Path, db_path: Path) -> None:
     engine = sa.create_engine(f"sqlite:///{db_path}", echo=False)
     try:
         load_encode_ccres(raw_bed_path, engine)
-    finally:
+    except Exception:
         engine.dispose()
+        db_path.unlink(missing_ok=True)
+        raise
+    engine.dispose()
     # Clean up the raw BED — the SQLite DB is the final artifact
     raw_bed_path.unlink(missing_ok=True)
 
