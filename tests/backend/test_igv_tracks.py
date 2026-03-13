@@ -277,9 +277,7 @@ class TestSampleVariantsTrack:
 class TestGnomadTrack:
     """Tests for gnomAD AF JSON features endpoint."""
 
-    def test_gnomad_returns_empty_when_db_unavailable(
-        self, test_client: TestClient
-    ) -> None:
+    def test_gnomad_returns_empty_when_db_unavailable(self, test_client: TestClient) -> None:
         """When gnomAD DB doesn't exist, return empty array (not error)."""
         resp = test_client.get(
             "/api/igv-tracks/gnomad",
@@ -308,9 +306,7 @@ class TestGnomadTrack:
 class TestEncodeCcresTrack:
     """Tests for ENCODE cCREs JSON features endpoint."""
 
-    def test_ccres_returns_empty_when_db_unavailable(
-        self, test_client: TestClient
-    ) -> None:
+    def test_ccres_returns_empty_when_db_unavailable(self, test_client: TestClient) -> None:
         """When ENCODE cCREs DB is not loaded, return empty array."""
         resp = test_client.get(
             "/api/igv-tracks/encode-ccres",
