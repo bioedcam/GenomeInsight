@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+from pathlib import Path
 
 
 def test_version_guard_passes_on_current_python():
@@ -22,7 +23,7 @@ def test_version_guard_message_content(tmp_path):
         "with unittest.mock.patch.object(sys, 'version_info', (3, 11, 0, 'final', 0)):\n"
         "    exec(open('backend/__init__.py').read())\n"
     )
-    project_root = __import__("pathlib").Path(__file__).resolve().parents[2]
+    project_root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
         [sys.executable, str(script)],
         capture_output=True,

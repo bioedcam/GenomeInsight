@@ -18,16 +18,19 @@ make test     # Run tests
 ## Local Development
 
 **Backend only:**
+
 ```bash
 cd backend && uvicorn main:app --reload
 ```
 
 **Frontend only:**
+
 ```bash
 cd frontend && npm run dev
 ```
 
 **Full stack:**
+
 ```bash
 make dev
 ```
@@ -35,16 +38,19 @@ make dev
 ### Python environment
 
 The recommended path is the conda env `GI`:
+
 ```bash
 conda activate GI
 ```
 
 Editable install (for development):
+
 ```bash
 pip install -e ".[dev]"
 ```
 
 For ad-hoc `pytest` runs without installing the package:
+
 ```bash
 PYTHONPATH=. pytest
 ```
