@@ -55,6 +55,27 @@ For ad-hoc `pytest` runs without installing the package:
 PYTHONPATH=. pytest
 ```
 
+## Module Status
+
+| Module | Status | Phase |
+|--------|--------|-------|
+| Setup Wizard | Complete | 1 |
+| Dashboard | Complete | 1 |
+| Variant Explorer | Complete | 2 |
+| Variant Detail | Complete | 2 |
+| Genome Browser (IGV.js) | Complete | 2 |
+| Command Palette | Complete | 4 |
+| Pharmacogenomics | UI skeleton | 3 |
+| Nutrigenomics | UI skeleton | 3 |
+| Cancer | UI skeleton | 3 |
+| Cardiovascular | UI skeleton | 3 |
+| APOE | UI skeleton | 3 |
+| Carrier Status | UI skeleton | 3 |
+| Ancestry | UI skeleton | 3 |
+| Reports | UI skeleton | 4 |
+| Settings | UI skeleton | 4 |
+| Login / Auth | UI skeleton | 4 |
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

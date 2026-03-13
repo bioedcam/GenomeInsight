@@ -1,8 +1,11 @@
+import PlaceholderPage from "@/components/PlaceholderPage"
+
 export default function NutrigenomicsView() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Nutrigenomics</h1>
-      <p className="text-muted-foreground mt-2">Nutrient pathway considerations will appear here.</p>
-    </div>
+    <PlaceholderPage
+      moduleName="Nutrigenomics"
+      phase={3}
+      description="Categorical pathway scoring for nutrient metabolism — Folate, Vitamin D, B12, Omega-3, Iron, and Lactose pathways."
+    />
   )
 }
