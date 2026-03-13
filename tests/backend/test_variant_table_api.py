@@ -604,3 +604,137 @@ class TestAnnotationCoverageFilter:
         assert count_map["1"] == 2  # rs100, rs101
         assert count_map["2"] == 1  # rs200
         assert "10" not in count_map  # rs1000 is unannotated
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-26: ClinVar significance breakdown
+# ═══════════════════════════════════════════════════════════════════════
+
+# Annotated variants with ClinVar significance values.
+CLINVAR_TEST_VARIANTS = [
+    {
+        "rsid": "rs100",
+        "chrom": "1",
+        "pos": 50000,
+        "genotype": "AA",
+        "gene_symbol": "BRCA1",
+        "consequence": "missense_variant",
+        "clinvar_significance": "Pathogenic",
+        "annotation_coverage": 0b000111,
+    },
+    {
+        "rsid": "rs101",
+        "chrom": "1",
+        "pos": 100000,
+        "genotype": "AG",
+        "gene_symbol": "TP53",
+        "consequence": "synonymous_variant",
+        "clinvar_significance": "Benign",
+        "annotation_coverage": 0b000011,
+    },
+    {
+        "rsid": "rs102",
+        "chrom": "1",
+        "pos": 200000,
+        "genotype": "GG",
+        "gene_symbol": None,
+        "consequence": None,
+        "clinvar_significance": None,
+        "annotation_coverage": None,
+    },
+    {
+        "rsid": "rs200",
+        "chrom": "2",
+        "pos": 10000,
+        "genotype": "CC",
+        "gene_symbol": "APOE",
+        "consequence": "missense_variant",
+        "clinvar_significance": "Benign",
+        "annotation_coverage": 0b111111,
+    },
+    {
+        "rsid": "rs201",
+        "chrom": "2",
+        "pos": 20000,
+        "genotype": "CT",
+        "gene_symbol": "LDLR",
+        "consequence": "missense_variant",
+        "clinvar_significance": "Uncertain significance",
+        "annotation_coverage": 0b000011,
+    },
+    {
+        "rsid": "rs300",
+        "chrom": "3",
+        "pos": 5000,
+        "genotype": "TT",
+        "gene_symbol": None,
+        "consequence": None,
+        "clinvar_significance": None,
+        "annotation_coverage": None,
+    },
+]
+
+
+@pytest.fixture
+def client_with_clinvar_sample(tmp_data_dir: Path):
+    """FastAPI TestClient with a sample containing ClinVar significance data.
+
+    4 variants with ClinVar + 2 without (NULL).
+    """
+    yield from _setup_sample_client(
+        tmp_data_dir,
+        sample_name="clinvar_sample",
+        db_filename="sample_clinvar.db",
+        file_hash="clinvarhash789",
+        variants_table=annotated_variants,
+        variants_data=CLINVAR_TEST_VARIANTS,
+    )
+
+
+class TestClinvarSummary:
+    """P2-26: GET /api/variants/clinvar-summary returns significance breakdown."""
+
+    def test_returns_200(self, client_with_clinvar_sample):
+        client, sid = client_with_clinvar_sample
+        response = client.get(f"/api/variants/clinvar-summary?sample_id={sid}")
+        assert response.status_code == 200
+
+    def test_groups_by_significance(self, client_with_clinvar_sample):
+        client, sid = client_with_clinvar_sample
+        data = client.get(f"/api/variants/clinvar-summary?sample_id={sid}").json()
+        sig_map = {item["significance"]: item["count"] for item in data["items"]}
+        assert sig_map["Benign"] == 2
+        assert sig_map["Pathogenic"] == 1
+        assert sig_map["Uncertain significance"] == 1
+
+    def test_excludes_null_significance(self, client_with_clinvar_sample):
+        """Variants with NULL clinvar_significance are excluded."""
+        client, sid = client_with_clinvar_sample
+        data = client.get(f"/api/variants/clinvar-summary?sample_id={sid}").json()
+        # 4 variants have ClinVar data, 2 have NULL
+        assert data["total"] == 4
+        significances = [item["significance"] for item in data["items"]]
+        assert None not in significances
+
+    def test_sorted_by_count_descending(self, client_with_clinvar_sample):
+        client, sid = client_with_clinvar_sample
+        data = client.get(f"/api/variants/clinvar-summary?sample_id={sid}").json()
+        counts = [item["count"] for item in data["items"]]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_total_matches_sum(self, client_with_clinvar_sample):
+        client, sid = client_with_clinvar_sample
+        data = client.get(f"/api/variants/clinvar-summary?sample_id={sid}").json()
+        assert data["total"] == sum(item["count"] for item in data["items"])
+
+    def test_raw_variants_returns_empty(self, client_with_sample):
+        """Raw variants table has no ClinVar column → empty result."""
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/clinvar-summary?sample_id={sid}").json()
+        assert data["items"] == []
+        assert data["total"] == 0
+
+    def test_nonexistent_sample_returns_404(self, client_with_clinvar_sample):
+        client, _ = client_with_clinvar_sample
+        response = client.get("/api/variants/clinvar-summary?sample_id=999")
+        assert response.status_code == 404
