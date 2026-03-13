@@ -77,7 +77,7 @@ export default function TopNav() {
       >
         <Search className="h-3.5 w-3.5" />
         <span>Search...</span>
-        <kbd className="ml-2 text-xs bg-muted px-1.5 py-0.5 rounded">&#8984;K</kbd>
+        <kbd className="ml-2 text-xs bg-muted px-1.5 py-0.5 rounded">{/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+'}K</kbd>
       </button>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

@@ -92,6 +92,7 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
       <div
         data-cmdk-overlay=""
         className="fixed inset-0 bg-black/50"
+        aria-hidden="true"
         onClick={() => handleOpenChange(false)}
       />
       <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg z-50">

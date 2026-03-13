@@ -1,5 +1,5 @@
 /** Genomic locus pattern: chr1:12345-67890 or chr1:12345 or 1:12345-67890 */
-const COORD_PATTERN = /^(chr)?\d{1,2}:\d[\d,]*([-–]\d[\d,]*)?$/i
+const COORD_PATTERN = /^(chr)?(\d{1,2}|[XYM]|MT):\d[\d,]*([-–]\d[\d,]*)?$/i
 
 /** rsid pattern: rs followed by digits */
 const RSID_PATTERN = /^rs\d+$/i

@@ -29,6 +29,10 @@ describe("isGenomicQuery", () => {
     expect(isGenomicQuery("chr1:12345")).toBe(true)
     expect(isGenomicQuery("17:41196312-41277500")).toBe(true)
     expect(isGenomicQuery("1:100000")).toBe(true)
+    expect(isGenomicQuery("chrX:12345")).toBe(true)
+    expect(isGenomicQuery("Y:6789-9999")).toBe(true)
+    expect(isGenomicQuery("chrM:100")).toBe(true)
+    expect(isGenomicQuery("chrMT:200-300")).toBe(true)
   })
 
   it("matches gene symbols", () => {
