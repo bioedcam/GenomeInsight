@@ -34,6 +34,7 @@ afterAll(() => {
 
 describe("IgvBrowser", () => {
   it("renders loading state initially", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     render(<IgvBrowser />)
     expect(screen.getByRole("status")).toBeInTheDocument()
     expect(screen.getByText(/loading genome browser/i)).toBeInTheDocument()
@@ -185,11 +186,13 @@ describe("IgvBrowser", () => {
   })
 
   it("renders the IGV container div with data-testid", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     render(<IgvBrowser />)
     expect(screen.getByTestId("igv-container")).toBeInTheDocument()
   })
 
   it("applies custom className to container", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     const { container } = render(<IgvBrowser className="custom-class" />)
     expect(container.firstChild).toHaveClass("custom-class")
   })

@@ -1,3 +1,4 @@
+import { act } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from './test-utils'
 import SetupWizard from '@/pages/SetupWizard'
@@ -1207,18 +1208,20 @@ describe('DatabasesStep', () => {
 
     // Simulate SSE progress completing all downloads
     expect(progressHandler).not.toBeNull()
-    progressHandler!(
-      new MessageEvent('progress', {
-        data: JSON.stringify({
-          session_id: 'dbdl-test123',
-          databases: [
-            { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc', status: 'complete', progress_pct: 100, message: 'Done', error: null },
-            { db_name: 'vep_bundle', job_id: 'dbdl-vep-def', status: 'complete', progress_pct: 100, message: 'Done', error: null },
-            { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi', status: 'complete', progress_pct: 100, message: 'Done', error: null },
-          ],
+    act(() => {
+      progressHandler!(
+        new MessageEvent('progress', {
+          data: JSON.stringify({
+            session_id: 'dbdl-test123',
+            databases: [
+              { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+              { db_name: 'vep_bundle', job_id: 'dbdl-vep-def', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+              { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi', status: 'complete', progress_pct: 100, message: 'Done', error: null },
+            ],
+          }),
         }),
-      }),
-    )
+      )
+    })
 
     // After completion, EventSource should be closed
     await waitFor(() => {

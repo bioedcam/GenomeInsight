@@ -1,3 +1,4 @@
+import { act } from "react"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "./test-utils"
 import AnnotationPanel from "@/components/dashboard/AnnotationPanel"
@@ -162,12 +163,14 @@ describe("AnnotationPanel", () => {
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
       const es = MockEventSource.instances[0]
-      es._emit("progress", {
-        job_id: "test-job-123",
-        status: "running",
-        progress_pct: 50.0,
-        message: "Annotated 500/1,000 variants",
-        error: null,
+      act(() => {
+        es._emit("progress", {
+          job_id: "test-job-123",
+          status: "running",
+          progress_pct: 50.0,
+          message: "Annotated 500/1,000 variants",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -185,12 +188,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "running",
-        progress_pct: 25.0,
-        message: "Annotated 250/1,000 variants",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "running",
+          progress_pct: 25.0,
+          message: "Annotated 250/1,000 variants",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -206,12 +211,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "complete",
-        progress_pct: 100.0,
-        message: "Annotated 950 variants",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "complete",
+          progress_pct: 100.0,
+          message: "Annotated 950 variants",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -228,12 +235,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "failed",
-        progress_pct: 30.0,
-        message: "Annotation failed",
-        error: "Database connection lost",
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "failed",
+          progress_pct: 30.0,
+          message: "Annotation failed",
+          error: "Database connection lost",
+        })
       })
 
       await waitFor(() => {
@@ -251,12 +260,14 @@ describe("AnnotationPanel", () => {
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
       const es = MockEventSource.instances[0]
-      es._emit("progress", {
-        job_id: "test-job-123",
-        status: "complete",
-        progress_pct: 100.0,
-        message: "Done",
-        error: null,
+      act(() => {
+        es._emit("progress", {
+          job_id: "test-job-123",
+          status: "complete",
+          progress_pct: 100.0,
+          message: "Done",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -278,12 +289,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "running",
-        progress_pct: 10,
-        message: "Working...",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "running",
+          progress_pct: 10,
+          message: "Working...",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -299,12 +312,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "cancel-test-job",
-        status: "running",
-        progress_pct: 10,
-        message: "Working...",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "cancel-test-job",
+          status: "running",
+          progress_pct: 10,
+          message: "Working...",
+          error: null,
+        })
       })
 
       mockCancelAnnotation("cancel-test-job")
@@ -330,12 +345,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "cancelled",
-        progress_pct: 15.0,
-        message: "Cancelled by user",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "cancelled",
+          progress_pct: 15.0,
+          message: "Cancelled by user",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -357,12 +374,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "complete",
-        progress_pct: 100.0,
-        message: "Done",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "complete",
+          progress_pct: 100.0,
+          message: "Done",
+          error: null,
+        })
       })
 
       await waitFor(() => {
@@ -378,12 +397,14 @@ describe("AnnotationPanel", () => {
 
       await waitFor(() => expect(MockEventSource.instances.length).toBe(1))
 
-      MockEventSource.instances[0]._emit("progress", {
-        job_id: "test-job-123",
-        status: "complete",
-        progress_pct: 100.0,
-        message: "Done",
-        error: null,
+      act(() => {
+        MockEventSource.instances[0]._emit("progress", {
+          job_id: "test-job-123",
+          status: "complete",
+          progress_pct: 100.0,
+          message: "Done",
+          error: null,
+        })
       })
 
       await waitFor(() => {
