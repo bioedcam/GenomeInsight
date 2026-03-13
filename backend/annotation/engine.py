@@ -512,11 +512,16 @@ def _bulk_upsert(
         return 0
 
     written = 0
-    upsert_batch_size = 5_000
 
     # Normalise all rows to the same set of keys so multi-row INSERT works.
     all_keys = {"rsid", "chrom", "pos", "genotype", "annotation_coverage"}
     all_keys.update(_UPSERT_COLUMNS)
+
+    # Compute batch size to stay under SQLite's SQLITE_MAX_VARIABLE_NUMBER.
+    # macOS system SQLite defaults to 999; Linux builds typically allow 32766.
+    # Use 999 as a safe floor to ensure cross-platform compatibility.
+    num_cols = len(all_keys)
+    upsert_batch_size = max(1, 999 // num_cols)
     normalised = [{k: row.get(k) for k in all_keys} for row in rows]
 
     with sample_engine.begin() as conn:

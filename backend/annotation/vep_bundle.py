@@ -35,8 +35,10 @@ VEP_BITMASK = 0b000001  # bit 0 = 1
 # Batch size for SQLite IN clause (stay below 999 variable limit)
 _IN_BATCH_SIZE = 500
 
-# Batch size for upsert into annotated_variants
-BATCH_SIZE = 5_000
+# Batch size for upsert into annotated_variants.
+# VEP upserts ~13 columns/row; 999 // 13 ≈ 76 rows stays under macOS SQLite
+# variable limit. Use a moderate value that works cross-platform.
+BATCH_SIZE = 75
 
 # ── Consequence severity ranking (Ensembl SO terms) ──────────────────────
 # Higher value = more severe.  Mirrors scripts/build_vep_bundle.py.
