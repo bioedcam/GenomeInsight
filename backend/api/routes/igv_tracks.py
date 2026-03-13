@@ -194,9 +194,7 @@ async def sample_vcf_region(
         ref, alt, gt = _genotype_to_vcf_fields(row.genotype)
         rsid = row.rsid if row.rsid else "."
         info = f"GT={row.genotype}" if row.genotype else "."
-        lines.append(
-            f"chr{row.chrom}\t{row.pos}\t{rsid}\t{ref}\t{alt}\t.\t.\t{info}\tGT\t{gt}"
-        )
+        lines.append(f"chr{row.chrom}\t{row.pos}\t{rsid}\t{ref}\t{alt}\t.\t.\t{info}\tGT\t{gt}")
 
     return Response(content="\n".join(lines) + "\n", media_type="text/plain")
 
@@ -290,9 +288,9 @@ class CCREFeature(BaseModel):
 
 # Color palette for cCRE classification types
 CCRE_COLORS: dict[str, str] = {
-    "PLS": "rgb(255,0,0)",       # Promoter-like — red
-    "pELS": "rgb(255,205,0)",    # Proximal enhancer-like — orange/yellow
-    "dELS": "rgb(255,205,0)",    # Distal enhancer-like — orange/yellow
+    "PLS": "rgb(255,0,0)",  # Promoter-like — red
+    "pELS": "rgb(255,205,0)",  # Proximal enhancer-like — orange/yellow
+    "dELS": "rgb(255,205,0)",  # Distal enhancer-like — orange/yellow
     "CTCF-only": "rgb(0,176,240)",  # CTCF-bound — blue
     "DNase-H3K4me3": "rgb(102,205,170)",  # DNase-H3K4me3 — teal
 }
