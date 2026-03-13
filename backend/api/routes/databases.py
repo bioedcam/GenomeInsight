@@ -340,8 +340,19 @@ def _run_download(
 
         # Move from downloads dir to final destination
         final_dest = db_info.dest_path(settings)
-        if result.dest_path != final_dest:
-            final_dest.parent.mkdir(parents=True, exist_ok=True)
+        final_dest.parent.mkdir(parents=True, exist_ok=True)
+
+        if db_info.post_download is not None:
+            # Transform raw download into the final database file
+            _update_job(
+                engine,
+                job_id,
+                status="running",
+                progress_pct=99.0,
+                message=f"Transforming {db_info.display_name}...",
+            )
+            db_info.post_download(result.dest_path, final_dest)
+        elif result.dest_path != final_dest:
             shutil.move(str(result.dest_path), str(final_dest))
 
         _update_job(

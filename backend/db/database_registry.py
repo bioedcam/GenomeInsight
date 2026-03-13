@@ -12,8 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from backend.config import Settings
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -29,10 +33,37 @@ class DatabaseInfo:
     sha256: str | None = None
     required: bool = True
     phase: int = 1
+    post_download: Callable[[Path, Path], None] | None = None
 
     def dest_path(self, settings: Settings) -> Path:
         """Resolve the destination file path for this database."""
         return settings.data_dir / self.filename
+
+
+# ── Post-download transforms ─────────────────────────────────────────
+
+
+def _build_encode_ccres_db(raw_bed_path: Path, db_path: Path) -> None:
+    """Transform a downloaded ENCODE cCREs BED file into a SQLite database.
+
+    Called by the download pipeline as a ``post_download`` hook. Creates a
+    SQLite database at *db_path* from the raw BED at *raw_bed_path*, then
+    removes the raw BED file.
+    """
+    import sqlalchemy as sa
+
+    from backend.annotation.encode_ccres import load_encode_ccres
+
+    engine = sa.create_engine(f"sqlite:///{db_path}", echo=False)
+    try:
+        load_encode_ccres(raw_bed_path, engine)
+    except Exception:
+        engine.dispose()
+        db_path.unlink(missing_ok=True)
+        raise
+    engine.dispose()
+    # Clean up the raw BED — the SQLite DB is the final artifact
+    raw_bed_path.unlink(missing_ok=True)
 
 
 # ── Database Definitions ──────────────────────────────────────────────
@@ -111,6 +142,7 @@ DATABASES: dict[str, DatabaseInfo] = {
         expected_size_bytes=30_000_000,  # ~30 MB (SQLite after BED loading)
         required=False,
         phase=2,
+        post_download=_build_encode_ccres_db,
     ),
 }
 
