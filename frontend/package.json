@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:ci": "bash -c 'vitest run 2>&1 | tee /dev/stderr | (grep -q \"not wrapped in act\" && exit 1 || exit 0)'"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",

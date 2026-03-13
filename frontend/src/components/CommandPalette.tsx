@@ -11,6 +11,7 @@
 import { useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Command } from "cmdk"
+import * as Dialog from "@radix-ui/react-dialog"
 import {
   LayoutDashboard,
   Table2,
@@ -89,6 +90,10 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
         "[&_[cmdk-overlay]]:fixed [&_[cmdk-overlay]]:inset-0 [&_[cmdk-overlay]]:bg-black/50",
       )}
     >
+      <Dialog.Title className="sr-only">Command Menu</Dialog.Title>
+      <Dialog.Description className="sr-only">
+        Search pages, genes, rsids, or genomic coordinates
+      </Dialog.Description>
       <div
         data-cmdk-overlay=""
         className="fixed inset-0 bg-black/50"

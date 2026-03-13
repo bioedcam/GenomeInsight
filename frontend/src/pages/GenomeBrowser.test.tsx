@@ -1,6 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
+import { act } from "react"
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
 import { render, screen, waitFor } from "@/test/test-utils"
 import userEvent from "@testing-library/user-event"
@@ -45,6 +46,7 @@ describe("GenomeBrowser", () => {
   })
 
   it("renders page header and search bar", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     render(<GenomeBrowser />)
     expect(screen.getByText("Genome Browser")).toBeInTheDocument()
     expect(screen.getByTestId("igv-search-input")).toBeInTheDocument()
@@ -52,6 +54,7 @@ describe("GenomeBrowser", () => {
   })
 
   it("renders the IGV browser component", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     render(<GenomeBrowser />)
     expect(screen.getByTestId("igv-container")).toBeInTheDocument()
   })
@@ -146,16 +149,18 @@ describe("GenomeBrowser", () => {
       (args: unknown[]) => args[0] === "trackclick",
     )?.[1]
 
-    trackClickHandler(
-      { config: { type: "variant" } },
-      [
-        { name: "Chr", value: "chr17" },
-        { name: "Pos", value: "41196312" },
-        { name: "ID", value: "rs80357906" },
-        { name: "Ref", value: "A" },
-        { name: "Alt", value: "G" },
-      ],
-    )
+    act(() => {
+      trackClickHandler(
+        { config: { type: "variant" } },
+        [
+          { name: "Chr", value: "chr17" },
+          { name: "Pos", value: "41196312" },
+          { name: "ID", value: "rs80357906" },
+          { name: "Ref", value: "A" },
+          { name: "Alt", value: "G" },
+        ],
+      )
+    })
 
     await waitFor(() => {
       expect(screen.getByTestId("variant-click-indicator")).toBeInTheDocument()
@@ -176,16 +181,18 @@ describe("GenomeBrowser", () => {
       (args: unknown[]) => args[0] === "trackclick",
     )?.[1]
 
-    trackClickHandler(
-      { config: { type: "variant" } },
-      [
-        { name: "Chr", value: "chr1" },
-        { name: "Pos", value: "12345" },
-        { name: "ID", value: "rs123" },
-        { name: "Ref", value: "C" },
-        { name: "Alt", value: "T" },
-      ],
-    )
+    act(() => {
+      trackClickHandler(
+        { config: { type: "variant" } },
+        [
+          { name: "Chr", value: "chr1" },
+          { name: "Pos", value: "12345" },
+          { name: "ID", value: "rs123" },
+          { name: "Ref", value: "C" },
+          { name: "Alt", value: "T" },
+        ],
+      )
+    })
 
     await waitFor(() => {
       expect(screen.getByTestId("variant-click-indicator")).toBeInTheDocument()
@@ -197,6 +204,7 @@ describe("GenomeBrowser", () => {
   })
 
   it("has accessible search form with proper labels", () => {
+    mockCreateBrowser.mockReturnValue(new Promise(() => {}))
     render(<GenomeBrowser />)
     expect(screen.getByRole("search")).toHaveAttribute("aria-label", "Navigate to genomic locus")
     expect(screen.getByLabelText("Genomic locus search")).toBeInTheDocument()
