@@ -1,0 +1,766 @@
+"""CPIC data loader: allele definitions, diplotype→phenotype tables, and guidelines.
+
+Parses CPIC machine-readable CSV files and bulk-loads them into three tables
+in ``reference.db``: ``cpic_alleles``, ``cpic_diplotypes``, ``cpic_guidelines``.
+
+Also provides lookup functions for downstream star-allele calling (P3-02).
+
+Usage::
+
+    from backend.annotation.cpic import (
+        parse_cpic_alleles_csv,
+        parse_cpic_diplotypes_csv,
+        parse_cpic_guidelines_csv,
+        load_cpic_into_db,
+        lookup_alleles_by_gene,
+        lookup_diplotypes_by_gene,
+        lookup_guidelines_by_gene_drug,
+    )
+
+    alleles = parse_cpic_alleles_csv(Path("cpic_alleles.csv"))
+    diplotypes = parse_cpic_diplotypes_csv(Path("cpic_diplotypes.csv"))
+    guidelines = parse_cpic_guidelines_csv(Path("cpic_guidelines.csv"))
+    stats = load_cpic_into_db(alleles, diplotypes, guidelines, engine)
+"""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import sqlalchemy as sa
+import structlog
+
+from backend.db.tables import (
+    cpic_alleles,
+    cpic_diplotypes,
+    cpic_guidelines,
+    database_versions,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+logger = structlog.get_logger(__name__)
+
+# Batch size for bulk inserts (executemany)
+BATCH_SIZE = 5_000
+
+# Supported CPIC genes (per PRD P3-02)
+CPIC_GENES = frozenset({
+    "CYP2D6",
+    "CYP2C19",
+    "CYP2C9",
+    "CYP3A5",
+    "SLCO1B1",
+    "DPYD",
+    "TPMT",
+    "UGT1A1",
+})
+
+
+@dataclass
+class CPICLoadStats:
+    """Statistics from a CPIC data load operation."""
+
+    alleles_loaded: int = 0
+    diplotypes_loaded: int = 0
+    guidelines_loaded: int = 0
+    alleles_skipped: int = 0
+    diplotypes_skipped: int = 0
+    guidelines_skipped: int = 0
+    genes_found: set[str] = field(default_factory=set)
+    sha256: str | None = None
+    version: str | None = None
+
+
+@dataclass
+class CPICAllele:
+    """A single CPIC allele definition record."""
+
+    gene: str
+    allele_name: str
+    defining_variants: str  # JSON array of {rsid, ref, alt}
+    function: str | None = None
+    activity_score: float | None = None
+
+
+@dataclass
+class CPICDiplotype:
+    """A single CPIC diplotype→phenotype mapping."""
+
+    gene: str
+    diplotype: str
+    phenotype: str
+    ehr_notation: str | None = None
+    activity_score: float | None = None
+
+
+@dataclass
+class CPICGuideline:
+    """A single CPIC drug guideline record."""
+
+    gene: str
+    drug: str
+    phenotype: str
+    recommendation: str | None = None
+    classification: str | None = None
+    guideline_url: str | None = None
+
+
+def _parse_float(value: str) -> float | None:
+    """Safely parse a float from a CSV field."""
+    if not value or value.strip() == "":
+        return None
+    try:
+        return float(value.strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _allele_to_dict(record: CPICAllele) -> dict:
+    """Convert a CPICAllele to a dict for database insertion."""
+    return {
+        "gene": record.gene,
+        "allele_name": record.allele_name,
+        "defining_variants": record.defining_variants,
+        "function": record.function,
+        "activity_score": record.activity_score,
+    }
+
+
+def _diplotype_to_dict(record: CPICDiplotype) -> dict:
+    """Convert a CPICDiplotype to a dict for database insertion."""
+    return {
+        "gene": record.gene,
+        "diplotype": record.diplotype,
+        "phenotype": record.phenotype,
+        "ehr_notation": record.ehr_notation,
+        "activity_score": record.activity_score,
+    }
+
+
+def _guideline_to_dict(record: CPICGuideline) -> dict:
+    """Convert a CPICGuideline to a dict for database insertion."""
+    return {
+        "gene": record.gene,
+        "drug": record.drug,
+        "phenotype": record.phenotype,
+        "recommendation": record.recommendation,
+        "classification": record.classification,
+        "guideline_url": record.guideline_url,
+    }
+
+
+def parse_cpic_alleles_csv(
+    csv_path: Path,
+    *,
+    progress_callback: Callable[[int], None] | None = None,
+) -> tuple[list[dict], CPICLoadStats]:
+    """Parse a CPIC allele definitions CSV file.
+
+    Expected columns: gene, allele_name, defining_variants, function, activity_score
+
+    Args:
+        csv_path: Path to the allele definitions CSV.
+        progress_callback: Optional callback called with row count.
+
+    Returns:
+        Tuple of (list of row dicts, CPICLoadStats).
+    """
+    rows: list[dict] = []
+    stats = CPICLoadStats()
+
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for i, row in enumerate(reader, 1):
+            gene = row.get("gene", "").strip()
+            allele_name = row.get("allele_name", "").strip()
+
+            if not gene or not allele_name:
+                stats.alleles_skipped += 1
+                continue
+
+            # Validate defining_variants is valid JSON
+            raw_variants = row.get("defining_variants", "[]").strip()
+            try:
+                parsed = json.loads(raw_variants)
+                if not isinstance(parsed, list):
+                    raw_variants = "[]"
+            except json.JSONDecodeError:
+                raw_variants = "[]"
+
+            record = CPICAllele(
+                gene=gene,
+                allele_name=allele_name,
+                defining_variants=raw_variants,
+                function=row.get("function", "").strip() or None,
+                activity_score=_parse_float(row.get("activity_score", "")),
+            )
+
+            rows.append(_allele_to_dict(record))
+            stats.alleles_loaded += 1
+            stats.genes_found.add(gene)
+
+            if progress_callback and i % 1000 == 0:
+                progress_callback(i)
+
+    return rows, stats
+
+
+def parse_cpic_diplotypes_csv(
+    csv_path: Path,
+    *,
+    progress_callback: Callable[[int], None] | None = None,
+) -> tuple[list[dict], CPICLoadStats]:
+    """Parse a CPIC diplotype→phenotype CSV file.
+
+    Expected columns: gene, diplotype, phenotype, ehr_notation, activity_score
+
+    Args:
+        csv_path: Path to the diplotype CSV.
+        progress_callback: Optional callback called with row count.
+
+    Returns:
+        Tuple of (list of row dicts, CPICLoadStats).
+    """
+    rows: list[dict] = []
+    stats = CPICLoadStats()
+
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for i, row in enumerate(reader, 1):
+            gene = row.get("gene", "").strip()
+            diplotype = row.get("diplotype", "").strip()
+            phenotype = row.get("phenotype", "").strip()
+
+            if not gene or not diplotype or not phenotype:
+                stats.diplotypes_skipped += 1
+                continue
+
+            record = CPICDiplotype(
+                gene=gene,
+                diplotype=diplotype,
+                phenotype=phenotype,
+                ehr_notation=row.get("ehr_notation", "").strip() or None,
+                activity_score=_parse_float(row.get("activity_score", "")),
+            )
+
+            rows.append(_diplotype_to_dict(record))
+            stats.diplotypes_loaded += 1
+            stats.genes_found.add(gene)
+
+            if progress_callback and i % 1000 == 0:
+                progress_callback(i)
+
+    return rows, stats
+
+
+def parse_cpic_guidelines_csv(
+    csv_path: Path,
+    *,
+    progress_callback: Callable[[int], None] | None = None,
+) -> tuple[list[dict], CPICLoadStats]:
+    """Parse a CPIC drug guidelines CSV file.
+
+    Expected columns: gene, drug, phenotype, recommendation, classification, guideline_url
+
+    Args:
+        csv_path: Path to the guidelines CSV.
+        progress_callback: Optional callback called with row count.
+
+    Returns:
+        Tuple of (list of row dicts, CPICLoadStats).
+    """
+    rows: list[dict] = []
+    stats = CPICLoadStats()
+
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for i, row in enumerate(reader, 1):
+            gene = row.get("gene", "").strip()
+            drug = row.get("drug", "").strip()
+            phenotype = row.get("phenotype", "").strip()
+
+            if not gene or not drug or not phenotype:
+                stats.guidelines_skipped += 1
+                continue
+
+            record = CPICGuideline(
+                gene=gene,
+                drug=drug,
+                phenotype=phenotype,
+                recommendation=row.get("recommendation", "").strip() or None,
+                classification=row.get("classification", "").strip() or None,
+                guideline_url=row.get("guideline_url", "").strip() or None,
+            )
+
+            rows.append(_guideline_to_dict(record))
+            stats.guidelines_loaded += 1
+            stats.genes_found.add(gene)
+
+            if progress_callback and i % 1000 == 0:
+                progress_callback(i)
+
+    return rows, stats
+
+
+def _wal_checkpoint(engine: sa.Engine) -> None:
+    """Run WAL checkpoint if the engine is file-backed (not in-memory)."""
+    url = str(engine.url)
+    if url == "sqlite://" or ":memory:" in url:
+        return
+    with engine.connect() as conn:
+        conn.execute(sa.text("PRAGMA wal_checkpoint(TRUNCATE)"))
+        conn.commit()
+
+
+def load_cpic_into_db(
+    allele_rows: list[dict],
+    diplotype_rows: list[dict],
+    guideline_rows: list[dict],
+    engine: sa.Engine,
+    *,
+    clear_existing: bool = True,
+) -> CPICLoadStats:
+    """Bulk-load parsed CPIC data into the three CPIC tables.
+
+    Args:
+        allele_rows: List of dicts matching cpic_alleles columns.
+        diplotype_rows: List of dicts matching cpic_diplotypes columns.
+        guideline_rows: List of dicts matching cpic_guidelines columns.
+        engine: SQLAlchemy engine for reference.db.
+        clear_existing: Whether to DELETE all existing rows first.
+
+    Returns:
+        CPICLoadStats with counts.
+    """
+    stats = CPICLoadStats(
+        alleles_loaded=len(allele_rows),
+        diplotypes_loaded=len(diplotype_rows),
+        guidelines_loaded=len(guideline_rows),
+    )
+
+    # Collect unique genes
+    for row in allele_rows:
+        stats.genes_found.add(row["gene"])
+    for row in diplotype_rows:
+        stats.genes_found.add(row["gene"])
+    for row in guideline_rows:
+        stats.genes_found.add(row["gene"])
+
+    with engine.begin() as conn:
+        if clear_existing:
+            conn.execute(cpic_guidelines.delete())
+            conn.execute(cpic_diplotypes.delete())
+            conn.execute(cpic_alleles.delete())
+
+        # Bulk insert alleles in batches
+        for i in range(0, len(allele_rows), BATCH_SIZE):
+            batch = allele_rows[i : i + BATCH_SIZE]
+            conn.execute(cpic_alleles.insert(), batch)
+
+        # Bulk insert diplotypes in batches
+        for i in range(0, len(diplotype_rows), BATCH_SIZE):
+            batch = diplotype_rows[i : i + BATCH_SIZE]
+            conn.execute(cpic_diplotypes.insert(), batch)
+
+        # Bulk insert guidelines in batches
+        for i in range(0, len(guideline_rows), BATCH_SIZE):
+            batch = guideline_rows[i : i + BATCH_SIZE]
+            conn.execute(cpic_guidelines.insert(), batch)
+
+    # WAL checkpoint after bulk load
+    _wal_checkpoint(engine)
+
+    logger.info(
+        "cpic_loaded",
+        alleles=stats.alleles_loaded,
+        diplotypes=stats.diplotypes_loaded,
+        guidelines=stats.guidelines_loaded,
+        genes=sorted(stats.genes_found),
+    )
+
+    return stats
+
+
+def record_cpic_version(
+    engine: sa.Engine,
+    *,
+    version: str,
+    file_path: str | None = None,
+    file_size_bytes: int | None = None,
+    checksum: str | None = None,
+) -> None:
+    """Insert or update the CPIC version in the database_versions table."""
+    with engine.begin() as conn:
+        existing = conn.execute(
+            sa.select(database_versions.c.db_name).where(
+                database_versions.c.db_name == "cpic"
+            )
+        ).first()
+
+        now = datetime.now(UTC)
+
+        if existing:
+            conn.execute(
+                database_versions.update()
+                .where(database_versions.c.db_name == "cpic")
+                .values(
+                    version=version,
+                    file_path=file_path,
+                    file_size_bytes=file_size_bytes,
+                    downloaded_at=now,
+                    checksum_sha256=checksum,
+                )
+            )
+        else:
+            conn.execute(
+                database_versions.insert().values(
+                    db_name="cpic",
+                    version=version,
+                    file_path=file_path,
+                    file_size_bytes=file_size_bytes,
+                    downloaded_at=now,
+                    checksum_sha256=checksum,
+                )
+            )
+
+
+def _compute_sha256(path: Path) -> str:
+    """Compute SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def load_cpic_from_csvs(
+    alleles_csv: Path,
+    diplotypes_csv: Path,
+    guidelines_csv: Path,
+    engine: sa.Engine,
+    *,
+    clear_existing: bool = True,
+) -> CPICLoadStats:
+    """Full pipeline: parse all three CPIC CSVs and load into reference.db.
+
+    Args:
+        alleles_csv: Path to allele definitions CSV.
+        diplotypes_csv: Path to diplotype→phenotype CSV.
+        guidelines_csv: Path to drug guidelines CSV.
+        engine: SQLAlchemy engine for reference.db.
+        clear_existing: Whether to DELETE existing rows first.
+
+    Returns:
+        CPICLoadStats with counts and metadata.
+    """
+    # Parse all three CSVs
+    allele_rows, allele_stats = parse_cpic_alleles_csv(alleles_csv)
+    diplotype_rows, diplo_stats = parse_cpic_diplotypes_csv(diplotypes_csv)
+    guideline_rows, guide_stats = parse_cpic_guidelines_csv(guidelines_csv)
+
+    # Load into database
+    stats = load_cpic_into_db(
+        allele_rows, diplotype_rows, guideline_rows, engine, clear_existing=clear_existing
+    )
+
+    # Carry over skip counts from parsing
+    stats.alleles_skipped = allele_stats.alleles_skipped
+    stats.diplotypes_skipped = diplo_stats.diplotypes_skipped
+    stats.guidelines_skipped = guide_stats.guidelines_skipped
+
+    # Compute combined checksum from all three files
+    combined_hash = hashlib.sha256()
+    combined_hash.update(_compute_sha256(alleles_csv).encode())
+    combined_hash.update(_compute_sha256(diplotypes_csv).encode())
+    combined_hash.update(_compute_sha256(guidelines_csv).encode())
+    stats.sha256 = combined_hash.hexdigest()
+
+    # Record version
+    version = datetime.now(UTC).strftime("%Y%m%d")
+    stats.version = version
+    record_cpic_version(
+        engine,
+        version=version,
+        checksum=stats.sha256,
+    )
+
+    return stats
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CPIC Lookup Functions (for star-allele calling in P3-02)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Lookup batch size (stay under SQLite 999-variable limit)
+LOOKUP_BATCH_SIZE = 500
+
+
+def lookup_alleles_by_gene(
+    gene: str,
+    engine: sa.Engine,
+) -> list[dict]:
+    """Look up all CPIC allele definitions for a given gene.
+
+    Args:
+        gene: Gene symbol (e.g. "CYP2D6").
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        List of dicts with keys: allele_name, defining_variants (parsed JSON),
+        function, activity_score.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            sa.select(
+                cpic_alleles.c.allele_name,
+                cpic_alleles.c.defining_variants,
+                cpic_alleles.c.function,
+                cpic_alleles.c.activity_score,
+            )
+            .where(cpic_alleles.c.gene == gene)
+            .order_by(cpic_alleles.c.allele_name)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    results = []
+    for row in rows:
+        defining = row.defining_variants
+        try:
+            variants = json.loads(defining) if defining else []
+        except json.JSONDecodeError:
+            variants = []
+
+        results.append({
+            "allele_name": row.allele_name,
+            "defining_variants": variants,
+            "function": row.function,
+            "activity_score": row.activity_score,
+        })
+
+    return results
+
+
+def lookup_alleles_by_rsids(
+    rsids: list[str],
+    engine: sa.Engine,
+) -> dict[str, list[dict]]:
+    """Find alleles whose defining variants include the given rsids.
+
+    This enables reverse lookup: given a sample's genotyped rsids, find
+    which CPIC alleles they participate in.
+
+    Args:
+        rsids: List of rsid strings to search for.
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        Dict mapping rsid → list of {gene, allele_name, ref, alt, function,
+        activity_score} for alleles that use that rsid.
+    """
+    if not rsids:
+        return {}
+
+    results: dict[str, list[dict]] = {}
+
+    # Query all alleles that have non-empty defining_variants
+    with engine.connect() as conn:
+        stmt = sa.select(
+            cpic_alleles.c.gene,
+            cpic_alleles.c.allele_name,
+            cpic_alleles.c.defining_variants,
+            cpic_alleles.c.function,
+            cpic_alleles.c.activity_score,
+        ).where(cpic_alleles.c.defining_variants.isnot(None))
+
+        rows = conn.execute(stmt).fetchall()
+
+    rsid_set = set(rsids)
+
+    for row in rows:
+        try:
+            variants = json.loads(row.defining_variants) if row.defining_variants else []
+        except json.JSONDecodeError:
+            continue
+
+        for variant in variants:
+            rsid = variant.get("rsid", "")
+            if rsid in rsid_set:
+                entry = {
+                    "gene": row.gene,
+                    "allele_name": row.allele_name,
+                    "ref": variant.get("ref"),
+                    "alt": variant.get("alt"),
+                    "function": row.function,
+                    "activity_score": row.activity_score,
+                }
+                results.setdefault(rsid, []).append(entry)
+
+    return results
+
+
+def lookup_diplotypes_by_gene(
+    gene: str,
+    engine: sa.Engine,
+) -> list[dict]:
+    """Look up all diplotype→phenotype mappings for a given gene.
+
+    Args:
+        gene: Gene symbol (e.g. "CYP2D6").
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        List of dicts with keys: diplotype, phenotype, ehr_notation, activity_score.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            sa.select(
+                cpic_diplotypes.c.diplotype,
+                cpic_diplotypes.c.phenotype,
+                cpic_diplotypes.c.ehr_notation,
+                cpic_diplotypes.c.activity_score,
+            )
+            .where(cpic_diplotypes.c.gene == gene)
+            .order_by(cpic_diplotypes.c.diplotype)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "diplotype": row.diplotype,
+            "phenotype": row.phenotype,
+            "ehr_notation": row.ehr_notation,
+            "activity_score": row.activity_score,
+        }
+        for row in rows
+    ]
+
+
+def lookup_guidelines_by_gene_drug(
+    gene: str,
+    drug: str,
+    engine: sa.Engine,
+) -> list[dict]:
+    """Look up CPIC guidelines for a specific gene-drug pair.
+
+    Args:
+        gene: Gene symbol (e.g. "CYP2D6").
+        drug: Drug name (e.g. "codeine").
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        List of dicts with keys: phenotype, recommendation, classification,
+        guideline_url.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            sa.select(
+                cpic_guidelines.c.phenotype,
+                cpic_guidelines.c.recommendation,
+                cpic_guidelines.c.classification,
+                cpic_guidelines.c.guideline_url,
+            )
+            .where(
+                sa.and_(
+                    cpic_guidelines.c.gene == gene,
+                    cpic_guidelines.c.drug == drug,
+                )
+            )
+            .order_by(cpic_guidelines.c.phenotype)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "phenotype": row.phenotype,
+            "recommendation": row.recommendation,
+            "classification": row.classification,
+            "guideline_url": row.guideline_url,
+        }
+        for row in rows
+    ]
+
+
+def lookup_guidelines_by_gene(
+    gene: str,
+    engine: sa.Engine,
+) -> list[dict]:
+    """Look up all CPIC guidelines for a gene (all drugs).
+
+    Args:
+        gene: Gene symbol (e.g. "CYP2D6").
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        List of dicts with keys: drug, phenotype, recommendation,
+        classification, guideline_url.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            sa.select(
+                cpic_guidelines.c.drug,
+                cpic_guidelines.c.phenotype,
+                cpic_guidelines.c.recommendation,
+                cpic_guidelines.c.classification,
+                cpic_guidelines.c.guideline_url,
+            )
+            .where(cpic_guidelines.c.gene == gene)
+            .order_by(cpic_guidelines.c.drug, cpic_guidelines.c.phenotype)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "drug": row.drug,
+            "phenotype": row.phenotype,
+            "recommendation": row.recommendation,
+            "classification": row.classification,
+            "guideline_url": row.guideline_url,
+        }
+        for row in rows
+    ]
+
+
+def lookup_all_cpic_drugs(
+    engine: sa.Engine,
+) -> list[dict]:
+    """Look up all unique gene-drug pairs with CPIC guidelines.
+
+    Args:
+        engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        List of dicts with keys: gene, drug, classification.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            sa.select(
+                cpic_guidelines.c.gene,
+                cpic_guidelines.c.drug,
+                sa.func.min(cpic_guidelines.c.classification).label("classification"),
+            )
+            .group_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
+            .order_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "gene": row.gene,
+            "drug": row.drug,
+            "classification": row.classification,
+        }
+        for row in rows
+    ]
