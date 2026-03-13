@@ -102,7 +102,6 @@ export default function VariantDensityHistogram({ bins }: VariantDensityHistogra
           ticktext: chromTicks.map((t) => t.label),
           tickfont: { size: 10 },
           showgrid: false,
-          ...(chromBoundaries.length > 0 ? {} : {}),
         },
         yaxis: {
           title: { text: 'Variant Count' },

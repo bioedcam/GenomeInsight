@@ -591,7 +591,7 @@ def variant_density(
     # For raw_variants (no consequence column), everything is MODIFIER.
     has_consequence = hasattr(table.c, "consequence")
 
-    bin_expr = (table.c.pos / BIN_SIZE).cast(sa.Integer) * BIN_SIZE
+    bin_expr = sa.func.floor(table.c.pos / BIN_SIZE).cast(sa.Integer) * BIN_SIZE
 
     if has_consequence:
         query = (
