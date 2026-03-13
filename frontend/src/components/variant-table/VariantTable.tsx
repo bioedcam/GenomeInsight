@@ -1,7 +1,8 @@
 /** Variant table core: TanStack Table + infinite scroll + useInfiniteQuery (P1-15a).
  *  Chromosome anchors: jump-to-chromosome navigation bar (P1-15b).
  *  Column preset profiles (P1-15c).
- *  Contextual empty states (P1-15e). */
+ *  Contextual empty states (P1-15e).
+ *  Variant detail side panel on row click (P2-21). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -25,6 +26,7 @@ import {
   NoMatchEmpty,
   ErrorEmpty,
 } from "./EmptyStates"
+import VariantDetailSidePanel from "@/components/variant-detail/VariantDetailSidePanel"
 
 interface VariantTableProps {
   sampleId: number | null
@@ -50,6 +52,9 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [startChrom, setStartChrom] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined)
+
+  // Variant detail side panel state (P2-21)
+  const [selectedRsid, setSelectedRsid] = useState<string | null>(null)
 
   // Column preset state from URL param (P1-15c)
   const [activePreset, setActivePreset] = useState<string | null>(() => {
@@ -294,7 +299,10 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
               table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-border/50 hover:bg-accent/50 transition-colors"
+                  className={`border-b border-border/50 hover:bg-accent/50 transition-colors cursor-pointer ${
+                    row.original.rsid === selectedRsid ? "bg-accent" : ""
+                  }`}
+                  onClick={() => setSelectedRsid(row.original.rsid)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
@@ -324,6 +332,13 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
           )}
         </div>
       </section>
+
+      {/* Variant detail side panel (P2-21) */}
+      <VariantDetailSidePanel
+        rsid={selectedRsid}
+        sampleId={sampleId}
+        onClose={() => setSelectedRsid(null)}
+      />
     </div>
   )
 }

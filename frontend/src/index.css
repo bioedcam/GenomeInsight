@@ -82,3 +82,22 @@
   --color-sidebar-border: hsl(217.2 32.6% 17.5%);
   --color-sidebar-ring: hsl(168 75% 42%);
 }
+
+/* Slide-in drawer animation (P2-21) */
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out-to-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.animate-in.slide-in-from-right {
+  animation: slide-in-from-right 200ms ease-out;
+}
+
+.animate-out.slide-out-to-right {
+  animation: slide-out-to-right 150ms ease-in forwards;
+}
