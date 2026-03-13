@@ -14,7 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.column_presets import router as column_presets_router
-from backend.api.routes.databases import router as databases_router
+from backend.api.routes.databases import (
+    cleanup_interrupted_sessions,
+    shutdown_executor,
+)
+from backend.api.routes.databases import (
+    router as databases_router,
+)
 from backend.api.routes.encode_ccres import router as encode_ccres_router
 from backend.api.routes.igv_tracks import router as igv_tracks_router
 from backend.api.routes.ingest import router as ingest_router
@@ -45,9 +51,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry = get_registry()
     # Ensure reference tables exist (safe on existing DBs via checkfirst)
     reference_metadata.create_all(registry.reference_engine, checkfirst=True)
+    # Mark any leftover in-progress download sessions as interrupted/stale
+    cleanup_interrupted_sessions(registry.reference_engine)
     logger.info("DBRegistry initialised (reference.db engine ready)")
     yield
-    # Shutdown: dispose all engines
+    # Shutdown: stop download executor and dispose all engines
+    shutdown_executor()
     reset_registry()
     logger.info("DBRegistry disposed - all engines closed")
 
