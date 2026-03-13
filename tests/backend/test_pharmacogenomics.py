@@ -962,15 +962,14 @@ class TestCallConfidenceIntegrated:
         assert result.diplotype == "*1/*2"
         assert result.phenotype == "Normal Metabolizer"
 
-    def test_cyp2c19_partial_some_missing(self, pgx_reference_engine: sa.Engine):
-        """CYP2C19 with 1/3 rsids missing → Partial."""
+    def test_cyp2c19_insufficient_majority_missing(self, pgx_reference_engine: sa.Engine):
+        """CYP2C19 with 2/3 rsids missing → Insufficient."""
         alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
-        # Only provide 2 of 3 defining rsids
+        # Only provide 1 of 3 defining rsids
         genotypes = {"rs4244285": "GA"}
-        # rs4986893, rs12248560 are missing
+        # rs4986893, rs12248560 are missing (2/3 = 67% > 50%)
 
         result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
-        # 2/3 missing = 67% → Insufficient
         assert result.call_confidence == CallConfidence.INSUFFICIENT
 
     def test_cyp2c19_insufficient_all_missing(self, pgx_reference_engine: sa.Engine):
