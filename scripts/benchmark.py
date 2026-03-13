@@ -39,7 +39,7 @@ from backend.db.tables import (
 )
 
 
-def _create_shared_memory_engine() -> sa.Engine:
+def create_shared_memory_engine() -> sa.Engine:
     """Create an in-memory SQLite engine that shares state across connections.
 
     Uses StaticPool so all connections see the same in-memory database,
@@ -226,18 +226,19 @@ def seed_clinvar(
             conn.execute(clinvar_variants.insert(), batch)
 
 
-def seed_gene_phenotype(engine: sa.Engine) -> None:
+def seed_gene_phenotype(engine: sa.Engine, seed: int = 42) -> None:
     """Populate gene_phenotype with entries for each gene symbol."""
+    rng = random.Random(seed)
     rows = []
     for gene in GENE_SYMBOLS:
         rows.append(
             {
                 "gene_symbol": gene,
                 "disease_name": f"Disease associated with {gene}",
-                "disease_id": f"MONDO:{random.randint(1000, 9999):07d}",
+                "disease_id": f"MONDO:{rng.randint(1000, 9999):07d}",
                 "hpo_terms": '["HP:0000001"]',
                 "source": "mondo_hpo",
-                "inheritance": random.choice(["Autosomal dominant", "Autosomal recessive", None]),
+                "inheritance": rng.choice(["Autosomal dominant", "Autosomal recessive", None]),
             }
         )
     with engine.begin() as conn:
@@ -284,12 +285,12 @@ def seed_gnomad(
                 "ref": rng.choice(BASES),
                 "alt": rng.choice(BASES),
                 "af_global": af,
-                "af_afr": af * rng.uniform(0.5, 2.0),
-                "af_amr": af * rng.uniform(0.5, 2.0),
-                "af_eas": af * rng.uniform(0.5, 2.0),
-                "af_eur": af * rng.uniform(0.5, 2.0),
-                "af_fin": af * rng.uniform(0.5, 2.0),
-                "af_sas": af * rng.uniform(0.5, 2.0),
+                "af_afr": min(1.0, af * rng.uniform(0.5, 2.0)),
+                "af_amr": min(1.0, af * rng.uniform(0.5, 2.0)),
+                "af_eas": min(1.0, af * rng.uniform(0.5, 2.0)),
+                "af_eur": min(1.0, af * rng.uniform(0.5, 2.0)),
+                "af_fin": min(1.0, af * rng.uniform(0.5, 2.0)),
+                "af_sas": min(1.0, af * rng.uniform(0.5, 2.0)),
                 "homozygous_count": rng.randint(0, 1000),
             }
         )
@@ -461,7 +462,7 @@ def run_benchmark(num_variants: int = 600_000) -> dict:
     # 2. Populate sample DB
     print("[2/5] Loading variants into sample DB...", end=" ", flush=True)
     t0 = time.perf_counter()
-    sample_engine = _create_shared_memory_engine()
+    sample_engine = create_shared_memory_engine()
     create_sample_tables(sample_engine)
     batch_size = 50_000
     with sample_engine.begin() as conn:
@@ -475,12 +476,12 @@ def run_benchmark(num_variants: int = 600_000) -> dict:
     print("[3/5] Building annotation source databases...", end=" ", flush=True)
     t0 = time.perf_counter()
 
-    reference_engine = _create_shared_memory_engine()
+    reference_engine = create_shared_memory_engine()
     reference_metadata.create_all(reference_engine)
 
-    vep_engine = _create_shared_memory_engine()
-    gnomad_engine = _create_shared_memory_engine()
-    dbnsfp_engine = _create_shared_memory_engine()
+    vep_engine = create_shared_memory_engine()
+    gnomad_engine = create_shared_memory_engine()
+    dbnsfp_engine = create_shared_memory_engine()
 
     seed_vep_bundle(vep_engine, rsids, match_rate=0.7)
     seed_clinvar(reference_engine, rsids, match_rate=0.05)
@@ -618,7 +619,9 @@ def main() -> None:
     results = run_benchmark(args.variants)
 
     # Exit non-zero if annotation pipeline exceeds hard limit
-    if "FAIL" in results.get("annotation_status", ""):
+    if "FAIL" in results.get("annotation_status", "") or "FAIL" in results.get(
+        "ingest_status", ""
+    ):
         sys.exit(1)
 
 

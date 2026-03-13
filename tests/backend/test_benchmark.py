@@ -25,7 +25,7 @@ from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import annotated_variants, raw_variants, reference_metadata
 from scripts.benchmark import (
     BenchmarkDBRegistry,
-    _create_shared_memory_engine,
+    create_shared_memory_engine,
     generate_raw_variants,
     seed_clinvar,
     seed_dbnsfp,
@@ -57,12 +57,12 @@ def benchmark_engines_600k(
 
     Returns a dict with keys: reference, vep, gnomad, dbnsfp.
     """
-    reference_engine = _create_shared_memory_engine()
+    reference_engine = create_shared_memory_engine()
     reference_metadata.create_all(reference_engine)
 
-    vep_engine = _create_shared_memory_engine()
-    gnomad_engine = _create_shared_memory_engine()
-    dbnsfp_engine = _create_shared_memory_engine()
+    vep_engine = create_shared_memory_engine()
+    gnomad_engine = create_shared_memory_engine()
+    dbnsfp_engine = create_shared_memory_engine()
 
     rsids = benchmark_rsids_600k
     seed_vep_bundle(vep_engine, rsids, match_rate=0.7)
@@ -85,7 +85,7 @@ def benchmark_engines_600k(
 @pytest.mark.slow
 def test_ingest_600k_timing(benchmark_data_600k: list[dict]) -> None:
     """T2-24 sub-test: 600k variant ingest completes within 2 minutes."""
-    sample_engine = _create_shared_memory_engine()
+    sample_engine = create_shared_memory_engine()
     create_sample_tables(sample_engine)
 
     t0 = time.perf_counter()
@@ -117,7 +117,7 @@ def test_annotation_600k_timing(
     PRD target: < 2 min. Acceptable max: < 5 min.
     """
     # Create a fresh sample DB and load raw variants
-    sample_engine = _create_shared_memory_engine()
+    sample_engine = create_shared_memory_engine()
     create_sample_tables(sample_engine)
     batch_size = 50_000
     with sample_engine.begin() as conn:
@@ -182,16 +182,16 @@ def test_annotation_10k_smoke() -> None:
     rsids = [r["rsid"] for r in raw_data]
 
     # Create engines
-    sample_engine = _create_shared_memory_engine()
+    sample_engine = create_shared_memory_engine()
     create_sample_tables(sample_engine)
     with sample_engine.begin() as conn:
         conn.execute(raw_variants.insert(), raw_data)
 
-    reference_engine = _create_shared_memory_engine()
+    reference_engine = create_shared_memory_engine()
     reference_metadata.create_all(reference_engine)
-    vep_engine = _create_shared_memory_engine()
-    gnomad_engine = _create_shared_memory_engine()
-    dbnsfp_engine = _create_shared_memory_engine()
+    vep_engine = create_shared_memory_engine()
+    gnomad_engine = create_shared_memory_engine()
+    dbnsfp_engine = create_shared_memory_engine()
 
     seed_vep_bundle(vep_engine, rsids, match_rate=0.7, seed=99)
     seed_clinvar(reference_engine, rsids, match_rate=0.05, seed=99)
