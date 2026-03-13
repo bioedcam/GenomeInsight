@@ -1,9 +1,12 @@
-"""Tests for pharmacogenomics star-allele calling (P3-02).
+"""Tests for pharmacogenomics star-allele calling (P3-02) and three-state
+calling model (P3-03).
 
 Covers:
   - T3-01: Star-allele calling returns correct diplotype for CYP2C19 *1/*2
   - T3-02: Metabolizer phenotype correctly assigned: CYP2C19 *1/*2 → IM
-  - Additional: CYP2D6 calling, edge cases, multi-variant alleles, missing data
+  - T3-04: CYP2D6 calling produces Partial state with structural variant caveat
+  - Additional: CYP2D6 calling, edge cases, multi-variant alleles, missing data,
+    three-state confidence assignment
 """
 
 from __future__ import annotations
@@ -14,7 +17,9 @@ import pytest
 import sqlalchemy as sa
 
 from backend.analysis.pharmacogenomics import (
+    CallConfidence,
     StarAlleleResult,
+    _assess_call_confidence,
     _count_alt_alleles,
     _fetch_alleles_for_gene,
     _fetch_diplotype_phenotype,
@@ -797,3 +802,245 @@ class TestCallAllStarAlleles:
         assert r.gene == "CYP2C19"
         assert r.diplotype == "*1/*2"
         assert r.phenotype == "Intermediate Metabolizer"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _assess_call_confidence — unit tests (P3-03)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestAssessCallConfidence:
+    """Unit tests for the three-state calling confidence logic."""
+
+    def test_complete_all_rsids_present(self):
+        """Gene with all defining rsids genotyped → Complete."""
+        conf, note = _assess_call_confidence(
+            "CYP2C19",
+            all_defining_rsids={"rs4244285", "rs4986893", "rs12248560"},
+            missing_rsids=set(),
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.COMPLETE
+        assert "All defining positions" in note
+
+    def test_partial_structural_variant_gene(self):
+        """CYP2D6 with all SNP rsids present → still Partial."""
+        conf, note = _assess_call_confidence(
+            "CYP2D6",
+            all_defining_rsids={"rs16947", "rs3892097", "rs1065852"},
+            missing_rsids=set(),
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.PARTIAL
+        assert "structural variant" in note
+        assert "provisional" in note
+
+    def test_partial_cyp2b6(self):
+        """CYP2B6 is also a structural variant gene → Partial."""
+        conf, note = _assess_call_confidence(
+            "CYP2B6",
+            all_defining_rsids={"rs3745274"},
+            missing_rsids=set(),
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.PARTIAL
+
+    def test_partial_some_rsids_missing(self):
+        """Non-SV gene with 1/3 rsids missing (≤50%) → Partial."""
+        conf, note = _assess_call_confidence(
+            "CYP2C19",
+            all_defining_rsids={"rs4244285", "rs4986893", "rs12248560"},
+            missing_rsids={"rs4986893"},
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.PARTIAL
+        assert "1/3" in note
+        assert "rs4986893" in note
+
+    def test_partial_uncalled_rsids(self):
+        """Uncalled rsids (no-call genotypes) count toward unusable."""
+        conf, note = _assess_call_confidence(
+            "TPMT",
+            all_defining_rsids={"rs1800460", "rs1142345"},
+            missing_rsids=set(),
+            uncalled_rsids={"rs1142345"},
+        )
+        assert conf == CallConfidence.PARTIAL
+        assert "rs1142345" in note
+
+    def test_insufficient_majority_missing(self):
+        """More than 50% of defining rsids missing → Insufficient."""
+        conf, note = _assess_call_confidence(
+            "CYP2C19",
+            all_defining_rsids={"rs4244285", "rs4986893", "rs12248560"},
+            missing_rsids={"rs4244285", "rs4986893"},
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.INSUFFICIENT
+        assert "unreliable" in note
+
+    def test_insufficient_all_missing(self):
+        """All defining rsids missing → Insufficient."""
+        conf, note = _assess_call_confidence(
+            "SLCO1B1",
+            all_defining_rsids={"rs2306283", "rs4149056"},
+            missing_rsids={"rs2306283", "rs4149056"},
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.INSUFFICIENT
+
+    def test_insufficient_mixed_missing_and_uncalled(self):
+        """Missing + uncalled together exceed 50% → Insufficient."""
+        conf, note = _assess_call_confidence(
+            "CYP2C19",
+            all_defining_rsids={"rs4244285", "rs4986893", "rs12248560"},
+            missing_rsids={"rs4244285"},
+            uncalled_rsids={"rs4986893"},
+            # 2/3 = 67% unusable
+        )
+        assert conf == CallConfidence.INSUFFICIENT
+
+    def test_no_defining_rsids_non_sv_gene(self):
+        """Gene with no defining rsids (reference-only) → Complete."""
+        conf, note = _assess_call_confidence(
+            "TPMT",
+            all_defining_rsids=set(),
+            missing_rsids=set(),
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.COMPLETE
+
+    def test_no_defining_rsids_sv_gene(self):
+        """SV gene with no defining rsids → still Partial."""
+        conf, note = _assess_call_confidence(
+            "CYP2D6",
+            all_defining_rsids=set(),
+            missing_rsids=set(),
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.PARTIAL
+
+    def test_insufficient_note_truncates_long_list(self):
+        """Notes with >5 missing rsids are truncated."""
+        rsids = {f"rs{i}" for i in range(10)}
+        conf, note = _assess_call_confidence(
+            "FAKEGENE",
+            all_defining_rsids=rsids,
+            missing_rsids=rsids,
+            uncalled_rsids=set(),
+        )
+        assert conf == CallConfidence.INSUFFICIENT
+        assert "and 5 more" in note
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Three-state calling confidence — integrated tests (P3-03)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCallConfidenceIntegrated:
+    """Tests that call_star_alleles_for_gene correctly sets call_confidence."""
+
+    def test_cyp2c19_complete_all_rsids(self, pgx_reference_engine: sa.Engine):
+        """CYP2C19 with all defining rsids genotyped → Complete."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "GG", "rs4986893": "GG", "rs12248560": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.COMPLETE
+
+    def test_cyp2d6_partial_structural_variant(self, pgx_reference_engine: sa.Engine):
+        """T3-04: CYP2D6 calling produces Partial state with structural variant caveat."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CT", "rs3892097": "CC", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.PARTIAL
+        assert "structural variant" in result.confidence_note
+        assert "provisional" in result.confidence_note
+        # Diplotype still called correctly
+        assert result.diplotype == "*1/*2"
+        assert result.phenotype == "Normal Metabolizer"
+
+    def test_cyp2c19_partial_some_missing(self, pgx_reference_engine: sa.Engine):
+        """CYP2C19 with 1/3 rsids missing → Partial."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        # Only provide 2 of 3 defining rsids
+        genotypes = {"rs4244285": "GA"}
+        # rs4986893, rs12248560 are missing
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        # 2/3 missing = 67% → Insufficient
+        assert result.call_confidence == CallConfidence.INSUFFICIENT
+
+    def test_cyp2c19_insufficient_all_missing(self, pgx_reference_engine: sa.Engine):
+        """CYP2C19 with no data → Insufficient."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, {}, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.INSUFFICIENT
+        assert "unreliable" in result.confidence_note
+
+    def test_tpmt_complete_all_rsids(self, pgx_reference_engine: sa.Engine):
+        """TPMT with all defining rsids → Complete."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CC", "rs1142345": "AA"}
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.COMPLETE
+
+    def test_tpmt_partial_one_uncalled(self, pgx_reference_engine: sa.Engine):
+        """TPMT with 1/2 rsids as no-call → Partial (50% exactly)."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CC", "rs1142345": "--"}  # no-call
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.PARTIAL
+
+    def test_slco1b1_complete(self, pgx_reference_engine: sa.Engine):
+        """SLCO1B1 with all rsids genotyped → Complete."""
+        alleles = _fetch_alleles_for_gene("SLCO1B1", pgx_reference_engine)
+        genotypes = {"rs2306283": "AA", "rs4149056": "TT"}
+
+        result = call_star_alleles_for_gene("SLCO1B1", alleles, genotypes, pgx_reference_engine)
+        assert result.call_confidence == CallConfidence.COMPLETE
+
+    def test_call_all_includes_confidence(self, pgx_reference_engine: sa.Engine):
+        """call_all_star_alleles results include call_confidence field."""
+        sample = _make_sample_engine(
+            [
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs4986893", "chrom": "10", "pos": 96540410, "genotype": "GG"},
+                {"rsid": "rs12248560", "chrom": "10", "pos": 96521657, "genotype": "CC"},
+                {"rsid": "rs16947", "chrom": "22", "pos": 42522613, "genotype": "CT"},
+                {"rsid": "rs3892097", "chrom": "22", "pos": 42524947, "genotype": "CC"},
+                {"rsid": "rs1065852", "chrom": "22", "pos": 42525772, "genotype": "CC"},
+            ]
+        )
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19", "CYP2D6"}),
+        )
+
+        by_gene = {r.gene: r for r in results}
+        # CYP2C19 has all defining rsids → Complete
+        assert by_gene["CYP2C19"].call_confidence == CallConfidence.COMPLETE
+        # CYP2D6 is structural variant gene → always Partial
+        assert by_gene["CYP2D6"].call_confidence == CallConfidence.PARTIAL
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CallConfidence enum tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCallConfidenceEnum:
+    def test_values(self):
+        assert CallConfidence.COMPLETE.value == "Complete"
+        assert CallConfidence.PARTIAL.value == "Partial"
+        assert CallConfidence.INSUFFICIENT.value == "Insufficient"
+
+    def test_members(self):
+        assert len(CallConfidence) == 3
