@@ -72,10 +72,11 @@ describe('ConsequenceDonut', () => {
   })
 
   it('renders with many consequence types', () => {
+    const tiers = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'] as const
     const manyItems: ConsequenceCount[] = Array.from({ length: 20 }, (_, i) => ({
       consequence: `type_${i}`,
       count: 100 - i * 5,
-      tier: ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'][i % 4],
+      tier: tiers[i % tiers.length],
     }))
     const total = manyItems.reduce((sum, item) => sum + item.count, 0)
     render(<ConsequenceDonut items={manyItems} total={total} />)
