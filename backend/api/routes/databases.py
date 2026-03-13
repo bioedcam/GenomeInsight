@@ -14,7 +14,7 @@ import asyncio
 import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import sqlalchemy as sa
@@ -218,7 +218,6 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
             job_id=job_id,
             engine=engine,
             settings=settings,
-            session_id=session_id,
         )
 
     # Persist session in-memory and in database
@@ -304,9 +303,11 @@ async def download_progress(session_id: str) -> StreamingResponse:
             )
 
             if all_terminal:
-                # Update session status and clean up in-memory cache
+                # Determine final status based on job outcomes
                 _active_sessions.pop(session_id, None)
-                _update_session_status(engine, session_id, "complete")
+                has_failures = any(s.get("status") == "failed" for s in db_statuses)
+                final_status = "failed" if has_failures else "complete"
+                _update_session_status(engine, session_id, final_status)
                 return
 
             await asyncio.sleep(poll_interval)
@@ -406,7 +407,7 @@ def cleanup_interrupted_sessions(engine: sa.Engine) -> int:
     that were marked as interrupted or stale.
     """
     now = datetime.now(UTC)
-    one_hour_ago = now.replace(hour=max(now.hour - 1, 0)) if now.hour > 0 else now
+    one_hour_ago = now - timedelta(hours=1)
 
     count = 0
     with engine.begin() as conn:
@@ -525,7 +526,6 @@ def _run_download(
     job_id: str,
     engine: sa.Engine,
     settings: Settings,
-    session_id: str,
 ) -> None:
     """Execute a single database download in a background thread.
 

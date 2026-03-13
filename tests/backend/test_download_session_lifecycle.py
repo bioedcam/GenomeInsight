@@ -42,26 +42,6 @@ def _make_engine(tmp_data_dir: Path) -> sa.Engine:
     return engine
 
 
-def _make_client(tmp_data_dir: Path):
-    """Create a TestClient with patched settings."""
-    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-    engine = _make_engine(tmp_data_dir)
-    engine.dispose()
-
-    with (
-        patch("backend.main.get_settings", return_value=settings),
-        patch("backend.db.connection.get_settings", return_value=settings),
-        patch("backend.api.routes.databases.get_settings", return_value=settings),
-    ):
-        reset_registry()
-        from backend.main import create_app
-
-        app = create_app()
-        client = TestClient(app)
-        yield client
-        client.close()
-        reset_registry()
-
 
 # ── Executor singleton tests ─────────────────────────────────────────
 
