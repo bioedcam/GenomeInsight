@@ -353,6 +353,29 @@ describe("VariantDetailSidePanel (P2-21)", () => {
     })
   })
 
+  it("calls onClose when clicking the overlay", async () => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => mockVariantDetail,
+    }))
+
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <VariantDetailSidePanel rsid="rs100" sampleId={1} onClose={onClose} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+    })
+
+    // Click the overlay (outside the panel)
+    const overlay = screen.getByLabelText("Close panel")
+    await user.click(overlay)
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
   it("shows ensemble pathogenic indicator", async () => {
     mockFetch.mockImplementation(async () => ({
       ok: true,

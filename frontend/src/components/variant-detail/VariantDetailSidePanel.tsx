@@ -158,6 +158,7 @@ function PanelContent({
           )}
         </div>
         <button
+          type="button"
           onClick={onClose}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           aria-label="Close variant detail panel"
@@ -375,7 +376,10 @@ export default function VariantDetailSidePanel({
     <div
       className="fixed inset-0 z-40 bg-black/20 dark:bg-black/40 transition-opacity"
       onClick={handleOverlayClick}
-      aria-label="Variant detail panel overlay"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose() }}
+      role="button"
+      tabIndex={0}
+      aria-label="Close panel"
     >
       {/* Slide-in drawer */}
       <div
@@ -402,6 +406,7 @@ export default function VariantDetailSidePanel({
               <p className="text-sm text-destructive">Failed to load variant detail</p>
               <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
               <button
+                type="button"
                 onClick={onClose}
                 className="mt-3 px-3 py-1.5 text-sm rounded-md border border-input bg-background text-foreground hover:bg-accent transition-colors"
               >
@@ -409,8 +414,8 @@ export default function VariantDetailSidePanel({
               </button>
             </div>
           </div>
-        ) : variant ? (
-          <PanelContent variant={variant} sampleId={sampleId!} onClose={onClose} />
+        ) : variant && sampleId != null ? (
+          <PanelContent variant={variant} sampleId={sampleId} onClose={onClose} />
         ) : null}
       </div>
     </div>
