@@ -80,6 +80,24 @@ export interface QCStats {
   per_chromosome: ChromosomeQCStats[]
 }
 
+/** Single genomic bin in the density histogram (P2-23). */
+export interface DensityBin {
+  chrom: string
+  bin_start: number
+  bin_end: number
+  high: number
+  moderate: number
+  low: number
+  modifier: number
+  total: number
+}
+
+/** Variant density response (P2-23). */
+export interface DensityResponse {
+  bins: DensityBin[]
+  bin_size: number
+}
+
 /** Column preset profile (P1-15c). */
 export interface ColumnPreset {
   name: string

@@ -7,6 +7,7 @@ import type {
   VariantCursor,
   ChromosomeSummary,
   QCStats,
+  DensityResponse,
 } from "@/types/variants"
 
 const PAGE_SIZE = 100
@@ -155,6 +156,28 @@ export function useQCStats(sampleId: number | null) {
       if (!res.ok) {
         const text = await res.text().catch(() => "")
         throw new Error(`QC stats failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Variant density histogram data — counts per 1 Mb genomic bin,
+ * grouped by consequence tier (P2-23).
+ * Cached with staleTime: Infinity since variant data doesn't change.
+ */
+export function useVariantDensity(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["variants-density", sampleId],
+    queryFn: async (): Promise<DensityResponse> => {
+      const params = new URLSearchParams({ sample_id: String(sampleId!) })
+      const res = await fetch(`/api/variants/density?${params}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`Variant density failed: ${res.status}${text ? ` - ${text}` : ""}`)
       }
       return res.json()
     },

@@ -1,11 +1,12 @@
-"""Variant table API endpoints (P1-14, P1-15d).
+"""Variant table API endpoints (P1-14, P1-15d, P2-23).
 
 Cursor-based keyset pagination on (chrom, pos) for raw_variants and
 annotated_variants tables in per-sample databases.
 
-GET  /api/variants          — Paginated variant list
-GET  /api/variants/count    — Total count (async, separate query)
-GET  /api/variants/chromosomes — Per-chromosome counts
+GET  /api/variants              — Paginated variant list
+GET  /api/variants/count        — Total count (async, separate query)
+GET  /api/variants/chromosomes  — Per-chromosome counts
+GET  /api/variants/density      — Per 1 Mb bin density by consequence tier (P2-23)
 """
 
 from __future__ import annotations
@@ -508,3 +509,136 @@ def qc_stats(
         heterozygosity_rate=round(het_rate, 6),
         per_chromosome=per_chrom,
     )
+
+
+# ── Variant density (P2-23) ─────────────────────────────────────────
+
+# VEP consequence → tier mapping (Sequence Ontology impact).
+_CONSEQUENCE_TIER: dict[str, str] = {
+    # HIGH
+    "transcript_ablation": "HIGH",
+    "splice_acceptor_variant": "HIGH",
+    "splice_donor_variant": "HIGH",
+    "stop_gained": "HIGH",
+    "frameshift_variant": "HIGH",
+    "stop_lost": "HIGH",
+    "start_lost": "HIGH",
+    "transcript_amplification": "HIGH",
+    # MODERATE
+    "missense_variant": "MODERATE",
+    "inframe_insertion": "MODERATE",
+    "inframe_deletion": "MODERATE",
+    "protein_altering_variant": "MODERATE",
+    # LOW
+    "synonymous_variant": "LOW",
+    "splice_region_variant": "LOW",
+    "start_retained_variant": "LOW",
+    "stop_retained_variant": "LOW",
+    "incomplete_terminal_codon_variant": "LOW",
+    "coding_sequence_variant": "LOW",
+}
+
+# Anything not listed above (intron_variant, intergenic, upstream, downstream, etc.)
+# is classified as MODIFIER.
+
+_TIER_ORDER = {"HIGH": 0, "MODERATE": 1, "LOW": 2, "MODIFIER": 3}
+
+# 1 Mb bin size in base pairs.
+BIN_SIZE = 1_000_000
+
+
+class DensityBin(BaseModel):
+    """Single genomic bin in the density histogram."""
+
+    chrom: str
+    bin_start: int
+    bin_end: int
+    high: int = 0
+    moderate: int = 0
+    low: int = 0
+    modifier: int = 0
+    total: int = 0
+
+
+class DensityResponse(BaseModel):
+    """Variant density per 1 Mb bin, colored by consequence tier (P2-23)."""
+
+    bins: list[DensityBin]
+    bin_size: int = BIN_SIZE
+
+
+def _consequence_to_tier(consequence: str | None) -> str:
+    """Map a VEP SO consequence term to its impact tier."""
+    if not consequence:
+        return "MODIFIER"
+    return _CONSEQUENCE_TIER.get(consequence, "MODIFIER")
+
+
+@router.get("/density")
+def variant_density(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> DensityResponse:
+    """Return variant counts per 1 Mb genomic bin, grouped by consequence tier.
+
+    Bins are computed as ``pos // 1_000_000 * 1_000_000``. Each bin carries
+    counts for HIGH / MODERATE / LOW / MODIFIER consequence tiers plus total.
+    Only returns bins that contain at least one variant.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    # SQL-level aggregation: GROUP BY (chrom, bin_start, consequence).
+    # For raw_variants (no consequence column), everything is MODIFIER.
+    has_consequence = hasattr(table.c, "consequence")
+
+    bin_expr = sa.func.floor(table.c.pos / BIN_SIZE).cast(sa.Integer) * BIN_SIZE
+
+    if has_consequence:
+        query = (
+            sa.select(
+                table.c.chrom,
+                bin_expr.label("bin_start"),
+                table.c.consequence,
+                sa.func.count().label("cnt"),
+            )
+            .select_from(table)
+            .group_by(table.c.chrom, bin_expr, table.c.consequence)
+        )
+    else:
+        query = (
+            sa.select(
+                table.c.chrom,
+                bin_expr.label("bin_start"),
+                sa.literal(None).label("consequence"),
+                sa.func.count().label("cnt"),
+            )
+            .select_from(table)
+            .group_by(table.c.chrom, bin_expr)
+        )
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    # Accumulate into bins keyed by (chrom, bin_start).
+    bin_map: dict[tuple[str, int], DensityBin] = {}
+    for row in rows:
+        key = (row.chrom, row.bin_start)
+        if key not in bin_map:
+            bin_map[key] = DensityBin(
+                chrom=row.chrom,
+                bin_start=row.bin_start,
+                bin_end=row.bin_start + BIN_SIZE,
+            )
+        b = bin_map[key]
+        tier = _consequence_to_tier(row.consequence)
+        tier_lower = tier.lower()
+        setattr(b, tier_lower, getattr(b, tier_lower) + row.cnt)
+        b.total += row.cnt
+
+    # Sort bins by canonical chrom order then bin_start.
+    bins = sorted(
+        bin_map.values(),
+        key=lambda b: (_chrom_sort_key(b.chrom), b.bin_start),
+    )
+
+    return DensityResponse(bins=bins)
