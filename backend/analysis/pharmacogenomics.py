@@ -40,7 +40,7 @@ Usage::
     for r in results:
         print(f"{r.gene}: {r.diplotype} → {r.phenotype} ({r.call_confidence})")
 
-    alerts = generate_prescribing_alerts(results, reference_engine, sample_engine)
+    alerts = generate_prescribing_alerts(results, reference_engine)
     # alerts is a list of PrescribingAlert dataclasses
     # Call store_prescribing_alerts() to persist them as findings records
 """
