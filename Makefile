@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run dev run-api run-frontend run-huey build-frontend install uninstall service-status service-start service-stop clean
+.PHONY: setup setup-backend setup-frontend test test-backend test-frontend test-e2e lint format run dev run-api run-frontend run-huey build-frontend install uninstall service-status service-start service-stop clean benchmark
 
 # Default Python and Node
 PYTHON ?= python3
@@ -62,6 +62,9 @@ test-frontend:  ## Run frontend tests
 
 test-e2e:  ## Run Playwright E2E tests
 	npx playwright test
+
+benchmark:  ## Run annotation pipeline performance benchmark (600k SNPs)
+	$(PYTHON) scripts/benchmark.py
 
 # ──────────────────────────────────────────────
 # Code quality
