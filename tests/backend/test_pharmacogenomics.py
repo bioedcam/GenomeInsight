@@ -1,0 +1,799 @@
+"""Tests for pharmacogenomics star-allele calling (P3-02).
+
+Covers:
+  - T3-01: Star-allele calling returns correct diplotype for CYP2C19 *1/*2
+  - T3-02: Metabolizer phenotype correctly assigned: CYP2C19 *1/*2 → IM
+  - Additional: CYP2D6 calling, edge cases, multi-variant alleles, missing data
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+import sqlalchemy as sa
+
+from backend.analysis.pharmacogenomics import (
+    StarAlleleResult,
+    _count_alt_alleles,
+    _fetch_alleles_for_gene,
+    _fetch_diplotype_phenotype,
+    _fetch_sample_genotypes,
+    call_all_star_alleles,
+    call_star_alleles_for_gene,
+)
+from backend.db.sample_schema import create_sample_tables
+from backend.db.tables import (
+    cpic_alleles,
+    cpic_diplotypes,
+    raw_variants,
+    reference_metadata,
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Fixtures
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def pgx_reference_engine() -> sa.Engine:
+    """Reference engine with CPIC alleles and diplotypes for PGx testing."""
+    engine = sa.create_engine("sqlite://")
+    reference_metadata.create_all(engine)
+
+    alleles = [
+        # CYP2C19
+        {
+            "gene": "CYP2C19",
+            "allele_name": "*1",
+            "defining_variants": "[]",
+            "function": "Normal function",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "allele_name": "*2",
+            "defining_variants": json.dumps([{"rsid": "rs4244285", "ref": "G", "alt": "A"}]),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "allele_name": "*3",
+            "defining_variants": json.dumps([{"rsid": "rs4986893", "ref": "G", "alt": "A"}]),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "allele_name": "*17",
+            "defining_variants": json.dumps([{"rsid": "rs12248560", "ref": "C", "alt": "T"}]),
+            "function": "Increased function",
+            "activity_score": 1.5,
+        },
+        # CYP2D6
+        {
+            "gene": "CYP2D6",
+            "allele_name": "*1",
+            "defining_variants": "[]",
+            "function": "Normal function",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "allele_name": "*2",
+            "defining_variants": json.dumps([{"rsid": "rs16947", "ref": "C", "alt": "T"}]),
+            "function": "Normal function",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "allele_name": "*4",
+            "defining_variants": json.dumps([{"rsid": "rs3892097", "ref": "C", "alt": "T"}]),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "allele_name": "*10",
+            "defining_variants": json.dumps([{"rsid": "rs1065852", "ref": "C", "alt": "T"}]),
+            "function": "Decreased function",
+            "activity_score": 0.25,
+        },
+        # TPMT (with multi-variant allele *3A)
+        {
+            "gene": "TPMT",
+            "allele_name": "*1",
+            "defining_variants": "[]",
+            "function": "Normal function",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "TPMT",
+            "allele_name": "*3A",
+            "defining_variants": json.dumps(
+                [
+                    {"rsid": "rs1800460", "ref": "C", "alt": "T"},
+                    {"rsid": "rs1142345", "ref": "A", "alt": "G"},
+                ]
+            ),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "TPMT",
+            "allele_name": "*3B",
+            "defining_variants": json.dumps([{"rsid": "rs1800460", "ref": "C", "alt": "T"}]),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "TPMT",
+            "allele_name": "*3C",
+            "defining_variants": json.dumps([{"rsid": "rs1142345", "ref": "A", "alt": "G"}]),
+            "function": "No function",
+            "activity_score": 0.0,
+        },
+        # SLCO1B1 (with multi-variant allele *15)
+        {
+            "gene": "SLCO1B1",
+            "allele_name": "*1A",
+            "defining_variants": "[]",
+            "function": "Normal function",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "SLCO1B1",
+            "allele_name": "*1B",
+            "defining_variants": json.dumps([{"rsid": "rs2306283", "ref": "A", "alt": "G"}]),
+            "function": "Decreased function",
+            "activity_score": 0.75,
+        },
+        {
+            "gene": "SLCO1B1",
+            "allele_name": "*5",
+            "defining_variants": json.dumps([{"rsid": "rs4149056", "ref": "T", "alt": "C"}]),
+            "function": "Decreased function",
+            "activity_score": 0.5,
+        },
+        {
+            "gene": "SLCO1B1",
+            "allele_name": "*15",
+            "defining_variants": json.dumps(
+                [
+                    {"rsid": "rs2306283", "ref": "A", "alt": "G"},
+                    {"rsid": "rs4149056", "ref": "T", "alt": "C"},
+                ]
+            ),
+            "function": "Decreased function",
+            "activity_score": 0.25,
+        },
+    ]
+
+    diplotypes = [
+        # CYP2C19
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*1/*1",
+            "phenotype": "Normal Metabolizer",
+            "ehr_notation": "CYP2C19 Normal Metabolizer",
+            "activity_score": 2.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*1/*2",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "CYP2C19 Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*2/*2",
+            "phenotype": "Poor Metabolizer",
+            "ehr_notation": "CYP2C19 Poor Metabolizer",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*1/*17",
+            "phenotype": "Rapid Metabolizer",
+            "ehr_notation": "CYP2C19 Rapid Metabolizer",
+            "activity_score": 2.5,
+        },
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*17/*17",
+            "phenotype": "Ultrarapid Metabolizer",
+            "ehr_notation": "CYP2C19 Ultrarapid Metabolizer",
+            "activity_score": 3.0,
+        },
+        {
+            "gene": "CYP2C19",
+            "diplotype": "*2/*17",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "CYP2C19 Intermediate Metabolizer",
+            "activity_score": 1.5,
+        },
+        # CYP2D6
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*1/*1",
+            "phenotype": "Normal Metabolizer",
+            "ehr_notation": "CYP2D6 Normal Metabolizer",
+            "activity_score": 2.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*1/*4",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "CYP2D6 Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*4/*4",
+            "phenotype": "Poor Metabolizer",
+            "ehr_notation": "CYP2D6 Poor Metabolizer",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*1/*2",
+            "phenotype": "Normal Metabolizer",
+            "ehr_notation": "CYP2D6 Normal Metabolizer",
+            "activity_score": 2.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*2/*4",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "CYP2D6 Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "CYP2D6",
+            "diplotype": "*1/*10",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "CYP2D6 Intermediate Metabolizer",
+            "activity_score": 1.25,
+        },
+        # TPMT
+        {
+            "gene": "TPMT",
+            "diplotype": "*1/*1",
+            "phenotype": "Normal Metabolizer",
+            "ehr_notation": "TPMT Normal Metabolizer",
+            "activity_score": 2.0,
+        },
+        {
+            "gene": "TPMT",
+            "diplotype": "*1/*3A",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "TPMT Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "TPMT",
+            "diplotype": "*3A/*3A",
+            "phenotype": "Poor Metabolizer",
+            "ehr_notation": "TPMT Poor Metabolizer",
+            "activity_score": 0.0,
+        },
+        {
+            "gene": "TPMT",
+            "diplotype": "*1/*3B",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "TPMT Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        {
+            "gene": "TPMT",
+            "diplotype": "*1/*3C",
+            "phenotype": "Intermediate Metabolizer",
+            "ehr_notation": "TPMT Intermediate Metabolizer",
+            "activity_score": 1.0,
+        },
+        # SLCO1B1
+        {
+            "gene": "SLCO1B1",
+            "diplotype": "*1A/*1A",
+            "phenotype": "Normal function",
+            "ehr_notation": "SLCO1B1 Normal function",
+            "activity_score": 2.0,
+        },
+        {
+            "gene": "SLCO1B1",
+            "diplotype": "*1A/*5",
+            "phenotype": "Decreased function",
+            "ehr_notation": "SLCO1B1 Decreased function",
+            "activity_score": 1.5,
+        },
+        {
+            "gene": "SLCO1B1",
+            "diplotype": "*1A/*15",
+            "phenotype": "Decreased function",
+            "ehr_notation": "SLCO1B1 Decreased function",
+            "activity_score": 1.25,
+        },
+        {
+            "gene": "SLCO1B1",
+            "diplotype": "*1A/*1B",
+            "phenotype": "Normal function",
+            "ehr_notation": "SLCO1B1 Normal function",
+            "activity_score": 1.75,
+        },
+    ]
+
+    with engine.begin() as conn:
+        conn.execute(cpic_alleles.insert(), alleles)
+        conn.execute(cpic_diplotypes.insert(), diplotypes)
+
+    return engine
+
+
+def _make_sample_engine(genotypes: list[dict]) -> sa.Engine:
+    """Create a sample engine with given raw variants."""
+    engine = sa.create_engine("sqlite://")
+    create_sample_tables(engine)
+    if genotypes:
+        with engine.begin() as conn:
+            conn.execute(raw_variants.insert(), genotypes)
+    return engine
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _count_alt_alleles
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCountAltAlleles:
+    def test_hom_ref(self):
+        assert _count_alt_alleles("CC", "C", "T") == 0
+
+    def test_het(self):
+        assert _count_alt_alleles("CT", "C", "T") == 1
+
+    def test_het_reversed(self):
+        assert _count_alt_alleles("TC", "C", "T") == 1
+
+    def test_hom_alt(self):
+        assert _count_alt_alleles("TT", "C", "T") == 2
+
+    def test_no_call_dashes(self):
+        assert _count_alt_alleles("--", "C", "T") is None
+
+    def test_no_call_zeros(self):
+        assert _count_alt_alleles("00", "C", "T") is None
+
+    def test_indel_alleles(self):
+        assert _count_alt_alleles("CT", "CT", "C") is None
+
+    def test_empty_genotype(self):
+        assert _count_alt_alleles("", "C", "T") is None
+
+    def test_short_genotype(self):
+        assert _count_alt_alleles("C", "C", "T") is None
+
+    def test_unexpected_bases(self):
+        """Genotype with bases not matching ref or alt."""
+        assert _count_alt_alleles("AG", "C", "T") is None
+
+    def test_dd_genotype(self):
+        assert _count_alt_alleles("DD", "C", "T") is None
+
+    def test_ii_genotype(self):
+        assert _count_alt_alleles("II", "C", "T") is None
+
+    def test_di_genotype(self):
+        assert _count_alt_alleles("DI", "C", "T") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _fetch_sample_genotypes
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestFetchSampleGenotypes:
+    def test_returns_matching_rsids(self, sample_with_variants: sa.Engine):
+        result = _fetch_sample_genotypes(["rs429358", "rs7412"], sample_with_variants)
+        assert result == {"rs429358": "TC", "rs7412": "CC"}
+
+    def test_missing_rsids_excluded(self, sample_with_variants: sa.Engine):
+        result = _fetch_sample_genotypes(["rs429358", "rs_nonexistent"], sample_with_variants)
+        assert "rs429358" in result
+        assert "rs_nonexistent" not in result
+
+    def test_empty_list(self, sample_with_variants: sa.Engine):
+        assert _fetch_sample_genotypes([], sample_with_variants) == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _fetch_alleles_for_gene
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestFetchAllelesForGene:
+    def test_returns_alleles(self, pgx_reference_engine: sa.Engine):
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        names = [a["allele_name"] for a in alleles]
+        assert "*1" in names
+        assert "*2" in names
+        assert "*17" in names
+
+    def test_defining_variants_parsed(self, pgx_reference_engine: sa.Engine):
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        star2 = next(a for a in alleles if a["allele_name"] == "*2")
+        assert isinstance(star2["defining_variants"], list)
+        assert star2["defining_variants"][0]["rsid"] == "rs4244285"
+
+    def test_unknown_gene_returns_empty(self, pgx_reference_engine: sa.Engine):
+        assert _fetch_alleles_for_gene("FAKEGENE", pgx_reference_engine) == []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _fetch_diplotype_phenotype
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestFetchDiplotypePhenotype:
+    def test_known_diplotype(self, pgx_reference_engine: sa.Engine):
+        result = _fetch_diplotype_phenotype("CYP2C19", "*1/*2", pgx_reference_engine)
+        assert result is not None
+        assert result["phenotype"] == "Intermediate Metabolizer"
+
+    def test_unknown_diplotype_returns_none(self, pgx_reference_engine: sa.Engine):
+        result = _fetch_diplotype_phenotype("CYP2C19", "*99/*99", pgx_reference_engine)
+        assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# call_star_alleles_for_gene — CYP2C19
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCallStarAllelesCYP2C19:
+    """T3-01 + T3-02: CYP2C19 star-allele calling and phenotype assignment."""
+
+    def test_cyp2c19_star1_star2_het(self, pgx_reference_engine: sa.Engine):
+        """T3-01: CYP2C19 rs4244285 GA → *1/*2.
+        T3-02: CYP2C19 *1/*2 → Intermediate Metabolizer.
+        """
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "GA"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.gene == "CYP2C19"
+        assert result.diplotype == "*1/*2"
+        assert result.phenotype == "Intermediate Metabolizer"
+        assert "rs4244285" in result.involved_rsids
+
+    def test_cyp2c19_star1_star1_wildtype(self, pgx_reference_engine: sa.Engine):
+        """All defining rsids are ref → *1/*1 Normal Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "GG", "rs4986893": "GG", "rs12248560": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert result.phenotype == "Normal Metabolizer"
+
+    def test_cyp2c19_star2_star2_hom(self, pgx_reference_engine: sa.Engine):
+        """rs4244285 AA → *2/*2 → Poor Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "AA"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*2/*2"
+        assert result.phenotype == "Poor Metabolizer"
+
+    def test_cyp2c19_star1_star17_rapid(self, pgx_reference_engine: sa.Engine):
+        """rs12248560 CT → *1/*17 → Rapid Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "GG", "rs12248560": "CT"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*17"
+        assert result.phenotype == "Rapid Metabolizer"
+
+    def test_cyp2c19_star2_star17(self, pgx_reference_engine: sa.Engine):
+        """rs4244285 GA + rs12248560 CT → *2/*17 → IM."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "GA", "rs12248560": "CT"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*2/*17"
+        assert result.phenotype == "Intermediate Metabolizer"
+
+    def test_cyp2c19_missing_rsids(self, pgx_reference_engine: sa.Engine):
+        """No genotype data → *1/*1 with missing_rsids populated."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes: dict[str, str] = {}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert len(result.missing_rsids) > 0
+        assert "rs4244285" in result.missing_rsids
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# call_star_alleles_for_gene — CYP2D6
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCallStarAllelesCYP2D6:
+    def test_cyp2d6_star1_star4(self, pgx_reference_engine: sa.Engine):
+        """rs3892097 CT → *1/*4 → Intermediate Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CC", "rs3892097": "CT", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*4"
+        assert result.phenotype == "Intermediate Metabolizer"
+
+    def test_cyp2d6_star4_star4(self, pgx_reference_engine: sa.Engine):
+        """rs3892097 TT → *4/*4 → Poor Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CC", "rs3892097": "TT", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*4/*4"
+        assert result.phenotype == "Poor Metabolizer"
+
+    def test_cyp2d6_star2_star4(self, pgx_reference_engine: sa.Engine):
+        """rs16947 CT + rs3892097 CT → *2/*4 → IM."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CT", "rs3892097": "CT", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*2/*4"
+        assert result.phenotype == "Intermediate Metabolizer"
+        assert "rs16947" in result.involved_rsids
+        assert "rs3892097" in result.involved_rsids
+
+    def test_cyp2d6_star1_star2(self, pgx_reference_engine: sa.Engine):
+        """rs16947 CT, others ref → *1/*2 → Normal Metabolizer."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CT", "rs3892097": "CC", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*2"
+        assert result.phenotype == "Normal Metabolizer"
+
+    def test_cyp2d6_wildtype(self, pgx_reference_engine: sa.Engine):
+        """All ref → *1/*1."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {"rs16947": "CC", "rs3892097": "CC", "rs1065852": "CC"}
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert result.phenotype == "Normal Metabolizer"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Multi-variant allele handling (TPMT *3A, SLCO1B1 *15)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestMultiVariantAlleles:
+    def test_tpmt_star3a_het(self, pgx_reference_engine: sa.Engine):
+        """Both *3A defining variants het → *1/*3A (most specific wins)."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CT", "rs1142345": "AG"}
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        # *3A is most specific (2 variants), gets priority over *3B or *3C
+        assert result.diplotype == "*1/*3A"
+        assert result.phenotype == "Intermediate Metabolizer"
+
+    def test_tpmt_star3b_only(self, pgx_reference_engine: sa.Engine):
+        """Only rs1800460 het, rs1142345 ref → *1/*3B."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CT", "rs1142345": "AA"}
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*3B"
+        assert result.phenotype == "Intermediate Metabolizer"
+
+    def test_tpmt_star3c_only(self, pgx_reference_engine: sa.Engine):
+        """Only rs1142345 het, rs1800460 ref → *1/*3C."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CC", "rs1142345": "AG"}
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*3C"
+        assert result.phenotype == "Intermediate Metabolizer"
+
+    def test_tpmt_wildtype(self, pgx_reference_engine: sa.Engine):
+        """All ref → *1/*1."""
+        alleles = _fetch_alleles_for_gene("TPMT", pgx_reference_engine)
+        genotypes = {"rs1800460": "CC", "rs1142345": "AA"}
+
+        result = call_star_alleles_for_gene("TPMT", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert result.phenotype == "Normal Metabolizer"
+
+    def test_slco1b1_star15_het(self, pgx_reference_engine: sa.Engine):
+        """Both *15 defining variants het → *1A/*15 (most specific)."""
+        alleles = _fetch_alleles_for_gene("SLCO1B1", pgx_reference_engine)
+        genotypes = {"rs2306283": "AG", "rs4149056": "TC"}
+
+        result = call_star_alleles_for_gene("SLCO1B1", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1A/*15"
+        assert result.phenotype == "Decreased function"
+
+    def test_slco1b1_star1b_only(self, pgx_reference_engine: sa.Engine):
+        """Only rs2306283 het → *1A/*1B."""
+        alleles = _fetch_alleles_for_gene("SLCO1B1", pgx_reference_engine)
+        genotypes = {"rs2306283": "AG", "rs4149056": "TT"}
+
+        result = call_star_alleles_for_gene("SLCO1B1", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1A/*1B"
+        assert result.phenotype == "Normal function"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Edge cases
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestEdgeCases:
+    def test_no_call_genotype(self, pgx_reference_engine: sa.Engine):
+        """No-call genotype → treated as missing → uncalled_rsids populated."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        genotypes = {"rs4244285": "--"}
+
+        result = call_star_alleles_for_gene("CYP2C19", alleles, genotypes, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert "rs4244285" in result.uncalled_rsids
+
+    def test_empty_genotypes(self, pgx_reference_engine: sa.Engine):
+        """No sample data → defaults to reference alleles."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, {}, pgx_reference_engine)
+        assert result.diplotype == "*1/*1"
+        assert len(result.missing_rsids) > 0
+
+    def test_involved_rsids_correct(self, pgx_reference_engine: sa.Engine):
+        """involved_rsids only includes rsids that contributed to a call."""
+        alleles = _fetch_alleles_for_gene("CYP2D6", pgx_reference_engine)
+        genotypes = {
+            "rs16947": "CC",  # ref → not involved
+            "rs3892097": "CT",  # alt → involved (*4)
+            "rs1065852": "CC",  # ref → not involved
+        }
+
+        result = call_star_alleles_for_gene("CYP2D6", alleles, genotypes, pgx_reference_engine)
+        assert result.involved_rsids == {"rs3892097"}
+
+    def test_result_dataclass_fields(self, pgx_reference_engine: sa.Engine):
+        """StarAlleleResult has all expected fields."""
+        alleles = _fetch_alleles_for_gene("CYP2C19", pgx_reference_engine)
+        result = call_star_alleles_for_gene(
+            "CYP2C19", alleles, {"rs4244285": "GA"}, pgx_reference_engine
+        )
+        assert isinstance(result, StarAlleleResult)
+        assert result.gene == "CYP2C19"
+        assert result.allele1 is not None
+        assert result.allele2 is not None
+        assert result.ehr_notation is not None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# call_all_star_alleles — integration
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCallAllStarAlleles:
+    def test_calls_specified_genes(self, pgx_reference_engine: sa.Engine):
+        """Calling a subset of genes returns results only for those genes."""
+        sample = _make_sample_engine(
+            [
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs16947", "chrom": "22", "pos": 42522613, "genotype": "CT"},
+            ]
+        )
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19", "CYP2D6"}),
+        )
+
+        gene_names = [r.gene for r in results]
+        assert "CYP2C19" in gene_names
+        assert "CYP2D6" in gene_names
+        assert len(results) == 2
+
+    def test_cyp2c19_star1_star2_integration(self, pgx_reference_engine: sa.Engine):
+        """Full pipeline: sample with rs4244285 GA → CYP2C19 *1/*2 IM."""
+        sample = _make_sample_engine(
+            [
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+            ]
+        )
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19"}),
+        )
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.gene == "CYP2C19"
+        assert r.diplotype == "*1/*2"
+        assert r.phenotype == "Intermediate Metabolizer"
+
+    def test_multiple_genes(self, pgx_reference_engine: sa.Engine):
+        """Multiple genes called in one pass."""
+        sample = _make_sample_engine(
+            [
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs3892097", "chrom": "22", "pos": 42524947, "genotype": "CT"},
+                {"rsid": "rs16947", "chrom": "22", "pos": 42522613, "genotype": "CC"},
+                {"rsid": "rs1065852", "chrom": "22", "pos": 42525772, "genotype": "CC"},
+            ]
+        )
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19", "CYP2D6"}),
+        )
+
+        by_gene = {r.gene: r for r in results}
+        assert by_gene["CYP2C19"].diplotype == "*1/*2"
+        assert by_gene["CYP2D6"].diplotype == "*1/*4"
+
+    def test_no_data_defaults_to_wildtype(self, pgx_reference_engine: sa.Engine):
+        """Gene with no sample data → *1/*1."""
+        sample = _make_sample_engine([])
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19"}),
+        )
+
+        assert results[0].diplotype == "*1/*1"
+
+    def test_results_sorted_by_gene(self, pgx_reference_engine: sa.Engine):
+        """Results are sorted alphabetically by gene name."""
+        sample = _make_sample_engine([])
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"TPMT", "CYP2D6", "CYP2C19"}),
+        )
+
+        genes = [r.gene for r in results]
+        assert genes == sorted(genes)
+
+    def test_gene_not_in_reference_skipped(self, pgx_reference_engine: sa.Engine):
+        """Gene with no allele definitions in reference is skipped."""
+        sample = _make_sample_engine([])
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"UGT1A1"}),  # No alleles loaded for this gene
+        )
+
+        assert len(results) == 0
+
+    def test_with_seeded_conftest_data(
+        self, seeded_reference_engine: sa.Engine, sample_with_variants: sa.Engine
+    ):
+        """Integration with conftest seeded data: CYP2C19 rs4244285 GA → *1/*2."""
+        results = call_all_star_alleles(
+            seeded_reference_engine,
+            sample_with_variants,
+            genes=frozenset({"CYP2C19"}),
+        )
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.gene == "CYP2C19"
+        assert r.diplotype == "*1/*2"
+        assert r.phenotype == "Intermediate Metabolizer"
