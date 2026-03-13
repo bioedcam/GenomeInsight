@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
 import Dashboard from '@/pages/Dashboard'
 import VariantExplorer from '@/pages/VariantExplorer'
+import VariantDetailPage from '@/pages/VariantDetailPage'
 import PharmacogenomicsView from '@/pages/PharmacogenomicsView'
 import NutrigenomicsView from '@/pages/NutrigenomicsView'
 import CancerView from '@/pages/CancerView'
@@ -26,6 +27,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/variants" element={<VariantExplorer />} />
+        <Route path="/variants/:rsid" element={<VariantDetailPage />} />
         <Route path="/pharmacogenomics" element={<PharmacogenomicsView />} />
         <Route path="/nutrigenomics" element={<NutrigenomicsView />} />
         <Route path="/cancer" element={<CancerView />} />
