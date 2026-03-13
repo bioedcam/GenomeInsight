@@ -1,10 +1,11 @@
-"""Tests for pharmacogenomics star-allele calling (P3-02) and three-state
-calling model (P3-03).
+"""Tests for pharmacogenomics star-allele calling (P3-02), three-state
+calling model (P3-03), and prescribing alert generation (P3-04).
 
 Covers:
   - T3-01: Star-allele calling returns correct diplotype for CYP2C19 *1/*2
   - T3-02: Metabolizer phenotype correctly assigned: CYP2C19 *1/*2 → IM
   - T3-04: CYP2D6 calling produces Partial state with structural variant caveat
+  - P3-04: Prescribing alerts generated from star-allele results + CPIC guidelines
   - Additional: CYP2D6 calling, edge cases, multi-variant alleles, missing data,
     three-state confidence assignment
 """
@@ -18,19 +19,26 @@ import sqlalchemy as sa
 
 from backend.analysis.pharmacogenomics import (
     CallConfidence,
+    PrescribingAlert,
     StarAlleleResult,
     _assess_call_confidence,
+    _build_finding_text,
     _count_alt_alleles,
     _fetch_alleles_for_gene,
     _fetch_diplotype_phenotype,
+    _fetch_guidelines_for_gene_phenotype,
     _fetch_sample_genotypes,
     call_all_star_alleles,
     call_star_alleles_for_gene,
+    generate_prescribing_alerts,
+    store_prescribing_alerts,
 )
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
     cpic_alleles,
     cpic_diplotypes,
+    cpic_guidelines,
+    findings,
     raw_variants,
     reference_metadata,
 )
@@ -329,9 +337,122 @@ def pgx_reference_engine() -> sa.Engine:
         },
     ]
 
+    guidelines = [
+        # CYP2D6 codeine
+        {
+            "gene": "CYP2D6",
+            "drug": "codeine",
+            "phenotype": "Normal Metabolizer",
+            "recommendation": "Use label-recommended age- or weight-specific dosing.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        },
+        {
+            "gene": "CYP2D6",
+            "drug": "codeine",
+            "phenotype": "Intermediate Metabolizer",
+            "recommendation": "Use label-recommended age- or weight-specific dosing.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        },
+        {
+            "gene": "CYP2D6",
+            "drug": "codeine",
+            "phenotype": "Poor Metabolizer",
+            "recommendation": "Avoid codeine use. Alternative analgesics recommended.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        },
+        # CYP2D6 tramadol (classification B)
+        {
+            "gene": "CYP2D6",
+            "drug": "tramadol",
+            "phenotype": "Poor Metabolizer",
+            "recommendation": "Avoid tramadol use due to lack of efficacy.",
+            "classification": "B",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        },
+        {
+            "gene": "CYP2D6",
+            "drug": "tramadol",
+            "phenotype": "Normal Metabolizer",
+            "recommendation": "Use label-recommended dosing.",
+            "classification": "B",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        },
+        # CYP2C19 clopidogrel
+        {
+            "gene": "CYP2C19",
+            "drug": "clopidogrel",
+            "phenotype": "Intermediate Metabolizer",
+            "recommendation": "Consider alternative antiplatelet therapy.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-clopidogrel-and-cyp2c19/",
+        },
+        {
+            "gene": "CYP2C19",
+            "drug": "clopidogrel",
+            "phenotype": "Poor Metabolizer",
+            "recommendation": "Use alternative antiplatelet therapy.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-clopidogrel-and-cyp2c19/",
+        },
+        {
+            "gene": "CYP2C19",
+            "drug": "clopidogrel",
+            "phenotype": "Normal Metabolizer",
+            "recommendation": "Use label-recommended dosing.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-clopidogrel-and-cyp2c19/",
+        },
+        # TPMT mercaptopurine
+        {
+            "gene": "TPMT",
+            "drug": "mercaptopurine",
+            "phenotype": "Normal Metabolizer",
+            "recommendation": "Use label-recommended dosing.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+        },
+        {
+            "gene": "TPMT",
+            "drug": "mercaptopurine",
+            "phenotype": "Intermediate Metabolizer",
+            "recommendation": "Start at 30-70% of target dose. Titrate based on tolerance.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+        },
+        {
+            "gene": "TPMT",
+            "drug": "mercaptopurine",
+            "phenotype": "Poor Metabolizer",
+            "recommendation": "Reduce dose to 10% of standard. Consider alternative agent.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+        },
+        # SLCO1B1 simvastatin
+        {
+            "gene": "SLCO1B1",
+            "drug": "simvastatin",
+            "phenotype": "Normal function",
+            "recommendation": "Use label-recommended dosing.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-simvastatin-and-slco1b1/",
+        },
+        {
+            "gene": "SLCO1B1",
+            "drug": "simvastatin",
+            "phenotype": "Decreased function",
+            "recommendation": "Use lower dose or alternative statin. Avoid 80mg dose.",
+            "classification": "A",
+            "guideline_url": "https://cpicpgx.org/guidelines/guideline-for-simvastatin-and-slco1b1/",
+        },
+    ]
+
     with engine.begin() as conn:
         conn.execute(cpic_alleles.insert(), alleles)
         conn.execute(cpic_diplotypes.insert(), diplotypes)
+        conn.execute(cpic_guidelines.insert(), guidelines)
 
     return engine
 
@@ -1043,3 +1164,471 @@ class TestCallConfidenceEnum:
 
     def test_members(self):
         assert len(CallConfidence) == 3
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _fetch_guidelines_for_gene_phenotype (P3-04)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestFetchGuidelinesForGenePhenotype:
+    def test_returns_matching_guidelines(self, pgx_reference_engine: sa.Engine):
+        results = _fetch_guidelines_for_gene_phenotype(
+            "CYP2D6", "Poor Metabolizer", pgx_reference_engine
+        )
+        assert len(results) == 2
+        drugs = {r["drug"] for r in results}
+        assert drugs == {"codeine", "tramadol"}
+
+    def test_single_drug_match(self, pgx_reference_engine: sa.Engine):
+        results = _fetch_guidelines_for_gene_phenotype(
+            "CYP2C19", "Intermediate Metabolizer", pgx_reference_engine
+        )
+        assert len(results) == 1
+        assert results[0]["drug"] == "clopidogrel"
+        assert results[0]["classification"] == "A"
+
+    def test_no_match_returns_empty(self, pgx_reference_engine: sa.Engine):
+        results = _fetch_guidelines_for_gene_phenotype(
+            "CYP2D6", "Nonexistent Phenotype", pgx_reference_engine
+        )
+        assert results == []
+
+    def test_unknown_gene_returns_empty(self, pgx_reference_engine: sa.Engine):
+        results = _fetch_guidelines_for_gene_phenotype(
+            "FAKEGENE", "Normal Metabolizer", pgx_reference_engine
+        )
+        assert results == []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# generate_prescribing_alerts (P3-04)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGeneratePrescribingAlerts:
+    """Test prescribing alert generation from star-allele results."""
+
+    def test_cyp2d6_poor_metabolizer_alerts(self, pgx_reference_engine: sa.Engine):
+        """CYP2D6 Poor Metabolizer should generate codeine + tramadol alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*4",
+                allele2="*4",
+                diplotype="*4/*4",
+                phenotype="Poor Metabolizer",
+                ehr_notation="CYP2D6 Poor Metabolizer",
+                activity_score=0.0,
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="Structural variant gene.",
+                involved_rsids={"rs3892097"},
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 2
+        drugs = {a.drug for a in alerts}
+        assert drugs == {"codeine", "tramadol"}
+
+        codeine_alert = next(a for a in alerts if a.drug == "codeine")
+        assert codeine_alert.gene == "CYP2D6"
+        assert codeine_alert.diplotype == "*4/*4"
+        assert codeine_alert.phenotype == "Poor Metabolizer"
+        assert "Avoid codeine" in codeine_alert.recommendation
+        assert codeine_alert.classification == "A"
+        assert codeine_alert.evidence_level == 4  # CPIC A → ★★★★
+        assert codeine_alert.call_confidence == CallConfidence.PARTIAL
+
+        tramadol_alert = next(a for a in alerts if a.drug == "tramadol")
+        assert tramadol_alert.classification == "B"
+        assert tramadol_alert.evidence_level == 3  # CPIC B → ★★★
+
+    def test_cyp2c19_intermediate_metabolizer(self, pgx_reference_engine: sa.Engine):
+        """CYP2C19 IM should generate clopidogrel alert."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*2",
+                diplotype="*1/*2",
+                phenotype="Intermediate Metabolizer",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+                involved_rsids={"rs4244285"},
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 1
+        assert alerts[0].drug == "clopidogrel"
+        assert "alternative antiplatelet" in alerts[0].recommendation
+        assert alerts[0].call_confidence == CallConfidence.COMPLETE
+
+    def test_insufficient_confidence_excluded(self, pgx_reference_engine: sa.Engine):
+        """Genes with Insufficient confidence produce no alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*1",
+                allele2="*1",
+                diplotype="*1/*1",
+                phenotype="Normal Metabolizer",
+                call_confidence=CallConfidence.INSUFFICIENT,
+                confidence_note="3/3 defining positions missing.",
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 0
+
+    def test_no_phenotype_excluded(self, pgx_reference_engine: sa.Engine):
+        """Genes with no phenotype (None) produce no alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*99",
+                allele2="*99",
+                diplotype="*99/*99",
+                phenotype=None,
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 0
+
+    def test_no_guidelines_for_phenotype(self, pgx_reference_engine: sa.Engine):
+        """Phenotype with no matching guidelines produces no alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*1",
+                allele2="*17",
+                diplotype="*1/*17",
+                phenotype="Rapid Metabolizer",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        # No Rapid Metabolizer guidelines seeded for clopidogrel
+        assert len(alerts) == 0
+
+    def test_multiple_genes_multiple_alerts(self, pgx_reference_engine: sa.Engine):
+        """Multiple genes produce correctly grouped alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*1",
+                allele2="*1",
+                diplotype="*1/*1",
+                phenotype="Normal Metabolizer",
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="SV gene.",
+                involved_rsids=set(),
+            ),
+            StarAlleleResult(
+                gene="CYP2C19",
+                allele1="*2",
+                allele2="*2",
+                diplotype="*2/*2",
+                phenotype="Poor Metabolizer",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+                involved_rsids={"rs4244285"},
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        # CYP2D6 NM: codeine + tramadol = 2 alerts
+        # CYP2C19 PM: clopidogrel = 1 alert
+        assert len(alerts) == 3
+        genes = {a.gene for a in alerts}
+        assert genes == {"CYP2D6", "CYP2C19"}
+
+    def test_alerts_sorted_by_gene_drug(self, pgx_reference_engine: sa.Engine):
+        """Alerts are sorted by (gene, drug)."""
+        results = [
+            StarAlleleResult(
+                gene="TPMT",
+                allele1="*1",
+                allele2="*1",
+                diplotype="*1/*1",
+                phenotype="Normal Metabolizer",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+            ),
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*1",
+                allele2="*1",
+                diplotype="*1/*1",
+                phenotype="Normal Metabolizer",
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="SV gene.",
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        gene_drug_pairs = [(a.gene, a.drug) for a in alerts]
+        assert gene_drug_pairs == sorted(gene_drug_pairs)
+
+    def test_involved_rsids_propagated(self, pgx_reference_engine: sa.Engine):
+        """involved_rsids from star-allele result are carried into alerts."""
+        results = [
+            StarAlleleResult(
+                gene="CYP2D6",
+                allele1="*4",
+                allele2="*4",
+                diplotype="*4/*4",
+                phenotype="Poor Metabolizer",
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="SV gene.",
+                involved_rsids={"rs3892097"},
+            ),
+        ]
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        for alert in alerts:
+            assert alert.involved_rsids == ["rs3892097"]
+
+    def test_empty_results(self, pgx_reference_engine: sa.Engine):
+        """Empty star-allele results produce empty alerts."""
+        alerts = generate_prescribing_alerts([], pgx_reference_engine)
+        assert alerts == []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _build_finding_text (P3-04)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestBuildFindingText:
+    def test_complete_confidence(self):
+        alert = PrescribingAlert(
+            gene="CYP2D6",
+            drug="codeine",
+            diplotype="*4/*4",
+            phenotype="Poor Metabolizer",
+            recommendation="Avoid codeine use.",
+            classification="A",
+            guideline_url=None,
+            call_confidence=CallConfidence.COMPLETE,
+            confidence_note="All defining positions assessed.",
+            evidence_level=4,
+        )
+        text = _build_finding_text(alert)
+        assert "CYP2D6 *4/*4" in text
+        assert "Poor Metabolizer" in text
+        assert "codeine" in text
+        assert "Avoid codeine" in text
+        assert "provisional" not in text
+
+    def test_partial_confidence_adds_provisional_note(self):
+        alert = PrescribingAlert(
+            gene="CYP2D6",
+            drug="codeine",
+            diplotype="*4/*4",
+            phenotype="Poor Metabolizer",
+            recommendation="Avoid codeine use.",
+            classification="A",
+            guideline_url=None,
+            call_confidence=CallConfidence.PARTIAL,
+            confidence_note="SV gene.",
+            evidence_level=4,
+        )
+        text = _build_finding_text(alert)
+        assert "provisional" in text
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# store_prescribing_alerts (P3-04)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestStorePrescribingAlerts:
+    def test_stores_alerts_as_findings(self, pgx_reference_engine: sa.Engine):
+        """Alerts are persisted as findings records with module=pharmacogenomics."""
+        sample = _make_sample_engine([])
+
+        alerts = [
+            PrescribingAlert(
+                gene="CYP2D6",
+                drug="codeine",
+                diplotype="*4/*4",
+                phenotype="Poor Metabolizer",
+                recommendation="Avoid codeine use. Alternative analgesics recommended.",
+                classification="A",
+                guideline_url="https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+                call_confidence=CallConfidence.PARTIAL,
+                confidence_note="Structural variant gene.",
+                evidence_level=4,
+                activity_score=0.0,
+                ehr_notation="CYP2D6 Poor Metabolizer",
+                involved_rsids=["rs3892097"],
+            ),
+            PrescribingAlert(
+                gene="CYP2C19",
+                drug="clopidogrel",
+                diplotype="*1/*2",
+                phenotype="Intermediate Metabolizer",
+                recommendation="Consider alternative antiplatelet therapy.",
+                classification="A",
+                guideline_url="https://cpicpgx.org/guidelines/guideline-for-clopidogrel-and-cyp2c19/",
+                call_confidence=CallConfidence.COMPLETE,
+                confidence_note="All defining positions assessed.",
+                evidence_level=4,
+                involved_rsids=["rs4244285"],
+            ),
+        ]
+
+        count = store_prescribing_alerts(alerts, sample)
+        assert count == 2
+
+        # Verify rows in findings table
+        with sample.connect() as conn:
+            rows = conn.execute(sa.select(findings).order_by(findings.c.gene_symbol)).fetchall()
+
+        assert len(rows) == 2
+
+        # Check CYP2C19 row
+        cyp2c19_row = rows[0]
+        assert cyp2c19_row.module == "pharmacogenomics"
+        assert cyp2c19_row.category == "prescribing_alert"
+        assert cyp2c19_row.gene_symbol == "CYP2C19"
+        assert cyp2c19_row.drug == "clopidogrel"
+        assert cyp2c19_row.diplotype == "*1/*2"
+        assert cyp2c19_row.metabolizer_status == "Intermediate Metabolizer"
+        assert cyp2c19_row.evidence_level == 4
+        assert "clopidogrel" in cyp2c19_row.finding_text
+
+        # Check detail_json
+        detail = json.loads(cyp2c19_row.detail_json)
+        assert detail["classification"] == "A"
+        assert detail["call_confidence"] == "Complete"
+        assert detail["involved_rsids"] == ["rs4244285"]
+
+        # Check CYP2D6 row
+        cyp2d6_row = rows[1]
+        assert cyp2d6_row.gene_symbol == "CYP2D6"
+        assert cyp2d6_row.drug == "codeine"
+        assert "provisional" in cyp2d6_row.finding_text  # Partial confidence
+
+        cyp2d6_detail = json.loads(cyp2d6_row.detail_json)
+        assert cyp2d6_detail["call_confidence"] == "Partial"
+        assert cyp2d6_detail["activity_score"] == 0.0
+        assert cyp2d6_detail["guideline_url"] == (
+            "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/"
+        )
+
+    def test_empty_alerts_returns_zero(self):
+        """Storing empty alerts list returns 0 without DB interaction."""
+        sample = _make_sample_engine([])
+        count = store_prescribing_alerts([], sample)
+        assert count == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration: call_all_star_alleles → generate → store (P3-04)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestPrescribingAlertIntegration:
+    """Full pipeline: parse genotypes → call star alleles → generate alerts → store."""
+
+    def test_full_pipeline_cyp2d6_poor_metabolizer(self, pgx_reference_engine: sa.Engine):
+        """CYP2D6 *4/*4 → PM → codeine + tramadol alerts stored in findings."""
+        sample = _make_sample_engine(
+            [
+                {"rsid": "rs16947", "chrom": "22", "pos": 42522613, "genotype": "CC"},
+                {"rsid": "rs3892097", "chrom": "22", "pos": 42524947, "genotype": "TT"},
+                {"rsid": "rs1065852", "chrom": "22", "pos": 42525772, "genotype": "CC"},
+            ]
+        )
+
+        # Step 1: Call star alleles
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2D6"}),
+        )
+        assert results[0].diplotype == "*4/*4"
+        assert results[0].phenotype == "Poor Metabolizer"
+
+        # Step 2: Generate prescribing alerts
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 2
+
+        # Step 3: Store as findings
+        count = store_prescribing_alerts(alerts, sample)
+        assert count == 2
+
+        # Step 4: Verify findings in DB
+        with sample.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings)
+                .where(findings.c.module == "pharmacogenomics")
+                .order_by(findings.c.drug)
+            ).fetchall()
+
+        assert len(rows) == 2
+        assert rows[0].drug == "codeine"
+        assert rows[1].drug == "tramadol"
+        assert rows[0].evidence_level == 4  # CPIC A
+        assert rows[1].evidence_level == 3  # CPIC B
+
+    def test_full_pipeline_multi_gene(self, pgx_reference_engine: sa.Engine):
+        """Multi-gene pipeline: CYP2C19 IM + CYP2D6 NM → all alerts stored."""
+        sample = _make_sample_engine(
+            [
+                # CYP2C19 *1/*2 → IM
+                {"rsid": "rs4244285", "chrom": "10", "pos": 96541616, "genotype": "GA"},
+                {"rsid": "rs4986893", "chrom": "10", "pos": 96540410, "genotype": "GG"},
+                {"rsid": "rs12248560", "chrom": "10", "pos": 96521657, "genotype": "CC"},
+                # CYP2D6 *1/*1 → NM
+                {"rsid": "rs16947", "chrom": "22", "pos": 42522613, "genotype": "CC"},
+                {"rsid": "rs3892097", "chrom": "22", "pos": 42524947, "genotype": "CC"},
+                {"rsid": "rs1065852", "chrom": "22", "pos": 42525772, "genotype": "CC"},
+            ]
+        )
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19", "CYP2D6"}),
+        )
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        count = store_prescribing_alerts(alerts, sample)
+
+        # CYP2C19 IM → clopidogrel (1 alert)
+        # CYP2D6 NM → codeine + tramadol (2 alerts)
+        assert count == 3
+
+        with sample.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(findings.c.module == "pharmacogenomics")
+            ).fetchall()
+        assert len(rows) == 3
+
+    def test_insufficient_gene_excluded_from_pipeline(self, pgx_reference_engine: sa.Engine):
+        """Gene with insufficient confidence does not produce findings."""
+        # Empty sample → all genes will be Insufficient
+        sample = _make_sample_engine([])
+
+        results = call_all_star_alleles(
+            pgx_reference_engine,
+            sample,
+            genes=frozenset({"CYP2C19"}),
+        )
+        # CYP2C19 with no data → Insufficient (3/3 defining rsids missing)
+        assert results[0].call_confidence == CallConfidence.INSUFFICIENT
+
+        alerts = generate_prescribing_alerts(results, pgx_reference_engine)
+        assert len(alerts) == 0
+
+        count = store_prescribing_alerts(alerts, sample)
+        assert count == 0
