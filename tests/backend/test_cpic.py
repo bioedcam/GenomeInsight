@@ -282,29 +282,39 @@ class TestLoadCPICIntoDB:
             assert guide_count == 1
 
     def test_clear_existing_replaces(self, reference_engine: sa.Engine):
-        row = [{"gene": "CYP2D6", "allele_name": "*1", "defining_variants": "[]",
-                "function": "Normal function", "activity_score": 1.0}]
+        row = [
+            {
+                "gene": "CYP2D6",
+                "allele_name": "*1",
+                "defining_variants": "[]",
+                "function": "Normal function",
+                "activity_score": 1.0,
+            }
+        ]
 
         load_cpic_into_db(row, [], [], reference_engine)
         load_cpic_into_db(row, [], [], reference_engine, clear_existing=True)
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(cpic_alleles)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(cpic_alleles)).scalar()
             assert count == 1  # Not 2
 
     def test_no_clear_appends(self, reference_engine: sa.Engine):
-        row = [{"gene": "CYP2D6", "allele_name": "*1", "defining_variants": "[]",
-                "function": "Normal function", "activity_score": 1.0}]
+        row = [
+            {
+                "gene": "CYP2D6",
+                "allele_name": "*1",
+                "defining_variants": "[]",
+                "function": "Normal function",
+                "activity_score": 1.0,
+            }
+        ]
 
         load_cpic_into_db(row, [], [], reference_engine)
         load_cpic_into_db(row, [], [], reference_engine, clear_existing=False)
 
         with reference_engine.connect() as conn:
-            count = conn.execute(
-                sa.select(sa.func.count()).select_from(cpic_alleles)
-            ).scalar()
+            count = conn.execute(sa.select(sa.func.count()).select_from(cpic_alleles)).scalar()
             assert count == 2
 
     def test_load_seed_csvs(self, reference_engine: sa.Engine):
@@ -418,9 +428,7 @@ class TestLookupAllelesByRsids:
         assert results == {}
 
     def test_multiple_rsids(self, seeded_reference_engine: sa.Engine):
-        results = lookup_alleles_by_rsids(
-            ["rs16947", "rs3892097"], seeded_reference_engine
-        )
+        results = lookup_alleles_by_rsids(["rs16947", "rs3892097"], seeded_reference_engine)
         assert "rs16947" in results  # CYP2D6 *2
         assert "rs3892097" in results  # CYP2D6 *4
 
@@ -446,9 +454,7 @@ class TestLookupDiplotypes:
 
 class TestLookupGuidelines:
     def test_lookup_by_gene_drug(self, seeded_reference_engine: sa.Engine):
-        results = lookup_guidelines_by_gene_drug(
-            "CYP2D6", "codeine", seeded_reference_engine
-        )
+        results = lookup_guidelines_by_gene_drug("CYP2D6", "codeine", seeded_reference_engine)
 
         assert len(results) >= 2  # At least Normal + Intermediate + Poor
         phenotypes = {r["phenotype"] for r in results}
@@ -456,9 +462,7 @@ class TestLookupGuidelines:
         assert "Poor Metabolizer" in phenotypes
 
     def test_poor_metabolizer_recommendation(self, seeded_reference_engine: sa.Engine):
-        results = lookup_guidelines_by_gene_drug(
-            "CYP2D6", "codeine", seeded_reference_engine
-        )
+        results = lookup_guidelines_by_gene_drug("CYP2D6", "codeine", seeded_reference_engine)
 
         pm = next(r for r in results if r["phenotype"] == "Poor Metabolizer")
         assert "Avoid" in pm["recommendation"]

@@ -52,16 +52,18 @@ logger = structlog.get_logger(__name__)
 BATCH_SIZE = 5_000
 
 # Supported CPIC genes (per PRD P3-02)
-CPIC_GENES = frozenset({
-    "CYP2D6",
-    "CYP2C19",
-    "CYP2C9",
-    "CYP3A5",
-    "SLCO1B1",
-    "DPYD",
-    "TPMT",
-    "UGT1A1",
-})
+CPIC_GENES = frozenset(
+    {
+        "CYP2D6",
+        "CYP2C19",
+        "CYP2C9",
+        "CYP3A5",
+        "SLCO1B1",
+        "DPYD",
+        "TPMT",
+        "UGT1A1",
+    }
+)
 
 
 @dataclass
@@ -400,9 +402,7 @@ def record_cpic_version(
     """Insert or update the CPIC version in the database_versions table."""
     with engine.begin() as conn:
         existing = conn.execute(
-            sa.select(database_versions.c.db_name).where(
-                database_versions.c.db_name == "cpic"
-            )
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == "cpic")
         ).first()
 
         now = datetime.now(UTC)
@@ -501,6 +501,7 @@ def load_cpic_from_csvs(
 # CPIC Lookup Functions (for star-allele calling in P3-02)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def lookup_alleles_by_gene(
     gene: str,
     engine: sa.Engine,
@@ -537,12 +538,14 @@ def lookup_alleles_by_gene(
         except json.JSONDecodeError:
             variants = []
 
-        results.append({
-            "allele_name": row.allele_name,
-            "defining_variants": variants,
-            "function": row.function,
-            "activity_score": row.activity_score,
-        })
+        results.append(
+            {
+                "allele_name": row.allele_name,
+                "defining_variants": variants,
+                "function": row.function,
+                "activity_score": row.activity_score,
+            }
+        )
 
     return results
 
