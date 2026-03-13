@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes.annotation import router as annotation_router
+from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.column_presets import router as column_presets_router
 from backend.api.routes.databases import router as databases_router
 from backend.api.routes.encode_ccres import router as encode_ccres_router
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
 
     # API routes (must be included BEFORE static mount)
     api_router.include_router(annotation_router)
+    api_router.include_router(annotations_api_router)
     api_router.include_router(column_presets_router)
     api_router.include_router(databases_router)
     api_router.include_router(encode_ccres_router)
