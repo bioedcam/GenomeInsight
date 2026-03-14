@@ -420,9 +420,12 @@ def _is_odds_ratio(ci_text: str | None, or_beta_val: float | None) -> bool:
         # CI text with brackets only (no beta language) → OR
         if "[" in ci_lower or "(" in ci_lower:
             return True
-    # Fallback: if value is between 0.1 and 20, treat as OR
+    # Fallback heuristic: ORs are always positive (centered around 1.0).
+    # Negative values are always betas.
     if or_beta_val is not None:
-        return 0.1 <= abs(or_beta_val) <= 20
+        if or_beta_val < 0:
+            return False
+        return 0.1 <= or_beta_val <= 20
     return True
 
 

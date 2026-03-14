@@ -395,6 +395,9 @@ class TestIsOddsRatio:
     def test_no_ci(self):
         assert _is_odds_ratio(None, 1.5) is True  # between 0.1 and 20
 
+    def test_negative_value_is_beta(self):
+        assert _is_odds_ratio(None, -0.5) is False
+
     def test_none_value(self):
         assert _is_odds_ratio(None, None) is True  # default
 
