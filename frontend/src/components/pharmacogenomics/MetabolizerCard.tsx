@@ -36,7 +36,7 @@ function EvidenceStars({ level }: { level: number | null }) {
   if (level == null) return null
   const stars = Math.max(0, Math.min(4, level))
   return (
-    <span className="text-xs text-muted-foreground" aria-label={`${stars} of 4 stars evidence`}>
+    <span className="text-xs text-muted-foreground" role="img" aria-label={`${stars} of 4 stars evidence`}>
       {"★".repeat(stars)}
       {"☆".repeat(4 - stars)}
     </span>
@@ -49,12 +49,11 @@ export default function MetabolizerCard({ gene }: MetabolizerCardProps) {
   const ConfidenceIcon = config?.icon
 
   return (
-    <div
+    <article
       className={cn(
         "rounded-lg border bg-card p-4 transition-colors",
         config?.bg,
       )}
-      role="article"
       aria-label={`${gene.gene} metabolizer status`}
     >
       {/* Header: gene name + confidence badge */}
@@ -109,6 +108,6 @@ export default function MetabolizerCard({ gene }: MetabolizerCardProps) {
           </p>
         </div>
       )}
-    </div>
+    </article>
   )
 }

@@ -177,7 +177,7 @@ describe("DrugTable", () => {
       <DrugTable drugs={DRUG_LIST} onSelectDrug={onSelectDrug} selectedDrug={null} />,
     )
     const badges = screen.getAllByText("A")
-    expect(badges.length).toBeGreaterThanOrEqual(2) // clopidogrel, codeine, warfarin
+    expect(badges.length).toBe(3) // clopidogrel, codeine, warfarin
   })
 
   it("shows empty state when no results match", async () => {

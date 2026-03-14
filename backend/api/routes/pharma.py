@@ -387,7 +387,7 @@ def gene_results(
                     cpic_guidelines.c.drug,
                 )
                 .where(cpic_guidelines.c.gene.in_(gene_list))
-                .group_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
+                .distinct()
                 .order_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
             )
             drug_rows = conn.execute(stmt).fetchall()

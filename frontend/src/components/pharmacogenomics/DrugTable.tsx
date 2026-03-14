@@ -92,7 +92,6 @@ export default function DrugTable({ drugs, onSelectDrug, selectedDrug }: DrugTab
                     "hover:bg-muted/50",
                     selectedDrug === drug.drug && "bg-primary/5",
                   )}
-                  role="row"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {

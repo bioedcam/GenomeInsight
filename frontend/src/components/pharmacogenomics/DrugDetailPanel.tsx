@@ -112,6 +112,7 @@ export default function DrugDetailPanel({
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-lg font-semibold">{data?.drug ?? drugName}</h2>
         <button
+          type="button"
           onClick={onClose}
           className="rounded-md p-1.5 hover:bg-muted transition-colors"
           aria-label="Close drug detail"
