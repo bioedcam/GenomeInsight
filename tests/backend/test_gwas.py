@@ -1,0 +1,1006 @@
+"""Tests for the GWAS Catalog TSV loader and annotation lookup (P3-07).
+
+Covers:
+- EFO whitelist trait matching
+- TSV row parsing (rsid extraction, risk allele, sample size, OR vs beta)
+- Chromosome normalization
+- Streaming iterator parsing with EFO filtering
+- Bulk loading into SQLite via gwas_associations table
+- Stream loading via load_gwas_from_iter
+- Version tracking in database_versions
+- Download function (mocked HTTP, error handling, partial cleanup)
+- End-to-end download_and_load_gwas pipeline (mocked HTTP)
+- Annotation lookup by rsids (single + multi-trait)
+- Simplified trait name lookup
+"""
+
+from __future__ import annotations
+
+import csv
+import gzip
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+import sqlalchemy as sa
+
+from backend.annotation.gwas import (
+    EFO_MODULES,
+    EFO_WHITELIST,
+    GWASAnnotation,
+    GWASAnnotationSet,
+    _extract_risk_allele,
+    _extract_rsid,
+    _is_odds_ratio,
+    _normalize_chrom,
+    _parse_float,
+    _parse_int,
+    _parse_sample_size,
+    _trait_matches_whitelist,
+    download_and_load_gwas,
+    download_gwas_catalog,
+    iter_gwas_tsv,
+    load_gwas_from_iter,
+    load_gwas_into_db,
+    lookup_gwas_by_rsids,
+    lookup_gwas_traits_for_rsids,
+    parse_gwas_tsv,
+    parse_gwas_tsv_row,
+    record_gwas_version,
+)
+from backend.db.tables import database_versions, gwas_associations, reference_metadata
+
+# ═══════════════════════════════════════════════════════════════════════
+# Fixtures
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def reference_engine() -> sa.Engine:
+    """In-memory SQLite engine with reference tables created."""
+    engine = sa.create_engine("sqlite://")
+    reference_metadata.create_all(engine)
+    return engine
+
+
+_GWAS_HEADER = [
+    "DATE ADDED TO CATALOG", "PUBMEDID", "FIRST AUTHOR", "DATE",
+    "JOURNAL", "LINK", "STUDY", "DISEASE/TRAIT",
+    "INITIAL SAMPLE SIZE", "REPLICATION SAMPLE SIZE", "REGION",
+    "CHR_ID", "CHR_POS", "REPORTED GENE(S)", "MAPPED_GENE",
+    "UPSTREAM_GENE_ID", "DOWNSTREAM_GENE_ID", "SNP_GENE_IDS",
+    "UPSTREAM_GENE_DISTANCE", "DOWNSTREAM_GENE_DISTANCE",
+    "STRONGEST SNP-RISK ALLELE", "SNPS", "MERGED", "SNP_ID_CURRENT",
+    "CONTEXT", "INTERGENIC", "RISK ALLELE FREQUENCY", "P-VALUE",
+    "PVALUE_MLOG", "P-VALUE (TEXT)", "OR or BETA", "95% CI (TEXT)",
+    "PLATFORM [SNPS PASSING QC]", "CNV", "MAPPED_TRAIT",
+    "MAPPED_TRAIT_URI", "STUDY ACCESSION", "GENOTYPING TECHNOLOGY",
+]
+
+_GWAS_ROWS = [
+    {
+        "PUBMEDID": "22885922", "STUDY": "Morris et al. 2012",
+        "DISEASE/TRAIT": "Type 2 diabetes mellitus",
+        "INITIAL SAMPLE SIZE": "149,821 European ancestry individuals",
+        "CHR_ID": "10", "CHR_POS": "114758349",
+        "STRONGEST SNP-RISK ALLELE": "rs7903146-T", "SNPS": "rs7903146",
+        "P-VALUE": "5e-120", "OR or BETA": "1.37",
+        "95% CI (TEXT)": "[1.31-1.43]",
+        "MAPPED_TRAIT": "type 2 diabetes mellitus",
+    },
+    {
+        "PUBMEDID": "23824729", "STUDY": "van Meurs et al. 2013",
+        "DISEASE/TRAIT": "Homocysteine levels",
+        "INITIAL SAMPLE SIZE": "44,147 European ancestry individuals",
+        "CHR_ID": "1", "CHR_POS": "11856378",
+        "STRONGEST SNP-RISK ALLELE": "rs1801133-A", "SNPS": "rs1801133",
+        "P-VALUE": "2e-50", "OR or BETA": "1.73",
+        "95% CI (TEXT)": "[1.55-1.91] unit increase",
+        "MAPPED_TRAIT": "homocysteine measurement",
+    },
+    {
+        "PUBMEDID": "99999999", "STUDY": "Smith et al. 2023",
+        "DISEASE/TRAIT": "Hair whorl direction",
+        "INITIAL SAMPLE SIZE": "500 individuals",
+        "CHR_ID": "5", "CHR_POS": "131424209",
+        "STRONGEST SNP-RISK ALLELE": "rs9999999-G", "SNPS": "rs9999999",
+        "P-VALUE": "3e-10", "OR or BETA": "1.25",
+        "95% CI (TEXT)": "[1.15-1.36]",
+        "MAPPED_TRAIT": "hair whorl",
+    },
+    {
+        "PUBMEDID": "16258542", "STUDY": "Zubieta et al. 2003",
+        "DISEASE/TRAIT": "Pain sensitivity",
+        "INITIAL SAMPLE SIZE": "202 individuals",
+        "CHR_ID": "22", "CHR_POS": "19963748",
+        "STRONGEST SNP-RISK ALLELE": "rs4680-A", "SNPS": "rs4680",
+        "P-VALUE": "3e-8", "OR or BETA": "1.15",
+        "95% CI (TEXT)": "[1.02-1.30]",
+        "MAPPED_TRAIT": "pain sensitivity measurement",
+    },
+    {
+        "PUBMEDID": "20686565", "STUDY": "Teslovich et al. 2010",
+        "DISEASE/TRAIT": "HDL cholesterol levels",
+        "INITIAL SAMPLE SIZE": "100,184 European ancestry individuals",
+        "CHR_ID": "16", "CHR_POS": "57015091",
+        "STRONGEST SNP-RISK ALLELE": "rs708272-A", "SNPS": "rs708272",
+        "P-VALUE": "5e-50", "OR or BETA": "0.82",
+        "95% CI (TEXT)": "[0.72-0.92] unit increase",
+        "MAPPED_TRAIT": "HDL cholesterol measurement",
+    },
+]
+
+
+@pytest.fixture
+def mini_gwas_tsv(tmp_path: Path) -> Path:
+    """Create a minimal GWAS Catalog TSV fixture for testing."""
+    tsv_path = tmp_path / "gwas_test.tsv"
+    with open(tsv_path, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=_GWAS_HEADER, delimiter="\t",
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        for row in _GWAS_ROWS:
+            # Fill missing columns with empty strings
+            full_row = {h: row.get(h, "") for h in _GWAS_HEADER}
+            writer.writerow(full_row)
+    return tsv_path
+
+
+@pytest.fixture
+def mini_gwas_tsv_gz(tmp_path: Path, mini_gwas_tsv: Path) -> Path:
+    """Gzipped version of the mini GWAS TSV."""
+    gz_path = tmp_path / "gwas_test.tsv.gz"
+    with open(mini_gwas_tsv, "rb") as f_in, gzip.open(gz_path, "wb") as f_out:
+        f_out.write(f_in.read())
+    return gz_path
+
+
+@pytest.fixture
+def seeded_reference_engine(reference_engine: sa.Engine) -> sa.Engine:
+    """Reference engine with pre-loaded GWAS seed data."""
+    seed_data = [
+        {
+            "rsid": "rs429358",
+            "chrom": "19",
+            "pos": 44908684,
+            "trait": "Alzheimer disease",
+            "p_value": 1e-200,
+            "odds_ratio": 3.68,
+            "beta": None,
+            "risk_allele": "C",
+            "pubmed_id": "24162737",
+            "study": "Lambert et al. 2013",
+            "sample_size": 74046,
+        },
+        {
+            "rsid": "rs429358",
+            "chrom": "19",
+            "pos": 44908684,
+            "trait": "Coronary artery disease",
+            "p_value": 2e-15,
+            "odds_ratio": 1.08,
+            "beta": None,
+            "risk_allele": "C",
+            "pubmed_id": "26343387",
+            "study": "Nikpay et al. 2015",
+            "sample_size": 184305,
+        },
+        {
+            "rsid": "rs1801133",
+            "chrom": "1",
+            "pos": 11856378,
+            "trait": "Homocysteine levels",
+            "p_value": 2e-50,
+            "odds_ratio": None,
+            "beta": 1.73,
+            "risk_allele": "A",
+            "pubmed_id": "23824729",
+            "study": "van Meurs et al. 2013",
+            "sample_size": 44147,
+        },
+        {
+            "rsid": "rs4680",
+            "chrom": "22",
+            "pos": 19963748,
+            "trait": "Pain sensitivity",
+            "p_value": 3e-8,
+            "odds_ratio": 1.15,
+            "beta": None,
+            "risk_allele": "A",
+            "pubmed_id": "16258542",
+            "study": "Zubieta et al. 2003",
+            "sample_size": 202,
+        },
+        {
+            "rsid": "rs7903146",
+            "chrom": "10",
+            "pos": 114758349,
+            "trait": "Type 2 diabetes",
+            "p_value": 5e-120,
+            "odds_ratio": 1.37,
+            "beta": None,
+            "risk_allele": "T",
+            "pubmed_id": "17463246",
+            "study": "Zeggini et al. 2007",
+            "sample_size": 10128,
+        },
+    ]
+    with reference_engine.begin() as conn:
+        conn.execute(gwas_associations.insert(), seed_data)
+    return reference_engine
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Unit tests — helper functions
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestNormalizeChrom:
+    def test_plain_number(self):
+        assert _normalize_chrom("1") == "1"
+        assert _normalize_chrom("22") == "22"
+
+    def test_chr_prefix(self):
+        assert _normalize_chrom("chr1") == "1"
+        assert _normalize_chrom("chrX") == "X"
+
+    def test_sex_chromosomes(self):
+        assert _normalize_chrom("X") == "X"
+        assert _normalize_chrom("Y") == "Y"
+        assert _normalize_chrom("MT") == "MT"
+
+    def test_invalid(self):
+        assert _normalize_chrom("23") is None
+        assert _normalize_chrom("") is None
+        assert _normalize_chrom("Z") is None
+
+    def test_whitespace(self):
+        assert _normalize_chrom(" 1 ") == "1"
+
+
+class TestParseFloat:
+    def test_valid(self):
+        assert _parse_float("1.5") == 1.5
+        assert _parse_float("1e-10") == 1e-10
+
+    def test_empty_and_na(self):
+        assert _parse_float("") is None
+        assert _parse_float("NR") is None
+        assert _parse_float("NA") is None
+        assert _parse_float("-") is None
+        assert _parse_float(None) is None
+
+    def test_invalid(self):
+        assert _parse_float("abc") is None
+
+
+class TestParseInt:
+    def test_valid(self):
+        assert _parse_int("123") == 123
+        assert _parse_int("1,234") == 1234
+
+    def test_empty_and_na(self):
+        assert _parse_int("") is None
+        assert _parse_int("NR") is None
+        assert _parse_int(None) is None
+
+    def test_invalid(self):
+        assert _parse_int("abc") is None
+
+
+class TestExtractRsid:
+    def test_single_rsid(self):
+        assert _extract_rsid("rs429358") == "rs429358"
+
+    def test_semicolon_separated(self):
+        assert _extract_rsid("rs429358; rs7412") == "rs429358"
+
+    def test_interaction(self):
+        assert _extract_rsid("rs429358 x rs7412") == "rs429358"
+
+    def test_no_rsid(self):
+        assert _extract_rsid("") is None
+        assert _extract_rsid("chr19:44908684") is None
+
+    def test_none(self):
+        assert _extract_rsid(None) is None  # type: ignore[arg-type]
+
+    def test_case_insensitive(self):
+        assert _extract_rsid("RS429358") == "rs429358"
+
+
+class TestExtractRiskAllele:
+    def test_standard_format(self):
+        assert _extract_risk_allele("rs429358-C") == "C"
+        assert _extract_risk_allele("rs429358-A") == "A"
+
+    def test_unknown_allele(self):
+        assert _extract_risk_allele("rs429358-?") is None
+
+    def test_empty(self):
+        assert _extract_risk_allele("") is None
+        assert _extract_risk_allele(None) is None
+
+    def test_no_hyphen(self):
+        assert _extract_risk_allele("rs429358") is None
+
+
+class TestParseSampleSize:
+    def test_standard(self):
+        assert _parse_sample_size("74,046 European ancestry individuals") == 74046
+
+    def test_cases_controls(self):
+        result = _parse_sample_size("1,234 cases, 5,678 controls")
+        assert result == 6912
+
+    def test_empty(self):
+        assert _parse_sample_size("") is None
+        assert _parse_sample_size(None) is None
+
+    def test_no_numbers(self):
+        assert _parse_sample_size("European ancestry") is None
+
+
+class TestTraitMatchesWhitelist:
+    def test_exact_match(self):
+        assert _trait_matches_whitelist("Type 2 diabetes") is True
+
+    def test_substring_match(self):
+        assert _trait_matches_whitelist("Type 2 diabetes mellitus") is True
+
+    def test_case_insensitive(self):
+        assert _trait_matches_whitelist("VITAMIN D levels") is True
+
+    def test_no_match(self):
+        assert _trait_matches_whitelist("Hair whorl direction") is False
+
+    def test_nutrigenomics_terms(self):
+        assert _trait_matches_whitelist("Folate metabolism") is True
+        assert _trait_matches_whitelist("Homocysteine levels") is True
+        assert _trait_matches_whitelist("Omega-3 fatty acids") is True
+        assert _trait_matches_whitelist("Lactose intolerance") is True
+
+    def test_fitness_terms(self):
+        assert _trait_matches_whitelist("Grip strength") is True
+        assert _trait_matches_whitelist("Bone mineral density") is True
+
+    def test_sleep_terms(self):
+        assert _trait_matches_whitelist("Insomnia") is True
+        assert _trait_matches_whitelist("Chronotype") is True
+
+    def test_skin_terms(self):
+        assert _trait_matches_whitelist("Melanoma risk") is True
+        assert _trait_matches_whitelist("Hair color") is True
+
+    def test_allergy_terms(self):
+        assert _trait_matches_whitelist("Asthma risk") is True
+        assert _trait_matches_whitelist("Allergic rhinitis") is True
+
+    def test_traits_terms(self):
+        assert _trait_matches_whitelist("Educational attainment") is True
+        assert _trait_matches_whitelist("Neuroticism") is True
+        assert _trait_matches_whitelist("Pain sensitivity measurement") is True
+
+
+class TestIsOddsRatio:
+    def test_ci_with_brackets(self):
+        assert _is_odds_ratio("[1.2-1.5]", 1.3) is True
+
+    def test_ci_with_unit_increase(self):
+        assert _is_odds_ratio("[0.5-1.2] unit increase", 0.8) is False
+
+    def test_no_ci(self):
+        assert _is_odds_ratio(None, 1.5) is True  # between 0.1 and 20
+
+    def test_none_value(self):
+        assert _is_odds_ratio(None, None) is True  # default
+
+
+class TestEFOWhitelist:
+    def test_whitelist_not_empty(self):
+        assert len(EFO_WHITELIST) > 0
+
+    def test_all_modules_present(self):
+        expected_modules = {"nutrigenomics", "fitness", "sleep", "skin", "allergy", "traits"}
+        assert set(EFO_MODULES.keys()) == expected_modules
+
+    def test_whitelist_is_union(self):
+        union = frozenset()
+        for terms in EFO_MODULES.values():
+            union = union | terms
+        assert union == EFO_WHITELIST
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Unit tests — TSV row parsing
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestParseGwasTsvRow:
+    def test_valid_row_with_or(self):
+        row = {
+            "SNPS": "rs7903146",
+            "DISEASE/TRAIT": "Type 2 diabetes",
+            "MAPPED_TRAIT": "type 2 diabetes mellitus",
+            "CHR_ID": "10",
+            "CHR_POS": "114758349",
+            "P-VALUE": "5e-120",
+            "OR or BETA": "1.37",
+            "95% CI (TEXT)": "[1.31-1.43]",
+            "STRONGEST SNP-RISK ALLELE": "rs7903146-T",
+            "PUBMEDID": "17463246",
+            "STUDY": "Zeggini et al. 2007",
+            "INITIAL SAMPLE SIZE": "10,128 European ancestry individuals",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert skip is None
+        assert result is not None
+        assert result["rsid"] == "rs7903146"
+        assert result["chrom"] == "10"
+        assert result["pos"] == 114758349
+        assert result["trait"] == "type 2 diabetes mellitus"
+        assert result["p_value"] == 5e-120
+        assert result["odds_ratio"] == 1.37
+        assert result["beta"] is None
+        assert result["risk_allele"] == "T"
+        assert result["pubmed_id"] == "17463246"
+        assert result["sample_size"] == 10128
+
+    def test_valid_row_with_beta(self):
+        row = {
+            "SNPS": "rs1801133",
+            "DISEASE/TRAIT": "Homocysteine levels",
+            "MAPPED_TRAIT": "homocysteine measurement",
+            "CHR_ID": "1",
+            "CHR_POS": "11856378",
+            "P-VALUE": "2e-50",
+            "OR or BETA": "1.73",
+            "95% CI (TEXT)": "[1.55-1.91] unit increase",
+            "STRONGEST SNP-RISK ALLELE": "rs1801133-A",
+            "PUBMEDID": "23824729",
+            "STUDY": "van Meurs et al. 2013",
+            "INITIAL SAMPLE SIZE": "44,147 individuals",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert skip is None
+        assert result is not None
+        assert result["rsid"] == "rs1801133"
+        assert result["beta"] == 1.73
+        assert result["odds_ratio"] is None
+
+    def test_skip_no_rsid(self):
+        row = {
+            "SNPS": "chr19:44908684",
+            "DISEASE/TRAIT": "Alzheimer disease",
+            "MAPPED_TRAIT": "Alzheimer disease",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert result is None
+        assert skip == "no_rsid"
+
+    def test_skip_no_trait(self):
+        row = {
+            "SNPS": "rs429358",
+            "DISEASE/TRAIT": "",
+            "MAPPED_TRAIT": "",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert result is None
+        assert skip == "no_trait"
+
+    def test_skip_efo_filter(self):
+        row = {
+            "SNPS": "rs9999999",
+            "DISEASE/TRAIT": "Hair whorl direction",
+            "MAPPED_TRAIT": "hair whorl",
+            "CHR_ID": "5",
+            "CHR_POS": "131424209",
+            "P-VALUE": "3e-10",
+            "OR or BETA": "1.25",
+            "95% CI (TEXT)": "[1.15-1.36]",
+            "STRONGEST SNP-RISK ALLELE": "rs9999999-G",
+            "PUBMEDID": "99999999",
+            "STUDY": "Smith et al. 2023",
+            "INITIAL SAMPLE SIZE": "500 individuals",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert result is None
+        assert skip == "efo_filter"
+
+    def test_mapped_trait_preferred(self):
+        """MAPPED_TRAIT should be used over DISEASE/TRAIT when available."""
+        row = {
+            "SNPS": "rs7903146",
+            "DISEASE/TRAIT": "T2D",
+            "MAPPED_TRAIT": "type 2 diabetes mellitus",
+            "CHR_ID": "10",
+            "CHR_POS": "114758349",
+            "P-VALUE": "1e-10",
+            "OR or BETA": "",
+            "95% CI (TEXT)": "",
+            "STRONGEST SNP-RISK ALLELE": "",
+            "PUBMEDID": "12345",
+            "STUDY": "Test",
+            "INITIAL SAMPLE SIZE": "",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert result is not None
+        assert result["trait"] == "type 2 diabetes mellitus"
+
+    def test_missing_optional_fields(self):
+        """Row with only required fields should still parse."""
+        row = {
+            "SNPS": "rs429358",
+            "DISEASE/TRAIT": "Type 2 diabetes",
+            "MAPPED_TRAIT": "",
+            "CHR_ID": "",
+            "CHR_POS": "",
+            "P-VALUE": "",
+            "OR or BETA": "",
+            "95% CI (TEXT)": "",
+            "STRONGEST SNP-RISK ALLELE": "",
+            "PUBMEDID": "",
+            "STUDY": "",
+            "INITIAL SAMPLE SIZE": "",
+        }
+        result, skip = parse_gwas_tsv_row(row)
+        assert result is not None
+        assert result["rsid"] == "rs429358"
+        assert result["trait"] == "Type 2 diabetes"
+        assert result["chrom"] is None
+        assert result["pos"] is None
+        assert result["p_value"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration tests — TSV parsing
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestIterGwasTsv:
+    def test_parse_mini_fixture(self, mini_gwas_tsv: Path):
+        """Parse the mini GWAS TSV and verify filtering."""
+        rows, stats = parse_gwas_tsv(mini_gwas_tsv)
+        # 5 lines total: 4 match EFO filter, 1 filtered out (hair whorl)
+        assert stats.total_lines == 5
+        assert stats.associations_loaded == 4
+        assert stats.skipped_efo_filter == 1
+        assert len(rows) == 4
+
+    def test_parse_gzipped(self, mini_gwas_tsv_gz: Path):
+        """Parse the gzipped mini GWAS TSV."""
+        rows, stats = parse_gwas_tsv(mini_gwas_tsv_gz)
+        assert stats.associations_loaded == 4
+
+    def test_progress_callback(self, mini_gwas_tsv: Path):
+        """Progress callback should be called."""
+        # With only 5 lines, won't trigger the 10k modulo callback,
+        # but should still complete without error
+        callback = MagicMock()
+        rows, stats = parse_gwas_tsv(mini_gwas_tsv, progress_callback=callback)
+        assert stats.associations_loaded == 4
+
+    def test_specific_rows_parsed(self, mini_gwas_tsv: Path):
+        """Verify specific rows are correctly parsed."""
+        rows, stats = parse_gwas_tsv(mini_gwas_tsv)
+
+        # Find the T2D row
+        t2d = [r for r in rows if "type 2 diabetes" in r["trait"].lower()]
+        assert len(t2d) == 1
+        assert t2d[0]["rsid"] == "rs7903146"
+        assert t2d[0]["odds_ratio"] == 1.37
+        assert t2d[0]["risk_allele"] == "T"
+
+        # Find the pain sensitivity row
+        pain = [r for r in rows if "pain" in r["trait"].lower()]
+        assert len(pain) == 1
+        assert pain[0]["rsid"] == "rs4680"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration tests — Database loading
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestLoadGwasIntoDb:
+    def test_load_rows(self, reference_engine: sa.Engine):
+        """Load parsed GWAS rows into the database."""
+        rows = [
+            {
+                "rsid": "rs429358",
+                "chrom": "19",
+                "pos": 44908684,
+                "trait": "Alzheimer disease",
+                "p_value": 1e-200,
+                "odds_ratio": 3.68,
+                "beta": None,
+                "risk_allele": "C",
+                "pubmed_id": "24162737",
+                "study": "Lambert et al. 2013",
+                "sample_size": 74046,
+            },
+            {
+                "rsid": "rs7903146",
+                "chrom": "10",
+                "pos": 114758349,
+                "trait": "Type 2 diabetes",
+                "p_value": 5e-120,
+                "odds_ratio": 1.37,
+                "beta": None,
+                "risk_allele": "T",
+                "pubmed_id": "17463246",
+                "study": "Zeggini et al. 2007",
+                "sample_size": 10128,
+            },
+        ]
+        stats = load_gwas_into_db(rows, reference_engine)
+        assert stats.associations_loaded == 2
+
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 2
+
+    def test_clear_existing(self, reference_engine: sa.Engine):
+        """Loading with clear_existing=True should replace data."""
+        row1 = [{
+            "rsid": "rs1",
+            "chrom": "1",
+            "pos": 100,
+            "trait": "Type 2 diabetes",
+            "p_value": 1e-10,
+            "odds_ratio": 1.5,
+            "beta": None,
+            "risk_allele": "A",
+            "pubmed_id": "123",
+            "study": "Test",
+            "sample_size": 100,
+        }]
+        row2 = [{
+            "rsid": "rs2",
+            "chrom": "2",
+            "pos": 200,
+            "trait": "Obesity",
+            "p_value": 1e-8,
+            "odds_ratio": 1.2,
+            "beta": None,
+            "risk_allele": "G",
+            "pubmed_id": "456",
+            "study": "Test2",
+            "sample_size": 200,
+        }]
+
+        load_gwas_into_db(row1, reference_engine)
+        load_gwas_into_db(row2, reference_engine, clear_existing=True)
+
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 1
+
+    def test_append_existing(self, reference_engine: sa.Engine):
+        """Loading with clear_existing=False should append data."""
+        row1 = [{
+            "rsid": "rs1",
+            "chrom": "1",
+            "pos": 100,
+            "trait": "Type 2 diabetes",
+            "p_value": 1e-10,
+            "odds_ratio": 1.5,
+            "beta": None,
+            "risk_allele": "A",
+            "pubmed_id": "123",
+            "study": "Test",
+            "sample_size": 100,
+        }]
+        row2 = [{
+            "rsid": "rs2",
+            "chrom": "2",
+            "pos": 200,
+            "trait": "Obesity",
+            "p_value": 1e-8,
+            "odds_ratio": 1.2,
+            "beta": None,
+            "risk_allele": "G",
+            "pubmed_id": "456",
+            "study": "Test2",
+            "sample_size": 200,
+        }]
+
+        load_gwas_into_db(row1, reference_engine)
+        load_gwas_into_db(row2, reference_engine, clear_existing=False)
+
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 2
+
+    def test_load_from_tsv(self, reference_engine: sa.Engine, mini_gwas_tsv: Path):
+        """Load directly from TSV file parsing."""
+        rows, stats = parse_gwas_tsv(mini_gwas_tsv)
+        load_gwas_into_db(rows, reference_engine, stats=stats)
+
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 4
+
+
+class TestLoadGwasFromIter:
+    def test_stream_load(self, reference_engine: sa.Engine, mini_gwas_tsv: Path):
+        """Stream-load from TSV iterator."""
+        row_iter = iter_gwas_tsv(mini_gwas_tsv)
+        stats = load_gwas_from_iter(row_iter, reference_engine)
+
+        assert stats.associations_loaded == 4
+
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 4
+
+
+class TestRecordGwasVersion:
+    def test_insert_version(self, reference_engine: sa.Engine):
+        """Insert a GWAS version record."""
+        record_gwas_version(
+            reference_engine,
+            version="20240101",
+            file_path="/tmp/gwas.tsv",
+            file_size_bytes=1000,
+            checksum="abc123",
+        )
+        with reference_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(database_versions).where(
+                    database_versions.c.db_name == "gwas_catalog"
+                )
+            ).first()
+            assert row is not None
+            assert row.version == "20240101"
+            assert row.checksum_sha256 == "abc123"
+
+    def test_update_version(self, reference_engine: sa.Engine):
+        """Updating should overwrite existing version."""
+        record_gwas_version(reference_engine, version="v1")
+        record_gwas_version(reference_engine, version="v2")
+
+        with reference_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(database_versions).where(
+                    database_versions.c.db_name == "gwas_catalog"
+                )
+            ).first()
+            assert row.version == "v2"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration tests — Download (mocked HTTP)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestDownloadGwasCatalog:
+    def test_download_success(self, tmp_path: Path):
+        """Download should write file and rename on success."""
+        tsv_content = b"SNPS\ttrait\nrs429358\tAlzheimer disease\n"
+
+        mock_response = MagicMock()
+        mock_response.headers = {"Content-Length": str(len(tsv_content))}
+        mock_response.iter_bytes.return_value = [tsv_content]
+        mock_response.num_bytes_downloaded = len(tsv_content)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.annotation.gwas.httpx.Client", return_value=mock_client):
+            result = download_gwas_catalog(tmp_path, url="http://test/gwas.tsv")
+
+        assert result.exists()
+        assert result.name == "gwas_catalog_associations.tsv"
+        assert result.read_bytes() == tsv_content
+
+    def test_download_cleanup_on_failure(self, tmp_path: Path):
+        """Temp file should be cleaned up on download failure."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "404", request=MagicMock(), response=MagicMock()
+        )
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("backend.annotation.gwas.httpx.Client", return_value=mock_client),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
+            download_gwas_catalog(tmp_path, url="http://test/gwas.tsv")
+
+        # Temp file should not exist
+        assert not (tmp_path / "gwas_catalog_associations.tsv.tmp").exists()
+
+    def test_progress_callback(self, tmp_path: Path):
+        """Progress callback should be called with byte counts."""
+        tsv_content = b"data\n"
+        callback = MagicMock()
+
+        mock_response = MagicMock()
+        mock_response.headers = {"Content-Length": str(len(tsv_content))}
+        mock_response.iter_bytes.return_value = [tsv_content]
+        mock_response.num_bytes_downloaded = len(tsv_content)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.annotation.gwas.httpx.Client", return_value=mock_client):
+            download_gwas_catalog(
+                tmp_path,
+                url="http://test/gwas.tsv",
+                progress_callback=callback,
+            )
+
+        callback.assert_called()
+
+
+class TestDownloadAndLoadGwas:
+    def test_full_pipeline(self, reference_engine: sa.Engine, mini_gwas_tsv: Path):
+        """Full download + parse + load pipeline (mocked download)."""
+        with patch(
+            "backend.annotation.gwas.download_gwas_catalog",
+            return_value=mini_gwas_tsv,
+        ), patch(
+            "backend.annotation.gwas._compute_sha256",
+            return_value="fake_sha256",
+        ):
+            stats = download_and_load_gwas(
+                reference_engine,
+                mini_gwas_tsv.parent,
+                url="http://test/gwas.tsv",
+            )
+
+        assert stats.associations_loaded == 4
+        assert stats.sha256 == "fake_sha256"
+
+        # Verify data loaded
+        with reference_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(gwas_associations)
+            ).scalar()
+            assert count == 4
+
+        # Verify version recorded
+        with reference_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(database_versions).where(
+                    database_versions.c.db_name == "gwas_catalog"
+                )
+            ).first()
+            assert row is not None
+            assert row.checksum_sha256 == "fake_sha256"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Integration tests — Annotation lookup
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestLookupGwasByRsids:
+    def test_single_match(self, seeded_reference_engine: sa.Engine):
+        """Single rsid with one trait association."""
+        results = lookup_gwas_by_rsids(["rs7903146"], seeded_reference_engine)
+        assert "rs7903146" in results
+        aset = results["rs7903146"]
+        assert len(aset.associations) == 1
+        assert aset.associations[0].trait == "Type 2 diabetes"
+        assert aset.associations[0].odds_ratio == 1.37
+
+    def test_multi_trait_variant(self, seeded_reference_engine: sa.Engine):
+        """rs429358 has two trait associations (Alzheimer + CAD)."""
+        results = lookup_gwas_by_rsids(["rs429358"], seeded_reference_engine)
+        assert "rs429358" in results
+        aset = results["rs429358"]
+        assert len(aset.associations) == 2
+        traits = aset.traits
+        assert "Alzheimer disease" in traits
+        assert "Coronary artery disease" in traits
+
+    def test_best_p_value(self, seeded_reference_engine: sa.Engine):
+        """best_p_value should return the most significant p-value."""
+        results = lookup_gwas_by_rsids(["rs429358"], seeded_reference_engine)
+        aset = results["rs429358"]
+        assert aset.best_p_value == 1e-200
+
+    def test_no_match(self, seeded_reference_engine: sa.Engine):
+        """Unknown rsid should not be in results."""
+        results = lookup_gwas_by_rsids(["rs999999999"], seeded_reference_engine)
+        assert "rs999999999" not in results
+
+    def test_empty_input(self, seeded_reference_engine: sa.Engine):
+        results = lookup_gwas_by_rsids([], seeded_reference_engine)
+        assert results == {}
+
+    def test_batch_lookup(self, seeded_reference_engine: sa.Engine):
+        """Multiple rsids in one call."""
+        results = lookup_gwas_by_rsids(
+            ["rs429358", "rs1801133", "rs7903146", "rs999"],
+            seeded_reference_engine,
+        )
+        assert len(results) == 3
+        assert "rs999" not in results
+
+    def test_beta_value(self, seeded_reference_engine: sa.Engine):
+        """rs1801133 should have beta (not OR)."""
+        results = lookup_gwas_by_rsids(["rs1801133"], seeded_reference_engine)
+        annot = results["rs1801133"].associations[0]
+        assert annot.beta == 1.73
+        assert annot.odds_ratio is None
+
+
+class TestLookupGwasTraitsForRsids:
+    def test_traits_only(self, seeded_reference_engine: sa.Engine):
+        """Simplified lookup should return trait names only."""
+        results = lookup_gwas_traits_for_rsids(
+            ["rs429358", "rs7903146"],
+            seeded_reference_engine,
+        )
+        assert "rs429358" in results
+        assert "Alzheimer disease" in results["rs429358"]
+        assert results["rs7903146"] == ["Type 2 diabetes"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dataclass tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGWASAnnotationSet:
+    def test_traits_unique(self):
+        aset = GWASAnnotationSet(
+            rsid="rs1",
+            associations=[
+                GWASAnnotation("rs1", "Trait A", 1e-10, None, None, None, None, None, None),
+                GWASAnnotation("rs1", "Trait A", 1e-8, None, None, None, None, None, None),
+                GWASAnnotation("rs1", "Trait B", 1e-5, None, None, None, None, None, None),
+            ],
+        )
+        assert aset.traits == ["Trait A", "Trait B"]
+
+    def test_best_p_value_none(self):
+        aset = GWASAnnotationSet(
+            rsid="rs1",
+            associations=[
+                GWASAnnotation("rs1", "Trait A", None, None, None, None, None, None, None),
+            ],
+        )
+        assert aset.best_p_value is None
+
+    def test_best_p_value(self):
+        aset = GWASAnnotationSet(
+            rsid="rs1",
+            associations=[
+                GWASAnnotation("rs1", "Trait A", 1e-5, None, None, None, None, None, None),
+                GWASAnnotation("rs1", "Trait B", 1e-10, None, None, None, None, None, None),
+            ],
+        )
+        assert aset.best_p_value == 1e-10
