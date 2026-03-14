@@ -65,67 +65,114 @@ def reference_engine() -> sa.Engine:
 
 
 _GWAS_HEADER = [
-    "DATE ADDED TO CATALOG", "PUBMEDID", "FIRST AUTHOR", "DATE",
-    "JOURNAL", "LINK", "STUDY", "DISEASE/TRAIT",
-    "INITIAL SAMPLE SIZE", "REPLICATION SAMPLE SIZE", "REGION",
-    "CHR_ID", "CHR_POS", "REPORTED GENE(S)", "MAPPED_GENE",
-    "UPSTREAM_GENE_ID", "DOWNSTREAM_GENE_ID", "SNP_GENE_IDS",
-    "UPSTREAM_GENE_DISTANCE", "DOWNSTREAM_GENE_DISTANCE",
-    "STRONGEST SNP-RISK ALLELE", "SNPS", "MERGED", "SNP_ID_CURRENT",
-    "CONTEXT", "INTERGENIC", "RISK ALLELE FREQUENCY", "P-VALUE",
-    "PVALUE_MLOG", "P-VALUE (TEXT)", "OR or BETA", "95% CI (TEXT)",
-    "PLATFORM [SNPS PASSING QC]", "CNV", "MAPPED_TRAIT",
-    "MAPPED_TRAIT_URI", "STUDY ACCESSION", "GENOTYPING TECHNOLOGY",
+    "DATE ADDED TO CATALOG",
+    "PUBMEDID",
+    "FIRST AUTHOR",
+    "DATE",
+    "JOURNAL",
+    "LINK",
+    "STUDY",
+    "DISEASE/TRAIT",
+    "INITIAL SAMPLE SIZE",
+    "REPLICATION SAMPLE SIZE",
+    "REGION",
+    "CHR_ID",
+    "CHR_POS",
+    "REPORTED GENE(S)",
+    "MAPPED_GENE",
+    "UPSTREAM_GENE_ID",
+    "DOWNSTREAM_GENE_ID",
+    "SNP_GENE_IDS",
+    "UPSTREAM_GENE_DISTANCE",
+    "DOWNSTREAM_GENE_DISTANCE",
+    "STRONGEST SNP-RISK ALLELE",
+    "SNPS",
+    "MERGED",
+    "SNP_ID_CURRENT",
+    "CONTEXT",
+    "INTERGENIC",
+    "RISK ALLELE FREQUENCY",
+    "P-VALUE",
+    "PVALUE_MLOG",
+    "P-VALUE (TEXT)",
+    "OR or BETA",
+    "95% CI (TEXT)",
+    "PLATFORM [SNPS PASSING QC]",
+    "CNV",
+    "MAPPED_TRAIT",
+    "MAPPED_TRAIT_URI",
+    "STUDY ACCESSION",
+    "GENOTYPING TECHNOLOGY",
 ]
 
 _GWAS_ROWS = [
     {
-        "PUBMEDID": "22885922", "STUDY": "Morris et al. 2012",
+        "PUBMEDID": "22885922",
+        "STUDY": "Morris et al. 2012",
         "DISEASE/TRAIT": "Type 2 diabetes mellitus",
         "INITIAL SAMPLE SIZE": "149,821 European ancestry individuals",
-        "CHR_ID": "10", "CHR_POS": "114758349",
-        "STRONGEST SNP-RISK ALLELE": "rs7903146-T", "SNPS": "rs7903146",
-        "P-VALUE": "5e-120", "OR or BETA": "1.37",
+        "CHR_ID": "10",
+        "CHR_POS": "114758349",
+        "STRONGEST SNP-RISK ALLELE": "rs7903146-T",
+        "SNPS": "rs7903146",
+        "P-VALUE": "5e-120",
+        "OR or BETA": "1.37",
         "95% CI (TEXT)": "[1.31-1.43]",
         "MAPPED_TRAIT": "type 2 diabetes mellitus",
     },
     {
-        "PUBMEDID": "23824729", "STUDY": "van Meurs et al. 2013",
+        "PUBMEDID": "23824729",
+        "STUDY": "van Meurs et al. 2013",
         "DISEASE/TRAIT": "Homocysteine levels",
         "INITIAL SAMPLE SIZE": "44,147 European ancestry individuals",
-        "CHR_ID": "1", "CHR_POS": "11856378",
-        "STRONGEST SNP-RISK ALLELE": "rs1801133-A", "SNPS": "rs1801133",
-        "P-VALUE": "2e-50", "OR or BETA": "1.73",
+        "CHR_ID": "1",
+        "CHR_POS": "11856378",
+        "STRONGEST SNP-RISK ALLELE": "rs1801133-A",
+        "SNPS": "rs1801133",
+        "P-VALUE": "2e-50",
+        "OR or BETA": "1.73",
         "95% CI (TEXT)": "[1.55-1.91] unit increase",
         "MAPPED_TRAIT": "homocysteine measurement",
     },
     {
-        "PUBMEDID": "99999999", "STUDY": "Smith et al. 2023",
+        "PUBMEDID": "99999999",
+        "STUDY": "Smith et al. 2023",
         "DISEASE/TRAIT": "Hair whorl direction",
         "INITIAL SAMPLE SIZE": "500 individuals",
-        "CHR_ID": "5", "CHR_POS": "131424209",
-        "STRONGEST SNP-RISK ALLELE": "rs9999999-G", "SNPS": "rs9999999",
-        "P-VALUE": "3e-10", "OR or BETA": "1.25",
+        "CHR_ID": "5",
+        "CHR_POS": "131424209",
+        "STRONGEST SNP-RISK ALLELE": "rs9999999-G",
+        "SNPS": "rs9999999",
+        "P-VALUE": "3e-10",
+        "OR or BETA": "1.25",
         "95% CI (TEXT)": "[1.15-1.36]",
         "MAPPED_TRAIT": "hair whorl",
     },
     {
-        "PUBMEDID": "16258542", "STUDY": "Zubieta et al. 2003",
+        "PUBMEDID": "16258542",
+        "STUDY": "Zubieta et al. 2003",
         "DISEASE/TRAIT": "Pain sensitivity",
         "INITIAL SAMPLE SIZE": "202 individuals",
-        "CHR_ID": "22", "CHR_POS": "19963748",
-        "STRONGEST SNP-RISK ALLELE": "rs4680-A", "SNPS": "rs4680",
-        "P-VALUE": "3e-8", "OR or BETA": "1.15",
+        "CHR_ID": "22",
+        "CHR_POS": "19963748",
+        "STRONGEST SNP-RISK ALLELE": "rs4680-A",
+        "SNPS": "rs4680",
+        "P-VALUE": "3e-8",
+        "OR or BETA": "1.15",
         "95% CI (TEXT)": "[1.02-1.30]",
         "MAPPED_TRAIT": "pain sensitivity measurement",
     },
     {
-        "PUBMEDID": "20686565", "STUDY": "Teslovich et al. 2010",
+        "PUBMEDID": "20686565",
+        "STUDY": "Teslovich et al. 2010",
         "DISEASE/TRAIT": "HDL cholesterol levels",
         "INITIAL SAMPLE SIZE": "100,184 European ancestry individuals",
-        "CHR_ID": "16", "CHR_POS": "57015091",
-        "STRONGEST SNP-RISK ALLELE": "rs708272-A", "SNPS": "rs708272",
-        "P-VALUE": "5e-50", "OR or BETA": "0.82",
+        "CHR_ID": "16",
+        "CHR_POS": "57015091",
+        "STRONGEST SNP-RISK ALLELE": "rs708272-A",
+        "SNPS": "rs708272",
+        "P-VALUE": "5e-50",
+        "OR or BETA": "0.82",
         "95% CI (TEXT)": "[0.72-0.92] unit increase",
         "MAPPED_TRAIT": "HDL cholesterol measurement",
     },
@@ -138,7 +185,9 @@ def mini_gwas_tsv(tmp_path: Path) -> Path:
     tsv_path = tmp_path / "gwas_test.tsv"
     with open(tsv_path, "w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=_GWAS_HEADER, delimiter="\t",
+            f,
+            fieldnames=_GWAS_HEADER,
+            delimiter="\t",
             extrasaction="ignore",
         )
         writer.writeheader()
@@ -650,32 +699,36 @@ class TestLoadGwasIntoDb:
 
     def test_clear_existing(self, reference_engine: sa.Engine):
         """Loading with clear_existing=True should replace data."""
-        row1 = [{
-            "rsid": "rs1",
-            "chrom": "1",
-            "pos": 100,
-            "trait": "Type 2 diabetes",
-            "p_value": 1e-10,
-            "odds_ratio": 1.5,
-            "beta": None,
-            "risk_allele": "A",
-            "pubmed_id": "123",
-            "study": "Test",
-            "sample_size": 100,
-        }]
-        row2 = [{
-            "rsid": "rs2",
-            "chrom": "2",
-            "pos": 200,
-            "trait": "Obesity",
-            "p_value": 1e-8,
-            "odds_ratio": 1.2,
-            "beta": None,
-            "risk_allele": "G",
-            "pubmed_id": "456",
-            "study": "Test2",
-            "sample_size": 200,
-        }]
+        row1 = [
+            {
+                "rsid": "rs1",
+                "chrom": "1",
+                "pos": 100,
+                "trait": "Type 2 diabetes",
+                "p_value": 1e-10,
+                "odds_ratio": 1.5,
+                "beta": None,
+                "risk_allele": "A",
+                "pubmed_id": "123",
+                "study": "Test",
+                "sample_size": 100,
+            }
+        ]
+        row2 = [
+            {
+                "rsid": "rs2",
+                "chrom": "2",
+                "pos": 200,
+                "trait": "Obesity",
+                "p_value": 1e-8,
+                "odds_ratio": 1.2,
+                "beta": None,
+                "risk_allele": "G",
+                "pubmed_id": "456",
+                "study": "Test2",
+                "sample_size": 200,
+            }
+        ]
 
         load_gwas_into_db(row1, reference_engine)
         load_gwas_into_db(row2, reference_engine, clear_existing=True)
@@ -688,32 +741,36 @@ class TestLoadGwasIntoDb:
 
     def test_append_existing(self, reference_engine: sa.Engine):
         """Loading with clear_existing=False should append data."""
-        row1 = [{
-            "rsid": "rs1",
-            "chrom": "1",
-            "pos": 100,
-            "trait": "Type 2 diabetes",
-            "p_value": 1e-10,
-            "odds_ratio": 1.5,
-            "beta": None,
-            "risk_allele": "A",
-            "pubmed_id": "123",
-            "study": "Test",
-            "sample_size": 100,
-        }]
-        row2 = [{
-            "rsid": "rs2",
-            "chrom": "2",
-            "pos": 200,
-            "trait": "Obesity",
-            "p_value": 1e-8,
-            "odds_ratio": 1.2,
-            "beta": None,
-            "risk_allele": "G",
-            "pubmed_id": "456",
-            "study": "Test2",
-            "sample_size": 200,
-        }]
+        row1 = [
+            {
+                "rsid": "rs1",
+                "chrom": "1",
+                "pos": 100,
+                "trait": "Type 2 diabetes",
+                "p_value": 1e-10,
+                "odds_ratio": 1.5,
+                "beta": None,
+                "risk_allele": "A",
+                "pubmed_id": "123",
+                "study": "Test",
+                "sample_size": 100,
+            }
+        ]
+        row2 = [
+            {
+                "rsid": "rs2",
+                "chrom": "2",
+                "pos": 200,
+                "trait": "Obesity",
+                "p_value": 1e-8,
+                "odds_ratio": 1.2,
+                "beta": None,
+                "risk_allele": "G",
+                "pubmed_id": "456",
+                "study": "Test2",
+                "sample_size": 200,
+            }
+        ]
 
         load_gwas_into_db(row1, reference_engine)
         load_gwas_into_db(row2, reference_engine, clear_existing=False)
@@ -763,9 +820,7 @@ class TestRecordGwasVersion:
         )
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "gwas_catalog"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "gwas_catalog")
             ).first()
             assert row is not None
             assert row.version == "20240101"
@@ -778,9 +833,7 @@ class TestRecordGwasVersion:
 
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "gwas_catalog"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "gwas_catalog")
             ).first()
             assert row.version == "v2"
 
@@ -869,12 +922,15 @@ class TestDownloadGwasCatalog:
 class TestDownloadAndLoadGwas:
     def test_full_pipeline(self, reference_engine: sa.Engine, mini_gwas_tsv: Path):
         """Full download + parse + load pipeline (mocked download)."""
-        with patch(
-            "backend.annotation.gwas.download_gwas_catalog",
-            return_value=mini_gwas_tsv,
-        ), patch(
-            "backend.annotation.gwas._compute_sha256",
-            return_value="fake_sha256",
+        with (
+            patch(
+                "backend.annotation.gwas.download_gwas_catalog",
+                return_value=mini_gwas_tsv,
+            ),
+            patch(
+                "backend.annotation.gwas._compute_sha256",
+                return_value="fake_sha256",
+            ),
         ):
             stats = download_and_load_gwas(
                 reference_engine,
@@ -895,9 +951,7 @@ class TestDownloadAndLoadGwas:
         # Verify version recorded
         with reference_engine.connect() as conn:
             row = conn.execute(
-                sa.select(database_versions).where(
-                    database_versions.c.db_name == "gwas_catalog"
-                )
+                sa.select(database_versions).where(database_versions.c.db_name == "gwas_catalog")
             ).first()
             assert row is not None
             assert row.checksum_sha256 == "fake_sha256"
