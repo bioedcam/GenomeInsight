@@ -303,7 +303,8 @@ def run_nutrigenomics(
     count = store_nutrigenomics_findings(result, sample_engine)
 
     # P3-09a: Set annotation_coverage bitmask bit 5 for GWAS-matched variants
-    update_annotation_coverage_gwas(result, sample_engine)
+    gwas_updated = update_annotation_coverage_gwas(result, sample_engine)
+    logger.info("GWAS annotation_coverage updated for %d variants", gwas_updated)
 
     return RunResponse(
         findings_count=count,
