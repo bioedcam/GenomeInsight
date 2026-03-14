@@ -1,4 +1,4 @@
-"""Tests for drug lookup API (P3-05).
+"""Tests for drug lookup API (P3-05) and gene results endpoint.
 
 T3-05: Drug lookup for "clopidogrel" returns CYP2C19 with correct genotype,
 recommendation, and call confidence.
@@ -6,6 +6,7 @@ recommendation, and call confidence.
 Covers:
   - GET /api/analysis/pharma/drugs — List all CPIC drugs
   - GET /api/analysis/pharma/drug/{drug_name} — Drug detail with user genotype
+  - GET /api/analysis/pharma/genes?sample_id=N — Per-gene star-allele results
   - Case-insensitive drug name matching
   - Missing drug returns 404
   - Gene with no sample finding (Insufficient / not yet run)
@@ -387,3 +388,81 @@ class TestDrugLookupGuideline:
         data = resp.json()
         effect = data["gene_effects"][0]
         assert effect["ehr_notation"] == "Intermediate Metabolizer"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/analysis/pharma/genes — Per-gene star-allele results
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGeneResults:
+    """Per-gene metabolizer card endpoint returns grouped findings."""
+
+    def test_returns_all_genes(self, client: tuple[TestClient, int]):
+        tc, sample_id = client
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        genes = [item["gene"] for item in data["items"]]
+        assert "CYP2C19" in genes
+        assert "CYP2D6" in genes
+
+    def test_cyp2c19_detail(self, client: tuple[TestClient, int]):
+        tc, sample_id = client
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        data = resp.json()
+        cyp2c19 = next(i for i in data["items"] if i["gene"] == "CYP2C19")
+        assert cyp2c19["diplotype"] == "*1/*2"
+        assert cyp2c19["phenotype"] == "Intermediate Metabolizer"
+        assert cyp2c19["call_confidence"] == "Complete"
+        assert cyp2c19["confidence_note"] == "All defining rsids present and genotyped."
+        assert cyp2c19["activity_score"] == 0.5
+        assert cyp2c19["ehr_notation"] == "Intermediate Metabolizer"
+        assert cyp2c19["evidence_level"] == 4
+        assert cyp2c19["involved_rsids"] == ["rs4244285"]
+
+    def test_cyp2d6_detail(self, client: tuple[TestClient, int]):
+        tc, sample_id = client
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        data = resp.json()
+        cyp2d6 = next(i for i in data["items"] if i["gene"] == "CYP2D6")
+        assert cyp2d6["diplotype"] == "*1/*4"
+        assert cyp2d6["phenotype"] == "Intermediate Metabolizer"
+        assert cyp2d6["call_confidence"] == "Partial"
+        assert cyp2d6["activity_score"] == 1.0
+        assert cyp2d6["involved_rsids"] == ["rs3892097"]
+
+    def test_drugs_populated_from_cpic(self, client: tuple[TestClient, int]):
+        tc, sample_id = client
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        data = resp.json()
+        cyp2c19 = next(i for i in data["items"] if i["gene"] == "CYP2C19")
+        assert "clopidogrel" in cyp2c19["drugs"]
+        cyp2d6 = next(i for i in data["items"] if i["gene"] == "CYP2D6")
+        assert "codeine" in cyp2d6["drugs"]
+
+    def test_empty_when_no_findings(self, client_no_findings: tuple[TestClient, int]):
+        tc, sample_id = client_no_findings
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["items"] == []
+
+    def test_unknown_sample_404(self, client: tuple[TestClient, int]):
+        tc, _ = client
+        resp = tc.get("/api/analysis/pharma/genes?sample_id=9999")
+        assert resp.status_code == 404
+
+    def test_missing_sample_id(self, client: tuple[TestClient, int]):
+        tc, _ = client
+        resp = tc.get("/api/analysis/pharma/genes")
+        assert resp.status_code == 422
+
+    def test_items_sorted_by_gene(self, client: tuple[TestClient, int]):
+        tc, sample_id = client
+        resp = tc.get(f"/api/analysis/pharma/genes?sample_id={sample_id}")
+        data = resp.json()
+        genes = [item["gene"] for item in data["items"]]
+        assert genes == sorted(genes)

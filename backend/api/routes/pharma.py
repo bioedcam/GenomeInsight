@@ -6,6 +6,7 @@ CPIC classification level, and prescribing recommendation.
 
 GET  /api/analysis/pharma/drugs           — List all CPIC drugs
 GET  /api/analysis/pharma/drug/{drug_name} — Drug detail with user genotype
+GET  /api/analysis/pharma/genes?sample_id=N — Per-gene star-allele results (metabolizer cards)
 """
 
 from __future__ import annotations
@@ -66,6 +67,28 @@ class DrugLookupResponse(BaseModel):
 
     drug: str
     gene_effects: list[GeneEffect]
+
+
+class GeneSummary(BaseModel):
+    """Per-gene star-allele result for metabolizer phenotype cards."""
+
+    gene: str
+    diplotype: str | None = None
+    phenotype: str | None = None
+    call_confidence: str | None = None
+    confidence_note: str | None = None
+    activity_score: float | None = None
+    ehr_notation: str | None = None
+    evidence_level: int | None = None
+    involved_rsids: list[str] = []
+    drugs: list[str] = []
+
+
+class GeneSummaryResponse(BaseModel):
+    """List of per-gene star-allele results for a sample."""
+
+    items: list[GeneSummary]
+    total: int
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -300,3 +323,98 @@ def drug_lookup(
         drug=canonical_drug,
         gene_effects=gene_effects,
     )
+
+
+@router.get("/genes")
+def gene_results(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> GeneSummaryResponse:
+    """Return all pharmacogenomics gene results for a sample.
+
+    Groups findings by gene_symbol (taking the first finding per gene for
+    diplotype / phenotype / confidence) and fetches associated drugs from
+    CPIC guidelines.  Intended for metabolizer phenotype cards on the
+    pharmacogenomics overview page.
+
+    Example: ``GET /api/analysis/pharma/genes?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    # 1. Fetch all pharmacogenomics findings for this sample
+    with sample_engine.connect() as conn:
+        stmt = (
+            sa.select(findings)
+            .where(findings.c.module == "pharmacogenomics")
+            .order_by(findings.c.gene_symbol, findings.c.id)
+        )
+        rows = conn.execute(stmt).fetchall()
+
+    # 2. Group by gene_symbol — first finding per gene wins
+    gene_map: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        gene = row.gene_symbol
+        if gene is None:
+            continue
+        if gene in gene_map:
+            continue
+
+        detail: dict[str, Any] = {}
+        if row.detail_json:
+            try:
+                detail = json.loads(row.detail_json)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        gene_map[gene] = {
+            "diplotype": row.diplotype,
+            "phenotype": row.metabolizer_status,
+            "call_confidence": detail.get("call_confidence"),
+            "confidence_note": detail.get("confidence_note"),
+            "activity_score": detail.get("activity_score"),
+            "ehr_notation": detail.get("ehr_notation"),
+            "evidence_level": row.evidence_level,
+            "involved_rsids": detail.get("involved_rsids", []),
+        }
+
+    # 3. Fetch drugs for each gene from CPIC guidelines
+    if gene_map:
+        registry = get_registry()
+        gene_list = list(gene_map.keys())
+        with registry.reference_engine.connect() as conn:
+            stmt = (
+                sa.select(
+                    cpic_guidelines.c.gene,
+                    cpic_guidelines.c.drug,
+                )
+                .where(cpic_guidelines.c.gene.in_(gene_list))
+                .group_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
+                .order_by(cpic_guidelines.c.gene, cpic_guidelines.c.drug)
+            )
+            drug_rows = conn.execute(stmt).fetchall()
+
+        gene_drugs: dict[str, list[str]] = {}
+        for dr in drug_rows:
+            gene_drugs.setdefault(dr.gene, []).append(dr.drug)
+    else:
+        gene_drugs = {}
+
+    # 4. Build response
+    items: list[GeneSummary] = []
+    for gene in sorted(gene_map):
+        info = gene_map[gene]
+        items.append(
+            GeneSummary(
+                gene=gene,
+                diplotype=info["diplotype"],
+                phenotype=info["phenotype"],
+                call_confidence=info["call_confidence"],
+                confidence_note=info["confidence_note"],
+                activity_score=info["activity_score"],
+                ehr_notation=info["ehr_notation"],
+                evidence_level=info["evidence_level"],
+                involved_rsids=info["involved_rsids"],
+                drugs=gene_drugs.get(gene, []),
+            )
+        )
+
+    return GeneSummaryResponse(items=items, total=len(items))
