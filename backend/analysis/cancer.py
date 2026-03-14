@@ -144,22 +144,26 @@ def load_cancer_panel(panel_path: Path | None = None) -> CancerPanel:
         data = json.load(f)
 
     genes: list[CancerGene] = []
-    for gene_data in data["genes"]:
-        genes.append(
-            CancerGene(
-                gene_symbol=gene_data["gene_symbol"],
-                name=gene_data["name"],
-                chromosome=gene_data["chromosome"],
-                syndromes=gene_data["syndromes"],
-                cancer_types=gene_data["cancer_types"],
-                inheritance=gene_data["inheritance"],
-                evidence_level=gene_data["evidence_level"],
-                cross_links=gene_data.get("cross_links", []),
-                expected_clinvar_rsids=gene_data.get("expected_clinvar_rsids", []),
-                pmids=gene_data.get("pmids", []),
-                notes=gene_data.get("notes", ""),
+    for idx, gene_data in enumerate(data["genes"]):
+        try:
+            genes.append(
+                CancerGene(
+                    gene_symbol=gene_data["gene_symbol"],
+                    name=gene_data["name"],
+                    chromosome=gene_data["chromosome"],
+                    syndromes=gene_data["syndromes"],
+                    cancer_types=gene_data["cancer_types"],
+                    inheritance=gene_data["inheritance"],
+                    evidence_level=gene_data["evidence_level"],
+                    cross_links=gene_data.get("cross_links", []),
+                    expected_clinvar_rsids=gene_data.get("expected_clinvar_rsids", []),
+                    pmids=gene_data.get("pmids", []),
+                    notes=gene_data.get("notes", ""),
+                )
             )
-        )
+        except KeyError as e:
+            symbol = gene_data.get("gene_symbol", f"index {idx}")
+            raise ValueError(f"Missing required field {e} for gene {symbol}") from e
 
     panel = CancerPanel(
         module=data["module"],

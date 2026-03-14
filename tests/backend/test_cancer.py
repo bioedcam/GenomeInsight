@@ -15,6 +15,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -64,8 +65,23 @@ class TestPanelLoading:
     def test_panel_malformed_json(self, tmp_path: Path) -> None:
         bad_file = tmp_path / "bad.json"
         bad_file.write_text("{invalid json", encoding="utf-8")
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             load_cancer_panel(bad_file)
+
+    def test_panel_missing_required_field(self, tmp_path: Path) -> None:
+        """Missing required field raises ValueError with gene context."""
+        bad_panel = tmp_path / "bad_panel.json"
+        bad_panel.write_text(
+            json.dumps({
+                "module": "cancer",
+                "version": "1.0.0",
+                "description": "test",
+                "genes": [{"gene_symbol": "TEST"}],
+            }),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="Missing required field.*TEST"):
+            load_cancer_panel(bad_panel)
 
 
 # ── Gene count and completeness ──────────────────────────────────────────

@@ -1,7 +1,7 @@
 {
   "module": "cancer",
   "version": "1.0.0",
-  "description": "Curated cancer predisposition gene panel for GenomeInsight (P3-12). Covers 22 genes associated with hereditary cancer syndromes, with expected ClinVar Pathogenic/Likely Pathogenic entries.",
+  "description": "Curated cancer predisposition gene panel for GenomeInsight (P3-12). Covers 22 gene groups (28 individual genes) associated with hereditary cancer syndromes, with expected ClinVar Pathogenic/Likely Pathogenic entries.",
   "genes": [
     {
       "gene_symbol": "BRCA1",
