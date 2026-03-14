@@ -72,12 +72,14 @@ class TestPanelLoading:
         """Missing required field raises ValueError with gene context."""
         bad_panel = tmp_path / "bad_panel.json"
         bad_panel.write_text(
-            json.dumps({
-                "module": "cancer",
-                "version": "1.0.0",
-                "description": "test",
-                "genes": [{"gene_symbol": "TEST"}],
-            }),
+            json.dumps(
+                {
+                    "module": "cancer",
+                    "version": "1.0.0",
+                    "description": "test",
+                    "genes": [{"gene_symbol": "TEST"}],
+                }
+            ),
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="Missing required field.*TEST"):
@@ -92,14 +94,17 @@ class TestGeneCompleteness:
 
     # The 22 gene groups from the PRD (expanded to individual genes)
     EXPECTED_GENES = [
-        "BRCA1", "BRCA2",  # BRCA1/2
+        "BRCA1",
+        "BRCA2",  # BRCA1/2
         "TP53",
         "PALB2",
         "ATM",
         "CHEK2",
-        "RAD51C", "RAD51D",  # RAD51C/D
+        "RAD51C",
+        "RAD51D",  # RAD51C/D
         "MLH1",
-        "MSH2", "MSH6",  # MSH2/6
+        "MSH2",
+        "MSH6",  # MSH2/6
         "PMS2",
         "APC",
         "MUTYH",
@@ -108,9 +113,13 @@ class TestGeneCompleteness:
         "PTEN",
         "STK11",
         "CDH1",
-        "NF1", "NF2",  # NF1/2
+        "NF1",
+        "NF2",  # NF1/2
         "MEN1",
-        "SDHA", "SDHB", "SDHC", "SDHD",  # SDHA/B/C/D
+        "SDHA",
+        "SDHB",
+        "SDHC",
+        "SDHD",  # SDHA/B/C/D
         "BAP1",
         "CDKN2A",
     ]
@@ -216,9 +225,7 @@ class TestExpectedClinVarRsids:
     def test_rsids_are_valid_format(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
             for rsid in gene.expected_clinvar_rsids:
-                assert rsid.startswith("rs"), (
-                    f"Invalid rsid format: {rsid} in {gene.gene_symbol}"
-                )
+                assert rsid.startswith("rs"), f"Invalid rsid format: {rsid} in {gene.gene_symbol}"
                 # Ensure the numeric part is valid
                 assert rsid[2:].isdigit(), (
                     f"Invalid rsid numeric part: {rsid} in {gene.gene_symbol}"
@@ -227,9 +234,7 @@ class TestExpectedClinVarRsids:
     def test_no_duplicate_rsids_within_gene(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
             rsids = gene.expected_clinvar_rsids
-            assert len(rsids) == len(set(rsids)), (
-                f"Duplicate rsids in {gene.gene_symbol}"
-            )
+            assert len(rsids) == len(set(rsids)), f"Duplicate rsids in {gene.gene_symbol}"
 
     def test_total_expected_rsids(self, panel: CancerPanel) -> None:
         """Panel should have a substantial number of expected rsids."""
@@ -309,16 +314,12 @@ class TestPMIDs:
 
     def test_all_genes_have_pmids(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
-            assert len(gene.pmids) > 0, (
-                f"{gene.gene_symbol} has no PubMed citations"
-            )
+            assert len(gene.pmids) > 0, f"{gene.gene_symbol} has no PubMed citations"
 
     def test_pmids_are_numeric(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
             for pmid in gene.pmids:
-                assert pmid.isdigit(), (
-                    f"Invalid PMID: {pmid} in {gene.gene_symbol}"
-                )
+                assert pmid.isdigit(), f"Invalid PMID: {pmid} in {gene.gene_symbol}"
 
 
 # ── Gene metadata ────────────────────────────────────────────────────────
@@ -329,15 +330,11 @@ class TestGeneMetadata:
 
     def test_all_genes_have_syndromes(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
-            assert len(gene.syndromes) > 0, (
-                f"{gene.gene_symbol} has no syndromes"
-            )
+            assert len(gene.syndromes) > 0, f"{gene.gene_symbol} has no syndromes"
 
     def test_all_genes_have_cancer_types(self, panel: CancerPanel) -> None:
         for gene in panel.genes:
-            assert len(gene.cancer_types) > 0, (
-                f"{gene.gene_symbol} has no cancer types"
-            )
+            assert len(gene.cancer_types) > 0, f"{gene.gene_symbol} has no cancer types"
 
     def test_all_genes_have_chromosome(self, panel: CancerPanel) -> None:
         valid_chroms = {str(i) for i in range(1, 23)} | {"X", "Y"}

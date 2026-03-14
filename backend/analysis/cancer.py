@@ -40,9 +40,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 # Path to the curated panel JSON (relative to this file)
-_PANEL_PATH = (
-    Path(__file__).resolve().parent.parent / "data" / "panels" / "cancer_panel.json"
-)
+_PANEL_PATH = Path(__file__).resolve().parent.parent / "data" / "panels" / "cancer_panel.json"
 
 
 # ── Data classes ──────────────────────────────────────────────────────────
@@ -85,11 +83,7 @@ class CancerPanel:
 
     def all_expected_rsids(self) -> list[str]:
         """Return all expected ClinVar rsids across all genes."""
-        return [
-            rsid
-            for gene in self.genes
-            for rsid in gene.expected_clinvar_rsids
-        ]
+        return [rsid for gene in self.genes for rsid in gene.expected_clinvar_rsids]
 
     def get_gene(self, gene_symbol: str) -> CancerGene | None:
         """Look up a gene by symbol (case-insensitive)."""
@@ -106,18 +100,12 @@ class CancerPanel:
     def genes_by_syndrome(self, syndrome: str) -> list[CancerGene]:
         """Return all genes associated with a given syndrome (substring match)."""
         syndrome_lower = syndrome.lower()
-        return [
-            g for g in self.genes
-            if any(syndrome_lower in s.lower() for s in g.syndromes)
-        ]
+        return [g for g in self.genes if any(syndrome_lower in s.lower() for s in g.syndromes)]
 
     def genes_by_cancer_type(self, cancer_type: str) -> list[CancerGene]:
         """Return all genes associated with a given cancer type (substring match)."""
         cancer_lower = cancer_type.lower()
-        return [
-            g for g in self.genes
-            if any(cancer_lower in ct.lower() for ct in g.cancer_types)
-        ]
+        return [g for g in self.genes if any(cancer_lower in ct.lower() for ct in g.cancer_types)]
 
 
 # ── Panel loading ─────────────────────────────────────────────────────────
