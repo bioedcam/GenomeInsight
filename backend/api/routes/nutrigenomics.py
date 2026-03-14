@@ -292,6 +292,7 @@ def run_nutrigenomics(
         load_nutrigenomics_panel,
         score_nutrigenomics_pathways,
         store_nutrigenomics_findings,
+        update_annotation_coverage_gwas,
     )
 
     registry = get_registry()
@@ -300,6 +301,9 @@ def run_nutrigenomics(
     panel = load_nutrigenomics_panel()
     result = score_nutrigenomics_pathways(panel, sample_engine, registry.reference_engine)
     count = store_nutrigenomics_findings(result, sample_engine)
+
+    # P3-09a: Set annotation_coverage bitmask bit 5 for GWAS-matched variants
+    update_annotation_coverage_gwas(result, sample_engine)
 
     return RunResponse(
         findings_count=count,

@@ -24,6 +24,7 @@ from backend.analysis.nutrigenomics import (
     MODERATE,
     STANDARD,
     NutrigenomicsPanel,
+    NutrigenomicsResult,
     PanelSNP,
     PathwayResult,
     SNPResult,
@@ -33,8 +34,11 @@ from backend.analysis.nutrigenomics import (
     load_nutrigenomics_panel,
     score_nutrigenomics_pathways,
     store_nutrigenomics_findings,
+    update_annotation_coverage_gwas,
 )
+from backend.annotation.engine import GWAS_BIT
 from backend.db.tables import (
+    annotated_variants,
     findings,
     gwas_associations,
     raw_variants,
@@ -614,3 +618,215 @@ def _make_snp_result(
         recommendation_text="Test.",
         present_in_sample=present,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# update_annotation_coverage_gwas (P3-09a)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestUpdateAnnotationCoverageGwas:
+    """Test that GWAS bitmask bit 5 (value 32) is ORed into annotation_coverage."""
+
+    def _make_sample_with_annotated(
+        self,
+        raw: list[dict],
+        annotated: list[dict],
+    ) -> sa.Engine:
+        """Create sample engine with raw_variants and pre-populated annotated_variants."""
+        engine = sa.create_engine("sqlite://")
+        sample_metadata_obj.create_all(engine)
+        if raw:
+            with engine.begin() as conn:
+                conn.execute(raw_variants.insert(), raw)
+        if annotated:
+            with engine.begin() as conn:
+                conn.execute(annotated_variants.insert(), annotated)
+        return engine
+
+    def test_sets_bit5_on_gwas_matched_variants(self):
+        """Variants in gwas_matched_rsids get bit 5 (32) set."""
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "genotype": "CT"},
+                {"rsid": "rs9999999", "chrom": "1", "pos": 100, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs1801133",
+                    "chrom": "1",
+                    "pos": 11856378,
+                    "genotype": "CT",
+                    "annotation_coverage": 0b001111,
+                },  # bits 0-3 set
+                {
+                    "rsid": "rs9999999",
+                    "chrom": "1",
+                    "pos": 100,
+                    "genotype": "CC",
+                    "annotation_coverage": 0b000011,
+                },  # bits 0-1 set
+            ],
+        )
+
+        result = NutrigenomicsResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs1801133"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            rows = {
+                r.rsid: r.annotation_coverage
+                for r in conn.execute(
+                    sa.select(
+                        annotated_variants.c.rsid,
+                        annotated_variants.c.annotation_coverage,
+                    )
+                ).fetchall()
+            }
+
+        # rs1801133: 0b001111 | 0b100000 = 0b101111 = 47
+        assert rows["rs1801133"] == 0b101111
+        # rs9999999: unchanged (not GWAS-matched)
+        assert rows["rs9999999"] == 0b000011
+
+    def test_null_annotation_coverage_gets_gwas_bit(self):
+        """Variant with NULL annotation_coverage gets GWAS bit set to 32."""
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "genotype": "CT"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs1801133",
+                    "chrom": "1",
+                    "pos": 11856378,
+                    "genotype": "CT",
+                    "annotation_coverage": None,
+                },
+            ],
+        )
+
+        result = NutrigenomicsResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs1801133"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs1801133"
+                )
+            ).scalar()
+
+        assert val == GWAS_BIT  # 32
+
+    def test_no_match_in_annotated_returns_zero(self):
+        """GWAS-matched rsid not in annotated_variants → 0 updates."""
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "genotype": "CT"},
+            ],
+            annotated=[],
+        )
+
+        result = NutrigenomicsResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs1801133"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 0
+
+    def test_empty_gwas_matched_returns_zero(self):
+        """Empty gwas_matched_rsids list → 0 updates."""
+        sample = self._make_sample_with_annotated(raw=[], annotated=[])
+        result = NutrigenomicsResult(pathway_results=[], gwas_matched_rsids=[])
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 0
+
+    def test_multiple_gwas_matched_rsids(self):
+        """Multiple GWAS-matched rsids get bit 5 set."""
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "genotype": "CT"},
+                {"rsid": "rs4988235", "chrom": "2", "pos": 136608646, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs1801133",
+                    "chrom": "1",
+                    "pos": 11856378,
+                    "genotype": "CT",
+                    "annotation_coverage": 0b000001,
+                },
+                {
+                    "rsid": "rs4988235",
+                    "chrom": "2",
+                    "pos": 136608646,
+                    "genotype": "CC",
+                    "annotation_coverage": 0b000011,
+                },
+            ],
+        )
+
+        result = NutrigenomicsResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs1801133", "rs4988235"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 2
+
+        with sample.connect() as conn:
+            rows = {
+                r.rsid: r.annotation_coverage
+                for r in conn.execute(
+                    sa.select(
+                        annotated_variants.c.rsid,
+                        annotated_variants.c.annotation_coverage,
+                    )
+                ).fetchall()
+            }
+
+        assert rows["rs1801133"] == 0b100001  # 33
+        assert rows["rs4988235"] == 0b100011  # 35
+
+    def test_idempotent_double_application(self):
+        """Applying GWAS bit twice does not change the value."""
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "genotype": "CT"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs1801133",
+                    "chrom": "1",
+                    "pos": 11856378,
+                    "genotype": "CT",
+                    "annotation_coverage": GWAS_BIT,
+                },
+            ],
+        )
+
+        result = NutrigenomicsResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs1801133"],
+        )
+
+        update_annotation_coverage_gwas(result, sample)
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs1801133"
+                )
+            ).scalar()
+
+        assert val == GWAS_BIT  # Still 32, no extra bits

@@ -44,7 +44,8 @@ from pathlib import Path
 import sqlalchemy as sa
 import structlog
 
-from backend.db.tables import findings, gwas_associations, raw_variants
+from backend.annotation.engine import GWAS_BIT
+from backend.db.tables import annotated_variants, findings, gwas_associations, raw_variants
 
 logger = structlog.get_logger(__name__)
 
@@ -550,3 +551,61 @@ def store_nutrigenomics_findings(
 
     logger.info("nutrigenomics_findings_stored", count=len(rows))
     return len(rows)
+
+
+# ── Annotation coverage bitmask ─────────────────────────────────────────
+
+_BITMASK_BATCH = 500  # Stay under SQLITE_MAX_VARIABLE_NUMBER
+
+
+def update_annotation_coverage_gwas(
+    result: NutrigenomicsResult,
+    sample_engine: sa.Engine,
+) -> int:
+    """OR bit 5 (GWAS Catalog, value 32) into annotation_coverage for GWAS-matched variants.
+
+    After the nutrigenomics module runs, every variant whose rsid was
+    found in the GWAS Catalog (stored in ``gwas_matched_rsids``) gets
+    bit 5 set in its ``annotation_coverage`` column in
+    ``annotated_variants``.
+
+    Args:
+        result: NutrigenomicsResult from :func:`score_nutrigenomics_pathways`.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of variants updated.
+    """
+    if not result.gwas_matched_rsids:
+        return 0
+
+    rsid_list = sorted(set(result.gwas_matched_rsids))
+    updated = 0
+
+    with sample_engine.begin() as conn:
+        for i in range(0, len(rsid_list), _BITMASK_BATCH):
+            batch = rsid_list[i : i + _BITMASK_BATCH]
+
+            stmt = (
+                annotated_variants.update()
+                .where(annotated_variants.c.rsid.in_(batch))
+                .values(
+                    annotation_coverage=sa.case(
+                        (
+                            annotated_variants.c.annotation_coverage.is_(None),
+                            GWAS_BIT,
+                        ),
+                        else_=annotated_variants.c.annotation_coverage.op("|")(GWAS_BIT),
+                    )
+                )
+            )
+            res = conn.execute(stmt)
+            updated += res.rowcount
+
+    logger.info(
+        "gwas_annotation_coverage_updated",
+        gwas_bit=GWAS_BIT,
+        gwas_matched_rsids=len(rsid_list),
+        rows_updated=updated,
+    )
+    return updated
