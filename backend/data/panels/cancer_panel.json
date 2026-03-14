@@ -1,0 +1,531 @@
+{
+  "module": "cancer",
+  "version": "1.0.0",
+  "description": "Curated cancer predisposition gene panel for GenomeInsight (P3-12). Covers 22 gene groups (28 individual genes) associated with hereditary cancer syndromes, with expected ClinVar Pathogenic/Likely Pathogenic entries.",
+  "genes": [
+    {
+      "gene_symbol": "BRCA1",
+      "name": "BRCA1 DNA Repair Associated",
+      "chromosome": "17",
+      "syndromes": ["Hereditary Breast and Ovarian Cancer Syndrome"],
+      "cancer_types": ["Breast", "Ovarian", "Pancreatic", "Prostate"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": ["carrier"],
+      "expected_clinvar_rsids": [
+        "rs80357906",
+        "rs80357713",
+        "rs28897672",
+        "rs80357914",
+        "rs28897696",
+        "rs28897689",
+        "rs80358065",
+        "rs80357973",
+        "rs80357975",
+        "rs80358152"
+      ],
+      "pmids": ["20301425", "29446198"],
+      "notes": "BRCA1 variants produce findings in both cancer and carrier modules. Dual-role gene with distinct framing per module."
+    },
+    {
+      "gene_symbol": "BRCA2",
+      "name": "BRCA2 DNA Repair Associated",
+      "chromosome": "13",
+      "syndromes": ["Hereditary Breast and Ovarian Cancer Syndrome"],
+      "cancer_types": ["Breast", "Ovarian", "Pancreatic", "Prostate", "Melanoma"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": ["carrier"],
+      "expected_clinvar_rsids": [
+        "rs80359550",
+        "rs80359065",
+        "rs80359585",
+        "rs80359671",
+        "rs11571833",
+        "rs80359375",
+        "rs80359351",
+        "rs80359716",
+        "rs276174802",
+        "rs80359688"
+      ],
+      "pmids": ["20301425", "29446198"],
+      "notes": "BRCA2 variants produce findings in both cancer and carrier modules. Dual-role gene with distinct framing per module."
+    },
+    {
+      "gene_symbol": "TP53",
+      "name": "Tumor Protein P53",
+      "chromosome": "17",
+      "syndromes": ["Li-Fraumeni Syndrome"],
+      "cancer_types": ["Sarcoma", "Breast", "Brain", "Adrenocortical", "Leukemia"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28934578",
+        "rs28934576",
+        "rs121912651",
+        "rs121912664",
+        "rs28934575",
+        "rs121913343",
+        "rs587776601",
+        "rs121912656"
+      ],
+      "pmids": ["20301488", "31170274"],
+      "notes": "Li-Fraumeni syndrome with multi-organ cancer risk. Early onset cancer common."
+    },
+    {
+      "gene_symbol": "PALB2",
+      "name": "Partner and Localizer of BRCA2",
+      "chromosome": "16",
+      "syndromes": ["Hereditary Breast Cancer"],
+      "cancer_types": ["Breast", "Pancreatic", "Ovarian"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs180177102",
+        "rs515726124",
+        "rs180177143",
+        "rs180177100",
+        "rs180177092"
+      ],
+      "pmids": ["24136374", "33471991"],
+      "notes": "Moderate-to-high penetrance breast cancer risk gene."
+    },
+    {
+      "gene_symbol": "ATM",
+      "name": "ATM Serine/Threonine Kinase",
+      "chromosome": "11",
+      "syndromes": ["Ataxia-Telangiectasia (biallelic)", "Hereditary Breast Cancer (monoallelic)"],
+      "cancer_types": ["Breast", "Pancreatic", "Prostate"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587776525",
+        "rs587776552",
+        "rs587776594",
+        "rs55861981",
+        "rs587779817"
+      ],
+      "pmids": ["20301670", "31785142"],
+      "notes": "Moderate penetrance for breast cancer. Heterozygous carriers at increased risk."
+    },
+    {
+      "gene_symbol": "CHEK2",
+      "name": "Checkpoint Kinase 2",
+      "chromosome": "22",
+      "syndromes": ["Hereditary Breast Cancer", "Li-Fraumeni Syndrome-2"],
+      "cancer_types": ["Breast", "Colorectal", "Prostate"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs555607708",
+        "rs28909982",
+        "rs137853007",
+        "rs200928781",
+        "rs587780174"
+      ],
+      "pmids": ["20301661", "29848605"],
+      "notes": "Moderate penetrance breast cancer gene. 1100delC is the most studied variant."
+    },
+    {
+      "gene_symbol": "RAD51C",
+      "name": "RAD51 Paralog C",
+      "chromosome": "17",
+      "syndromes": ["Hereditary Breast and Ovarian Cancer"],
+      "cancer_types": ["Ovarian", "Breast"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587782318",
+        "rs587783520",
+        "rs730881849",
+        "rs786201732"
+      ],
+      "pmids": ["20301399", "25583358"],
+      "notes": "Moderate penetrance for ovarian cancer. Part of the Fanconi anemia pathway."
+    },
+    {
+      "gene_symbol": "RAD51D",
+      "name": "RAD51 Paralog D",
+      "chromosome": "17",
+      "syndromes": ["Hereditary Breast and Ovarian Cancer"],
+      "cancer_types": ["Ovarian", "Breast"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587782682",
+        "rs587782729",
+        "rs730881950"
+      ],
+      "pmids": ["22006311", "29446198"],
+      "notes": "Moderate penetrance for ovarian cancer. DNA double-strand break repair."
+    },
+    {
+      "gene_symbol": "MLH1",
+      "name": "MutL Homolog 1",
+      "chromosome": "3",
+      "syndromes": ["Lynch Syndrome (HNPCC)"],
+      "cancer_types": ["Colorectal", "Endometrial", "Ovarian", "Gastric"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs63750781",
+        "rs63751710",
+        "rs63751445",
+        "rs267607732",
+        "rs63750264",
+        "rs193922367",
+        "rs587779024"
+      ],
+      "pmids": ["20301390", "28774630"],
+      "notes": "Lynch syndrome mismatch repair gene. Colonoscopy surveillance recommended for carriers."
+    },
+    {
+      "gene_symbol": "MSH2",
+      "name": "MutS Homolog 2",
+      "chromosome": "2",
+      "syndromes": ["Lynch Syndrome (HNPCC)"],
+      "cancer_types": ["Colorectal", "Endometrial", "Ovarian", "Urinary tract"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs63749810",
+        "rs63750073",
+        "rs63749893",
+        "rs63750416",
+        "rs63750447",
+        "rs267607949"
+      ],
+      "pmids": ["20301390", "28774630"],
+      "notes": "Lynch syndrome mismatch repair gene."
+    },
+    {
+      "gene_symbol": "MSH6",
+      "name": "MutS Homolog 6",
+      "chromosome": "2",
+      "syndromes": ["Lynch Syndrome (HNPCC)"],
+      "cancer_types": ["Colorectal", "Endometrial"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs267608087",
+        "rs267608090",
+        "rs267608120",
+        "rs267607798"
+      ],
+      "pmids": ["20301390", "28774630"],
+      "notes": "Lynch syndrome mismatch repair gene. Somewhat lower penetrance than MLH1/MSH2."
+    },
+    {
+      "gene_symbol": "PMS2",
+      "name": "PMS1 Homolog 2",
+      "chromosome": "7",
+      "syndromes": ["Lynch Syndrome (HNPCC)"],
+      "cancer_types": ["Colorectal", "Endometrial"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs63749868",
+        "rs587780827",
+        "rs587780826",
+        "rs587780825"
+      ],
+      "pmids": ["20301390", "25583358"],
+      "notes": "Lynch syndrome mismatch repair gene. Lower penetrance than MLH1/MSH2. Pseudogene PMS2CL complicates testing."
+    },
+    {
+      "gene_symbol": "APC",
+      "name": "APC Regulator of WNT Signaling Pathway",
+      "chromosome": "5",
+      "syndromes": ["Familial Adenomatous Polyposis (FAP)", "Attenuated FAP"],
+      "cancer_types": ["Colorectal", "Duodenal", "Thyroid"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs137854568",
+        "rs137854572",
+        "rs587781417",
+        "rs137854569",
+        "rs137854574"
+      ],
+      "pmids": ["20301519", "30844766"],
+      "notes": "Classic Familial Adenomatous Polyposis. Colectomy typically recommended."
+    },
+    {
+      "gene_symbol": "MUTYH",
+      "name": "MutY DNA Glycosylase",
+      "chromosome": "1",
+      "syndromes": ["MUTYH-Associated Polyposis (MAP)"],
+      "cancer_types": ["Colorectal"],
+      "inheritance": "AR",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs36053993",
+        "rs34612342",
+        "rs587782813",
+        "rs200621546"
+      ],
+      "pmids": ["20301569", "28774630"],
+      "notes": "Autosomal recessive polyposis. Biallelic carriers have high colorectal cancer risk. Monoallelic carriers have modestly elevated risk."
+    },
+    {
+      "gene_symbol": "VHL",
+      "name": "Von Hippel-Lindau Tumor Suppressor",
+      "chromosome": "3",
+      "syndromes": ["Von Hippel-Lindau Syndrome"],
+      "cancer_types": ["Renal cell carcinoma", "Pheochromocytoma", "Hemangioblastoma"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs5030625",
+        "rs5030626",
+        "rs5030627",
+        "rs28940299"
+      ],
+      "pmids": ["20301636", "31280893"],
+      "notes": "Surveillance recommended for carriers. Renal cell carcinoma screening starting age 15."
+    },
+    {
+      "gene_symbol": "RET",
+      "name": "Ret Proto-Oncogene",
+      "chromosome": "10",
+      "syndromes": ["Multiple Endocrine Neoplasia Type 2 (MEN2)"],
+      "cancer_types": ["Medullary thyroid", "Pheochromocytoma"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs74799832",
+        "rs77709286",
+        "rs75030001",
+        "rs77724903",
+        "rs77931234"
+      ],
+      "pmids": ["20301434", "25651787"],
+      "notes": "Gain-of-function mutations. Prophylactic thyroidectomy recommended for certain variants."
+    },
+    {
+      "gene_symbol": "PTEN",
+      "name": "Phosphatase and Tensin Homolog",
+      "chromosome": "10",
+      "syndromes": ["Cowden Syndrome", "PTEN Hamartoma Tumor Syndrome"],
+      "cancer_types": ["Breast", "Thyroid", "Endometrial", "Colorectal", "Renal"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121909220",
+        "rs121909221",
+        "rs121909224",
+        "rs121909219",
+        "rs587776674"
+      ],
+      "pmids": ["20301661", "29895982"],
+      "notes": "Multi-organ cancer risk. Lifetime breast cancer risk ~85% for female carriers."
+    },
+    {
+      "gene_symbol": "STK11",
+      "name": "Serine/Threonine Kinase 11",
+      "chromosome": "19",
+      "syndromes": ["Peutz-Jeghers Syndrome"],
+      "cancer_types": ["Colorectal", "Breast", "Pancreatic", "Gastric", "Ovarian"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587780613",
+        "rs587780614",
+        "rs199919362",
+        "rs587780612"
+      ],
+      "pmids": ["20301443", "30311386"],
+      "notes": "Peutz-Jeghers syndrome with hamartomatous polyps and elevated multi-organ cancer risk."
+    },
+    {
+      "gene_symbol": "CDH1",
+      "name": "Cadherin 1",
+      "chromosome": "16",
+      "syndromes": ["Hereditary Diffuse Gastric Cancer"],
+      "cancer_types": ["Gastric (diffuse)", "Lobular breast"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587782413",
+        "rs587782414",
+        "rs587782412",
+        "rs587782415"
+      ],
+      "pmids": ["20301318", "26062993"],
+      "notes": "Prophylactic gastrectomy may be recommended. Lobular breast cancer screening for female carriers."
+    },
+    {
+      "gene_symbol": "NF1",
+      "name": "Neurofibromin 1",
+      "chromosome": "17",
+      "syndromes": ["Neurofibromatosis Type 1"],
+      "cancer_types": ["MPNST", "Optic glioma", "Breast"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs267606696",
+        "rs267606718",
+        "rs267606815",
+        "rs267606802"
+      ],
+      "pmids": ["20301288", "29392898"],
+      "notes": "Neurofibromatosis type 1. Cancer risk is part of broader clinical syndrome."
+    },
+    {
+      "gene_symbol": "NF2",
+      "name": "Neurofibromin 2 (Merlin)",
+      "chromosome": "22",
+      "syndromes": ["Neurofibromatosis Type 2"],
+      "cancer_types": ["Vestibular schwannoma", "Meningioma", "Ependymoma"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs137854555",
+        "rs137854556",
+        "rs137854553",
+        "rs137854554"
+      ],
+      "pmids": ["20301380", "22407877"],
+      "notes": "Bilateral vestibular schwannomas are hallmark. Surveillance MRI recommended."
+    },
+    {
+      "gene_symbol": "MEN1",
+      "name": "Menin 1",
+      "chromosome": "11",
+      "syndromes": ["Multiple Endocrine Neoplasia Type 1"],
+      "cancer_types": ["Parathyroid", "Pituitary", "Pancreatic neuroendocrine"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs104894251",
+        "rs104894254",
+        "rs104894256",
+        "rs104894255"
+      ],
+      "pmids": ["20301710", "25073840"],
+      "notes": "MEN1 classic triad: parathyroid adenoma, pituitary adenoma, pancreatic neuroendocrine tumor."
+    },
+    {
+      "gene_symbol": "SDHA",
+      "name": "Succinate Dehydrogenase Complex Flavoprotein Subunit A",
+      "chromosome": "5",
+      "syndromes": ["Paraganglioma-Pheochromocytoma Syndrome"],
+      "cancer_types": ["Paraganglioma", "Pheochromocytoma", "GIST"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs375367521",
+        "rs587782786"
+      ],
+      "pmids": ["20301715", "24344213"],
+      "notes": "Lower penetrance compared to SDHB. Surveillance recommended for carriers."
+    },
+    {
+      "gene_symbol": "SDHB",
+      "name": "Succinate Dehydrogenase Complex Iron Sulfur Subunit B",
+      "chromosome": "1",
+      "syndromes": ["Paraganglioma-Pheochromocytoma Syndrome"],
+      "cancer_types": ["Paraganglioma", "Pheochromocytoma", "Renal cell carcinoma"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs74315369",
+        "rs74315373",
+        "rs74315370",
+        "rs587782768"
+      ],
+      "pmids": ["20301715", "24344213"],
+      "notes": "Higher penetrance and malignancy risk compared to other SDH subunits."
+    },
+    {
+      "gene_symbol": "SDHC",
+      "name": "Succinate Dehydrogenase Complex Subunit C",
+      "chromosome": "1",
+      "syndromes": ["Paraganglioma-Pheochromocytoma Syndrome"],
+      "cancer_types": ["Paraganglioma", "Pheochromocytoma"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587782789",
+        "rs587782790"
+      ],
+      "pmids": ["20301715", "24344213"],
+      "notes": "Lower penetrance. Head and neck paragangliomas most common."
+    },
+    {
+      "gene_symbol": "SDHD",
+      "name": "Succinate Dehydrogenase Complex Subunit D",
+      "chromosome": "11",
+      "syndromes": ["Paraganglioma-Pheochromocytoma Syndrome"],
+      "cancer_types": ["Paraganglioma", "Pheochromocytoma"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28934575",
+        "rs587783368",
+        "rs104893901"
+      ],
+      "pmids": ["20301715", "24344213"],
+      "notes": "Parent-of-origin effect: disease penetrance primarily with paternal inheritance."
+    },
+    {
+      "gene_symbol": "BAP1",
+      "name": "BRCA1 Associated Protein 1",
+      "chromosome": "3",
+      "syndromes": ["BAP1 Tumor Predisposition Syndrome"],
+      "cancer_types": ["Uveal melanoma", "Mesothelioma", "Renal cell carcinoma", "Cutaneous melanoma"],
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs587782399",
+        "rs587782400",
+        "rs587782401"
+      ],
+      "pmids": ["27813044", "26014290"],
+      "notes": "BAP1 tumor predisposition syndrome. Dermal melanocytic tumors are common early sign."
+    },
+    {
+      "gene_symbol": "CDKN2A",
+      "name": "Cyclin Dependent Kinase Inhibitor 2A",
+      "chromosome": "9",
+      "syndromes": ["Familial Atypical Multiple Mole Melanoma Syndrome (FAMMM)", "Familial Pancreatic Cancer"],
+      "cancer_types": ["Melanoma", "Pancreatic"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs104894098",
+        "rs11515",
+        "rs104894099",
+        "rs104894094"
+      ],
+      "pmids": ["20301557", "30575489"],
+      "notes": "High penetrance for melanoma in carriers. Pancreatic cancer risk significantly elevated."
+    }
+  ]
+}
