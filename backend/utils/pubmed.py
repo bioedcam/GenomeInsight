@@ -138,11 +138,11 @@ class PubMedFetcher:
         cutoff = datetime.now(UTC) - timedelta(days=self._ttl_days)
 
         # Step 1: Check cache
-        cached, fresh_pmids, stale_pmids = self._check_cache(unique_pmids, cutoff)
+        cached, missing_pmids, stale_pmids = self._check_cache(unique_pmids, cutoff)
         result.from_cache = len(cached)
 
         # If everything is fresh in cache, return immediately
-        needs_fetch = fresh_pmids + stale_pmids
+        needs_fetch = missing_pmids + stale_pmids
         if not needs_fetch:
             result.articles = cached
             return result
@@ -153,7 +153,7 @@ class PubMedFetcher:
             logger.warning("pubmed_email_not_configured")
             result.errors.append("PubMed email not configured. Using cached data only.")
             # Mark stale entries
-            stale_cached = self._get_stale_cached(stale_pmids, gene)
+            stale_cached = self._get_stale_cached(stale_pmids)
             for article in stale_cached:
                 article.is_stale = True
             result.articles = cached + stale_cached
@@ -170,10 +170,10 @@ class PubMedFetcher:
             logger.warning(
                 "pubmed_network_fallback",
                 stale_count=len(stale_pmids),
-                missing_count=len(fresh_pmids),
+                missing_count=len(missing_pmids),
             )
             result.errors.append("PubMed network request failed. Showing cached data.")
-            stale_cached = self._get_stale_cached(stale_pmids, gene)
+            stale_cached = self._get_stale_cached(stale_pmids)
             for article in stale_cached:
                 article.is_stale = True
             result.articles = cached + stale_cached
@@ -260,7 +260,6 @@ class PubMedFetcher:
     def _get_stale_cached(
         self,
         pmids: list[str],
-        gene: str | None = None,
     ) -> list[PubMedArticle]:
         """Retrieve stale cached entries (for offline fallback)."""
         if not pmids:
@@ -361,8 +360,10 @@ class PubMedFetcher:
                     rettype="xml",
                     retmode="xml",
                 )
-                records = Entrez.read(handle)
-                handle.close()
+                try:
+                    records = Entrez.read(handle)
+                finally:
+                    handle.close()
 
                 for record in records.get("PubmedArticle", []):
                     article = _parse_entrez_record(record, gene)
@@ -403,8 +404,10 @@ class PubMedFetcher:
                 retmax=str(max_results),
                 sort="relevance",
             )
-            record = Entrez.read(handle)
-            handle.close()
+            try:
+                record = Entrez.read(handle)
+            finally:
+                handle.close()
 
             pmids = record.get("IdList", [])
             logger.info(
