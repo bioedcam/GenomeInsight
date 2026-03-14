@@ -49,7 +49,7 @@ data/
 !backend/data/
 !backend/data/**
 downloads/
-~/.genomeinsight/
+.genomeinsight/
 logs/
 
 # Coverage & test artifacts

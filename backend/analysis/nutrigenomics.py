@@ -40,15 +40,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 import structlog
 
 from backend.db.tables import findings, gwas_associations, raw_variants
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 
@@ -105,11 +101,7 @@ class NutrigenomicsPanel:
 
     def all_rsids(self) -> list[str]:
         """Return all rsids in the panel."""
-        rsids: list[str] = []
-        for pathway in self.pathways:
-            for snp in pathway.snps:
-                rsids.append(snp.rsid)
-        return rsids
+        return [snp.rsid for pathway in self.pathways for snp in pathway.snps]
 
 
 @dataclass
@@ -177,7 +169,7 @@ def load_nutrigenomics_panel(panel_path: Path | None = None) -> NutrigenomicsPan
     path = panel_path or _PANEL_PATH
     logger.info("loading_nutrigenomics_panel", path=str(path))
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     pathways: list[Pathway] = []
@@ -325,13 +317,8 @@ def _determine_pathway_level(snp_results: list[SNPResult]) -> str:
         return STANDARD
 
     category_priority = {ELEVATED: 2, MODERATE: 1, STANDARD: 0}
-    max_priority = max(category_priority.get(r.category, 0) for r in called)
-
-    for cat, priority in category_priority.items():
-        if priority == max_priority:
-            return cat
-
-    return STANDARD
+    present = {r.category for r in called}
+    return max(present, key=lambda c: category_priority.get(c, 0), default=STANDARD)
 
 
 # ── Main scoring function ────────────────────────────────────────────────

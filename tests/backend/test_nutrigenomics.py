@@ -188,6 +188,12 @@ class TestGenotypeNormalization:
     def test_whitespace(self) -> None:
         assert _normalize_genotype("  CT  ") == "CT"
 
+    def test_indel_markers(self) -> None:
+        assert _normalize_genotype("II") is None
+        assert _normalize_genotype("DD") is None
+        assert _normalize_genotype("DI") is None
+        assert _normalize_genotype("ID") is None
+
     def test_lowercase(self) -> None:
         assert _normalize_genotype("ct") == "CT"
 
