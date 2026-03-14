@@ -136,10 +136,12 @@ describe("PathwayCard", () => {
   })
 
   it("shows selected state when selected prop is true", () => {
-    const { container } = render(
+    render(
       <PathwayCard pathway={ELEVATED_PATHWAY} onClick={onClick} selected />,
     )
-    const article = container.querySelector("article")
-    expect(article?.className).toContain("ring-2")
+    const card = screen.getByRole("button", {
+      name: "Folate Metabolism — Elevated Consideration",
+    })
+    expect(card).toHaveAttribute("data-selected", "true")
   })
 })

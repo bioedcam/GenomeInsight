@@ -7,6 +7,7 @@
 
 import { cn } from "@/lib/utils"
 import type { PathwaySummary, PathwayLevel } from "@/types/nutrigenomics"
+import EvidenceStars from "@/components/ui/EvidenceStars"
 import { ChevronRight } from "lucide-react"
 
 interface PathwayCardProps {
@@ -57,20 +58,6 @@ const PATHWAY_DESCRIPTIONS: Record<string, string> = {
     "Lactose tolerance determines the ability to digest dairy sugars in adulthood.",
 }
 
-function EvidenceStars({ level }: { level: number }) {
-  const stars = Math.max(0, Math.min(4, level))
-  return (
-    <span
-      className="text-xs text-muted-foreground"
-      role="img"
-      aria-label={`${stars} of 4 stars evidence`}
-    >
-      {"★".repeat(stars)}
-      {"☆".repeat(4 - stars)}
-    </span>
-  )
-}
-
 export default function PathwayCard({ pathway, onClick, selected }: PathwayCardProps) {
   const config = LEVEL_CONFIG[pathway.level] || LEVEL_CONFIG.Standard
   const description = PATHWAY_DESCRIPTIONS[pathway.pathway_id] || ""
@@ -94,6 +81,7 @@ export default function PathwayCard({ pathway, onClick, selected }: PathwayCardP
       tabIndex={0}
       role="button"
       aria-label={`${pathway.pathway_name} — ${config.label}`}
+      data-selected={selected || undefined}
     >
       {/* Header: pathway name + level badge */}
       <div className="flex items-start justify-between gap-2 mb-2">

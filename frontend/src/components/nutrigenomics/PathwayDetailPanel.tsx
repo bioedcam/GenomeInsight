@@ -4,8 +4,10 @@
  * effect summaries, recommendations, and PubMed literature links.
  */
 
+import { useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { useNutrigenomicsPathwayDetail } from "@/api/nutrigenomics"
+import EvidenceStars from "@/components/ui/EvidenceStars"
 import type { SNPDetail, PathwayLevel } from "@/types/nutrigenomics"
 import { X, Loader2, ExternalLink, AlertCircle, Dna } from "lucide-react"
 
@@ -26,20 +28,6 @@ const CATEGORY_DOT: Record<PathwayLevel, string> = {
   Elevated: "bg-amber-500",
   Moderate: "bg-blue-500",
   Standard: "bg-emerald-500",
-}
-
-function EvidenceStars({ level }: { level: number }) {
-  const stars = Math.max(0, Math.min(4, level))
-  return (
-    <span
-      className="text-xs text-muted-foreground"
-      role="img"
-      aria-label={`${stars} of 4 stars evidence`}
-    >
-      {"★".repeat(stars)}
-      {"☆".repeat(4 - stars)}
-    </span>
-  )
 }
 
 function SNPRow({ snp }: { snp: SNPDetail }) {
@@ -117,6 +105,14 @@ export default function PathwayDetailPanel({
 }: PathwayDetailPanelProps) {
   const detailQuery = useNutrigenomicsPathwayDetail(pathwayId, sampleId)
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    document.addEventListener("keydown", handleEscape)
+    return () => document.removeEventListener("keydown", handleEscape)
+  }, [onClose])
+
   return (
     <aside
       className={cn(
@@ -126,6 +122,7 @@ export default function PathwayDetailPanel({
         "animate-in slide-in-from-right duration-200",
       )}
       role="dialog"
+      aria-modal="true"
       aria-label={`${pathwayName} pathway details`}
     >
       {/* Header */}
