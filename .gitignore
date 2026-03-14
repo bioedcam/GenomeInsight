@@ -44,10 +44,12 @@ credentials.json
 .DS_Store
 Thumbs.db
 
-# GenomeInsight runtime
+# GenomeInsight runtime data (not curated panels)
 data/
+!backend/data/
+!backend/data/**
 downloads/
-~/.genomeinsight/
+.genomeinsight/
 logs/
 
 # Coverage & test artifacts
@@ -64,3 +66,6 @@ blob-report/
 
 # Claude
 .claude/
+
+# Review/planning docs (local only)
+gero.md

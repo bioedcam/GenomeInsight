@@ -1,0 +1,513 @@
+{
+  "module": "nutrigenomics",
+  "version": "1.0.0",
+  "description": "Curated nutrigenomics SNP panel for GenomeInsight (P3-08). Covers 6 nutrient pathways with evidence-gated categorical scoring.",
+  "pathways": [
+    {
+      "id": "folate_metabolism",
+      "name": "Folate Metabolism",
+      "description": "Variants affecting folate/homocysteine metabolism via the one-carbon pathway.",
+      "snps": [
+        {
+          "rsid": "rs1801133",
+          "gene": "MTHFR",
+          "variant_name": "C677T",
+          "hgvs_protein": "p.Ala222Val",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal MTHFR enzyme activity. Standard folate metabolism."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Reduced MTHFR enzyme activity (~65% of normal). Mildly elevated homocysteine possible."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Reduced MTHFR enzyme activity (~65% of normal). Mildly elevated homocysteine possible."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Significantly reduced MTHFR enzyme activity (~30% of normal). Consider dietary folate sources and discuss methylfolate supplementation with a clinician."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["23824729", "16825279"],
+          "recommendation_text": "Consider dietary folate sources (leafy greens, legumes) and discuss methylfolate supplementation with a clinician."
+        },
+        {
+          "rsid": "rs1801131",
+          "gene": "MTHFR",
+          "variant_name": "A1298C",
+          "hgvs_protein": "p.Glu429Ala",
+          "risk_allele": "C",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal MTHFR enzyme activity at A1298C locus."
+            },
+            "AC": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced MTHFR enzyme activity at A1298C locus."
+            },
+            "CA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced MTHFR enzyme activity at A1298C locus."
+            },
+            "CC": {
+              "category": "Moderate",
+              "effect_summary": "Moderately reduced MTHFR enzyme activity at A1298C locus. Effect is less pronounced than C677T."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["23824729"],
+          "recommendation_text": "Effect is milder than C677T. Compound heterozygosity (C677T + A1298C) may have additive effects on homocysteine levels."
+        },
+        {
+          "rsid": "rs1801394",
+          "gene": "MTRR",
+          "variant_name": "A66G",
+          "hgvs_protein": "p.Ile22Met",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal methionine synthase reductase activity."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced methionine synthase reductase activity. May contribute to elevated homocysteine in combination with MTHFR variants."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced methionine synthase reductase activity. May contribute to elevated homocysteine in combination with MTHFR variants."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Reduced methionine synthase reductase activity."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["23824729"],
+          "recommendation_text": "Supportive role in folate metabolism. Effect is primarily relevant in combination with MTHFR variants."
+        }
+      ]
+    },
+    {
+      "id": "vitamin_d",
+      "name": "Vitamin D",
+      "description": "Variants affecting vitamin D synthesis, transport, and metabolism.",
+      "snps": [
+        {
+          "rsid": "rs2282679",
+          "gene": "GC",
+          "variant_name": "GC/DBP variant",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Normal vitamin D binding protein levels."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "Modestly lower vitamin D binding protein levels. May have mildly reduced circulating 25(OH)D."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "Modestly lower vitamin D binding protein levels. May have mildly reduced circulating 25(OH)D."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Significantly lower vitamin D binding protein levels. Associated with reduced circulating 25(OH)D."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20541252"],
+          "recommendation_text": "Consider vitamin D status monitoring and adequate sun exposure or supplementation as directed by a clinician."
+        },
+        {
+          "rsid": "rs7041",
+          "gene": "GC",
+          "variant_name": "GC Asp432Glu",
+          "hgvs_protein": "p.Asp432Glu",
+          "risk_allele": "C",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal vitamin D binding protein variant."
+            },
+            "AC": {
+              "category": "Moderate",
+              "effect_summary": "Modestly reduced vitamin D binding affinity."
+            },
+            "CA": {
+              "category": "Moderate",
+              "effect_summary": "Modestly reduced vitamin D binding affinity."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Reduced vitamin D binding affinity. Associated with lower circulating 25(OH)D."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20541252"],
+          "recommendation_text": "Consider vitamin D status monitoring."
+        },
+        {
+          "rsid": "rs12794714",
+          "gene": "CYP2R1",
+          "variant_name": "CYP2R1 variant",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal vitamin D 25-hydroxylase activity."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced vitamin D 25-hydroxylation efficiency."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced vitamin D 25-hydroxylation efficiency."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Reduced vitamin D 25-hydroxylation efficiency."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20541252"],
+          "recommendation_text": "May contribute to lower vitamin D levels. Discuss with a clinician if deficiency is suspected."
+        },
+        {
+          "rsid": "rs10741657",
+          "gene": "CYP2R1",
+          "variant_name": "CYP2R1 promoter variant",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal CYP2R1 promoter activity."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced CYP2R1 expression."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced CYP2R1 expression."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Reduced CYP2R1 expression. May contribute to lower vitamin D levels."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20541252"],
+          "recommendation_text": "Supportive variant for vitamin D pathway assessment."
+        }
+      ]
+    },
+    {
+      "id": "vitamin_b12",
+      "name": "Vitamin B12",
+      "description": "Variants affecting vitamin B12 absorption and transport.",
+      "snps": [
+        {
+          "rsid": "rs602662",
+          "gene": "FUT2",
+          "variant_name": "FUT2 secretor status",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Non-secretor genotype. Associated with reduced vitamin B12 absorption from food sources."
+            },
+            "GA": {
+              "category": "Standard",
+              "effect_summary": "Secretor genotype. Normal vitamin B12 absorption."
+            },
+            "AG": {
+              "category": "Standard",
+              "effect_summary": "Secretor genotype. Normal vitamin B12 absorption."
+            },
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Secretor genotype. Normal vitamin B12 absorption."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["19924280"],
+          "recommendation_text": "Non-secretors may benefit from monitoring B12 levels, particularly on plant-based diets."
+        },
+        {
+          "rsid": "rs4654748",
+          "gene": "NBPF3/ALPL",
+          "variant_name": "B6 levels variant",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal vitamin B6 levels."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Modestly lower circulating vitamin B6 levels."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Modestly lower circulating vitamin B6 levels."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Lower circulating vitamin B6 levels."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["19744961"],
+          "recommendation_text": "Consider dietary sources of vitamin B6 (poultry, fish, potatoes, chickpeas)."
+        }
+      ]
+    },
+    {
+      "id": "omega_3",
+      "name": "Omega-3 Fatty Acids",
+      "description": "Variants affecting omega-3 and omega-6 fatty acid desaturation and metabolism.",
+      "snps": [
+        {
+          "rsid": "rs174547",
+          "gene": "FADS1",
+          "variant_name": "FADS1 promoter variant",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Reduced FADS1 desaturase activity. Lower conversion of ALA to EPA/DHA. Dietary omega-3 intake or supplementation may be more important."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced FADS1 desaturase activity. Intermediate conversion of ALA to EPA/DHA."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced FADS1 desaturase activity. Intermediate conversion of ALA to EPA/DHA."
+            },
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal FADS1 desaturase activity. Efficient conversion of ALA to EPA/DHA."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20686565", "24823311"],
+          "recommendation_text": "Consider direct dietary sources of EPA/DHA (fatty fish, algae-based supplements) if desaturase activity is reduced."
+        },
+        {
+          "rsid": "rs1535",
+          "gene": "FADS2",
+          "variant_name": "FADS2 variant",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal FADS2 desaturase activity."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Modestly altered omega-6 fatty acid levels."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Modestly altered omega-6 fatty acid levels."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Altered omega-6 fatty acid levels. Associated with higher inflammatory omega-6 to omega-3 ratio."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["24023261"],
+          "recommendation_text": "Balance omega-6 and omega-3 intake. Consider increasing omega-3-rich foods."
+        }
+      ]
+    },
+    {
+      "id": "iron",
+      "name": "Iron Metabolism",
+      "description": "Variants affecting iron absorption and storage, particularly hereditary hemochromatosis risk.",
+      "snps": [
+        {
+          "rsid": "rs1800562",
+          "gene": "HFE",
+          "variant_name": "C282Y",
+          "hgvs_protein": "p.Cys282Tyr",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No HFE C282Y mutation. Normal iron regulation at this locus."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Carrier of HFE C282Y. Mildly increased iron absorption. Hemochromatosis risk depends on second HFE allele."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Carrier of HFE C282Y. Mildly increased iron absorption. Hemochromatosis risk depends on second HFE allele."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HFE C282Y. Significantly increased iron absorption. Discuss iron status monitoring with a clinician."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["9462749"],
+          "recommendation_text": "Homozygous individuals should discuss iron level monitoring (serum ferritin, transferrin saturation) with a clinician."
+        },
+        {
+          "rsid": "rs1799945",
+          "gene": "HFE",
+          "variant_name": "H63D",
+          "hgvs_protein": "p.His63Asp",
+          "risk_allele": "G",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No HFE H63D mutation. Normal iron regulation at this locus."
+            },
+            "CG": {
+              "category": "Standard",
+              "effect_summary": "Carrier of HFE H63D. Minimal clinical significance alone. May contribute to iron overload risk with compound C282Y/H63D genotype."
+            },
+            "GC": {
+              "category": "Standard",
+              "effect_summary": "Carrier of HFE H63D. Minimal clinical significance alone."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous HFE H63D. Mildly increased iron absorption. Lower penetrance than C282Y."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["9462749"],
+          "recommendation_text": "H63D alone has low clinical penetrance. Most relevant in compound heterozygosity with C282Y."
+        }
+      ]
+    },
+    {
+      "id": "lactose",
+      "name": "Lactose Tolerance",
+      "description": "Variants affecting lactase persistence and lactose digestion in adulthood.",
+      "snps": [
+        {
+          "rsid": "rs4988235",
+          "gene": "MCM6/LCT",
+          "variant_name": "LCT -13910C>T",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype. Likely able to digest lactose in adulthood."
+            },
+            "AG": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype (one functional allele). Likely able to digest lactose in adulthood."
+            },
+            "GA": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype (one functional allele). Likely able to digest lactose in adulthood."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Lactase non-persistent genotype. Likely reduced ability to digest lactose in adulthood."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["11788828", "15106124"],
+          "recommendation_text": "Lactase non-persistent individuals may benefit from lactose-free dairy products or lactase enzyme supplements."
+        },
+        {
+          "rsid": "rs182549",
+          "gene": "MCM6/LCT",
+          "variant_name": "LCT -22018G>A",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype at secondary regulatory locus."
+            },
+            "TC": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype at secondary regulatory locus."
+            },
+            "CT": {
+              "category": "Standard",
+              "effect_summary": "Lactase persistent genotype at secondary regulatory locus."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Supports lactase non-persistence. Confirms finding from rs4988235 if both present."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["15106124"],
+          "recommendation_text": "Supportive variant for lactose tolerance assessment. Most informative when combined with rs4988235."
+        }
+      ]
+    }
+  ],
+  "additional_genes": {
+    "TCF7L2": {
+      "note": "TCF7L2 rs7903146 is included in GWAS Catalog data for Type 2 diabetes risk factor. Cross-referenced from metabolic GWAS findings but not a primary nutrigenomics pathway variant.",
+      "rsids": ["rs7903146", "rs12255372"]
+    },
+    "PPARG": {
+      "note": "PPARG Pro12Ala (rs1801282) relates to insulin sensitivity and fat metabolism. Referenced via GWAS associations.",
+      "rsids": ["rs1801282"]
+    },
+    "MC4R": {
+      "note": "MC4R variants affect appetite regulation and BMI. Referenced via GWAS associations for obesity-related traits.",
+      "rsids": ["rs17782313"]
+    },
+    "FTO": {
+      "note": "FTO rs9939609 is a well-replicated obesity/BMI variant. Referenced via GWAS associations.",
+      "rsids": ["rs9939609"]
+    },
+    "APOE": {
+      "note": "APOE lipid/dietary findings are generated by the dedicated APOE module (P3-22). Not scored in the nutrigenomics pathway cards to avoid duplication.",
+      "rsids": ["rs429358", "rs7412"]
+    }
+  },
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps"
+  }
+}
