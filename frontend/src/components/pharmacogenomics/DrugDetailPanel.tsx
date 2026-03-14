@@ -1,0 +1,152 @@
+/** Drug detail slide-in panel showing per-gene effects (P3-06). */
+
+import { cn } from "@/lib/utils"
+import { usePharmaDrugLookup } from "@/api/pharmacogenomics"
+import type { GeneEffect, CallConfidence } from "@/types/pharmacogenomics"
+import {
+  X,
+  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Loader2,
+} from "lucide-react"
+
+interface DrugDetailPanelProps {
+  drugName: string
+  sampleId: number
+  onClose: () => void
+}
+
+const CONFIDENCE_ICON: Record<CallConfidence, typeof CheckCircle2> = {
+  Complete: CheckCircle2,
+  Partial: AlertTriangle,
+  Insufficient: XCircle,
+}
+
+const CONFIDENCE_COLOR: Record<CallConfidence, string> = {
+  Complete: "text-emerald-600 dark:text-emerald-400",
+  Partial: "text-amber-600 dark:text-amber-400",
+  Insufficient: "text-red-600 dark:text-red-400",
+}
+
+function GeneEffectCard({ effect }: { effect: GeneEffect }) {
+  const confidence = effect.call_confidence
+  const Icon = confidence ? CONFIDENCE_ICON[confidence] : null
+  const color = confidence ? CONFIDENCE_COLOR[confidence] : ""
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h4 className="font-semibold text-sm">{effect.gene}</h4>
+        {confidence && Icon && (
+          <span className={cn("flex items-center gap-1 text-xs font-medium", color)}>
+            <Icon className="h-3.5 w-3.5" />
+            {confidence}
+          </span>
+        )}
+      </div>
+
+      {effect.diplotype && (
+        <p className="text-sm font-mono mb-1">{effect.diplotype}</p>
+      )}
+
+      {effect.metabolizer_status && (
+        <p className="text-sm text-muted-foreground mb-2">{effect.metabolizer_status}</p>
+      )}
+
+      {effect.recommendation && (
+        <div className="rounded-md bg-muted/50 p-3 mb-2">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Recommendation</p>
+          <p className="text-sm">{effect.recommendation}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        {effect.classification && (
+          <span>CPIC Level {effect.classification}</span>
+        )}
+        {effect.activity_score != null && (
+          <span>Activity: {effect.activity_score}</span>
+        )}
+      </div>
+
+      {effect.confidence_note && (
+        <p className="text-xs text-muted-foreground italic mt-2">{effect.confidence_note}</p>
+      )}
+
+      {effect.guideline_url && (
+        <a
+          href={effect.guideline_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
+        >
+          CPIC Guideline <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+    </div>
+  )
+}
+
+export default function DrugDetailPanel({
+  drugName,
+  sampleId,
+  onClose,
+}: DrugDetailPanelProps) {
+  const { data, isLoading, isError, error } = usePharmaDrugLookup(drugName, sampleId)
+
+  return (
+    <div
+      className={cn(
+        "fixed inset-y-0 right-0 z-40 w-full max-w-md",
+        "border-l bg-background shadow-xl",
+        "animate-in slide-in-from-right",
+        "flex flex-col",
+      )}
+      role="dialog"
+      aria-label={`${drugName} drug detail`}
+      aria-modal="true"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h2 className="text-lg font-semibold">{data?.drug ?? drugName}</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1.5 hover:bg-muted transition-colors"
+          aria-label="Close drug detail"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {isError && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+            <p className="text-sm text-destructive">
+              Failed to load drug details: {(error as Error).message}
+            </p>
+          </div>
+        )}
+
+        {data && data.gene_effects.length === 0 && (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            No gene interactions found for this drug.
+          </p>
+        )}
+
+        {data?.gene_effects.map((effect) => (
+          <GeneEffectCard key={effect.gene} effect={effect} />
+        ))}
+      </div>
+    </div>
+  )
+}
