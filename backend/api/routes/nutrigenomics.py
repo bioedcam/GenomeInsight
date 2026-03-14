@@ -123,14 +123,14 @@ def _fetch_nutrigenomics_findings(
             try:
                 detail = json.loads(row.detail_json)
             except (json.JSONDecodeError, TypeError):
-                pass
+                logger.warning("Failed to parse detail_json for finding id=%s", row.id)
 
         pmids: list[str] = []
         if row.pmid_citations:
             try:
                 pmids = json.loads(row.pmid_citations)
             except (json.JSONDecodeError, TypeError):
-                pass
+                logger.warning("Failed to parse pmid_citations for finding id=%s", row.id)
 
         result.append(
             {
@@ -176,8 +176,8 @@ def list_pathways(
             PathwaySummary(
                 pathway_id=detail.get("pathway_id", ""),
                 pathway_name=ps["pathway"] or "",
-                level=ps["pathway_level"] or "Standard",
-                evidence_level=ps["evidence_level"] or 1,
+                level=ps["pathway_level"] if ps["pathway_level"] is not None else "Standard",
+                evidence_level=ps["evidence_level"] if ps["evidence_level"] is not None else 1,
                 called_snps=detail.get("called_snps", 0),
                 total_snps=detail.get("total_snps", 0),
                 missing_snps=detail.get("missing_snps", []),
@@ -259,8 +259,16 @@ def pathway_detail(
     return PathwayDetailResponse(
         pathway_id=pathway_id,
         pathway_name=pathway_name,
-        level=pathway_summary["pathway_level"] or "Standard",
-        evidence_level=pathway_summary["evidence_level"] or 1,
+        level=(
+            pathway_summary["pathway_level"]
+            if pathway_summary["pathway_level"] is not None
+            else "Standard"
+        ),
+        evidence_level=(
+            pathway_summary["evidence_level"]
+            if pathway_summary["evidence_level"] is not None
+            else 1
+        ),
         called_snps=detail.get("called_snps", 0),
         total_snps=detail.get("total_snps", 0),
         missing_snps=detail.get("missing_snps", []),
