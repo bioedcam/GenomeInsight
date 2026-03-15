@@ -559,6 +559,7 @@ def store_prs_findings(
         )
 
         detail = {
+            "trait": r.trait,
             "source_ancestry": r.source_ancestry,
             "source_study": r.source_study,
             "source_pmid": r.source_pmid,

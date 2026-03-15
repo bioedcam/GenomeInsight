@@ -1,11 +1,13 @@
-"""Cancer predisposition findings API (P3-13).
+"""Cancer predisposition findings API (P3-13, P3-15).
 
 ClinVar P/LP extraction results from the 28-gene cancer panel — monogenic
 pathogenic variants with accession, review stars, syndrome, and inheritance.
+Cancer PRS (breast, prostate, colorectal, melanoma) with bootstrap CI gauges.
 
 GET  /api/analysis/cancer/variants?sample_id=N               — All cancer P/LP findings
 GET  /api/analysis/cancer/gene/{gene_symbol}?sample_id=N     — Findings for a single gene
-POST /api/analysis/cancer/run?sample_id=N                    — Run/re-run extraction
+GET  /api/analysis/cancer/prs?sample_id=N                    — Cancer PRS results
+POST /api/analysis/cancer/run?sample_id=N                    — Run/re-run extraction + PRS
 """
 
 from __future__ import annotations
@@ -55,12 +57,47 @@ class CancerVariantsListResponse(BaseModel):
     total: int
 
 
+class CancerPRSResponse(BaseModel):
+    """A single cancer PRS result."""
+
+    trait: str
+    name: str
+    percentile: float | None = None
+    z_score: float | None = None
+    bootstrap_ci_lower: float | None = None
+    bootstrap_ci_upper: float | None = None
+    bootstrap_iterations: int = 0
+    snps_used: int = 0
+    snps_total: int = 0
+    coverage_fraction: float = 0.0
+    is_sufficient: bool = False
+    source_ancestry: str = "EUR"
+    source_study: str = ""
+    source_pmid: str = ""
+    sample_size: int = 0
+    ancestry_mismatch: bool = False
+    ancestry_warning_text: str | None = None
+    evidence_level: int = 1
+    research_use_only: bool = True
+
+
+class CancerPRSListResponse(BaseModel):
+    """All cancer PRS results for a sample."""
+
+    items: list[CancerPRSResponse]
+    total: int
+    sufficient_count: int
+    insufficient_traits: list[str]
+
+
 class CancerRunResponse(BaseModel):
-    """Result of running cancer predisposition extraction."""
+    """Result of running cancer predisposition extraction + PRS."""
 
     findings_count: int
     panel_genes_checked: int
     variants_in_panel_genes: int
+    prs_findings_count: int = 0
+    prs_traits_computed: int = 0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -182,14 +219,83 @@ def cancer_gene_detail(
     return CancerVariantsListResponse(items=items, total=len(items))
 
 
+@router.get("/prs")
+def list_cancer_prs(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> CancerPRSListResponse:
+    """List cancer PRS results for a sample.
+
+    Returns PRS findings (breast, prostate, colorectal, melanoma) with
+    percentile, z-score, bootstrap CI, and ancestry mismatch status.
+    Results are in the "Research Use Only" tier.
+
+    Example: ``GET /api/analysis/cancer/prs?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(findings)
+            .where(
+                findings.c.module == "cancer",
+                findings.c.category == "prs",
+            )
+            .order_by(findings.c.id)
+        ).fetchall()
+
+    items: list[CancerPRSResponse] = []
+    for row in rows:
+        detail: dict[str, Any] = {}
+        if row.detail_json:
+            try:
+                detail = json.loads(row.detail_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Failed to parse detail_json for PRS finding id=%s", row.id)
+
+        items.append(
+            CancerPRSResponse(
+                trait=detail.get("trait", ""),
+                name=row.finding_text.split(":")[0] if row.finding_text else "",
+                percentile=row.prs_percentile,
+                z_score=detail.get("z_score"),
+                bootstrap_ci_lower=detail.get("bootstrap_ci_lower"),
+                bootstrap_ci_upper=detail.get("bootstrap_ci_upper"),
+                bootstrap_iterations=detail.get("bootstrap_iterations", 0),
+                snps_used=detail.get("snps_used", 0),
+                snps_total=detail.get("snps_total", 0),
+                coverage_fraction=detail.get("coverage_fraction", 0.0),
+                is_sufficient=detail.get("coverage_fraction", 0.0) >= 0.5,
+                source_ancestry=detail.get("source_ancestry", "EUR"),
+                source_study=detail.get("source_study", ""),
+                source_pmid=detail.get("source_pmid", ""),
+                sample_size=detail.get("sample_size", 0),
+                ancestry_mismatch=detail.get("ancestry_mismatch", False),
+                ancestry_warning_text=detail.get("ancestry_warning_text"),
+                evidence_level=row.evidence_level or 1,
+                research_use_only=True,
+            )
+        )
+
+    sufficient = [i for i in items if i.is_sufficient]
+    insufficient = [i.trait for i in items if not i.is_sufficient]
+
+    return CancerPRSListResponse(
+        items=items,
+        total=len(items),
+        sufficient_count=len(sufficient),
+        insufficient_traits=insufficient,
+    )
+
+
 @router.post("/run")
 def run_cancer_analysis(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> CancerRunResponse:
-    """Run or re-run cancer predisposition extraction for a sample.
+    """Run or re-run cancer predisposition extraction + PRS for a sample.
 
     Loads the curated panel, extracts ClinVar P/LP variants from
-    annotated_variants, and stores findings.
+    annotated_variants, runs cancer PRS (breast, prostate, colorectal,
+    melanoma), and stores all findings.
 
     Example: ``POST /api/analysis/cancer/run?sample_id=1``
     """
@@ -198,15 +304,28 @@ def run_cancer_analysis(
         load_cancer_panel,
         store_cancer_findings,
     )
+    from backend.analysis.cancer_prs import (
+        load_cancer_prs_weights,
+        run_cancer_prs,
+        store_cancer_prs_findings,
+    )
 
     sample_engine = _get_sample_engine(sample_id)
 
+    # Monogenic extraction (P3-13)
     panel = load_cancer_panel()
     result = extract_cancer_variants(panel, sample_engine)
     count = store_cancer_findings(result, sample_engine)
+
+    # PRS computation (P3-15)
+    weight_sets = load_cancer_prs_weights()
+    prs_result = run_cancer_prs(weight_sets, sample_engine)
+    prs_count = store_cancer_prs_findings(prs_result, sample_engine)
 
     return CancerRunResponse(
         findings_count=count,
         panel_genes_checked=result.panel_genes_checked,
         variants_in_panel_genes=result.variants_in_panel_genes,
+        prs_findings_count=prs_count,
+        prs_traits_computed=len(prs_result.results),
     )
