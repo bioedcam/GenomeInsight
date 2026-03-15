@@ -758,6 +758,25 @@ class TestStoreCardiovascularFindings:
         count = store_cardiovascular_findings(result, empty_sample)
         assert count == 0
 
+    def test_clears_previous_findings_when_result_becomes_empty(
+        self, panel: CardiovascularPanel, sample_with_cv_variants: sa.Engine
+    ) -> None:
+        """Previous findings should be cleared if new analysis finds no variants."""
+        result = extract_cardiovascular_variants(panel, sample_with_cv_variants)
+        store_cardiovascular_findings(result, sample_with_cv_variants)
+
+        # Second run with empty result (simulating variant reclassification)
+        empty_result = CardiovascularAnalysisResult()
+        store_cardiovascular_findings(empty_result, sample_with_cv_variants)
+
+        with sample_with_cv_variants.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(findings.c.module == "cardiovascular")
+            ).scalar()
+        assert count == 0
+
     def test_evidence_levels_stored_correctly(
         self, panel: CardiovascularPanel, sample_with_cv_variants: sa.Engine
     ) -> None:

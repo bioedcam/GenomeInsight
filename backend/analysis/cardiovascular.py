@@ -430,14 +430,13 @@ def store_cardiovascular_findings(
             }
         )
 
-    if not rows:
-        logger.info("no_cardiovascular_findings_to_store")
-        return 0
-
     with sample_engine.begin() as conn:
         # Clear previous cardiovascular findings
         conn.execute(sa.delete(findings).where(findings.c.module == "cardiovascular"))
-        conn.execute(sa.insert(findings), rows)
+        if rows:
+            conn.execute(sa.insert(findings), rows)
+        else:
+            logger.info("no_cardiovascular_findings_to_store")
 
     logger.info("cardiovascular_findings_stored", count=len(rows))
     return len(rows)
