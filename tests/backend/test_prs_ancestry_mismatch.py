@@ -103,11 +103,8 @@ def sample_no_ancestry(sample_engine: sa.Engine) -> sa.Engine:
     return sample_engine
 
 
-@pytest.fixture()
-def sample_with_prs_snps_and_ancestry_eur(
-    sample_with_ancestry_eur: sa.Engine,
-) -> sa.Engine:
-    """Sample with both ancestry=EUR and PRS SNPs for all 4 cancer traits."""
+def _build_prs_variants() -> list[dict]:
+    """Generate variant rows for all cancer PRS SNPs with rotating alleles."""
     weight_sets = load_cancer_prs_weights(WEIGHTS_PATH)
     all_rsids: set[str] = set()
     for ws in weight_sets:
@@ -127,9 +124,16 @@ def sample_with_prs_snps_and_ancestry_eur(
                 "annotation_coverage": 0,
             }
         )
+    return variants
 
+
+@pytest.fixture()
+def sample_with_prs_snps_and_ancestry_eur(
+    sample_with_ancestry_eur: sa.Engine,
+) -> sa.Engine:
+    """Sample with both ancestry=EUR and PRS SNPs for all 4 cancer traits."""
     with sample_with_ancestry_eur.begin() as conn:
-        conn.execute(sa.insert(annotated_variants), variants)
+        conn.execute(sa.insert(annotated_variants), _build_prs_variants())
     return sample_with_ancestry_eur
 
 
@@ -138,56 +142,16 @@ def sample_with_prs_snps_and_ancestry_afr(
     sample_with_ancestry_afr: sa.Engine,
 ) -> sa.Engine:
     """Sample with ancestry=AFR and PRS SNPs for all 4 cancer traits."""
-    weight_sets = load_cancer_prs_weights(WEIGHTS_PATH)
-    all_rsids: set[str] = set()
-    for ws in weight_sets:
-        all_rsids.update(ws.rsid_set())
-
-    variants = []
-    for i, rsid in enumerate(sorted(all_rsids)):
-        alleles = ["A", "C", "G", "T"]
-        a1 = alleles[i % 4]
-        a2 = alleles[(i + 1) % 4]
-        variants.append(
-            {
-                "rsid": rsid,
-                "chrom": str((i % 22) + 1),
-                "pos": 100000 + i * 1000,
-                "genotype": f"{a1}{a2}",
-                "annotation_coverage": 0,
-            }
-        )
-
     with sample_with_ancestry_afr.begin() as conn:
-        conn.execute(sa.insert(annotated_variants), variants)
+        conn.execute(sa.insert(annotated_variants), _build_prs_variants())
     return sample_with_ancestry_afr
 
 
 @pytest.fixture()
 def sample_with_prs_snps_no_ancestry(sample_no_ancestry: sa.Engine) -> sa.Engine:
     """Sample with PRS SNPs but no ancestry inference run."""
-    weight_sets = load_cancer_prs_weights(WEIGHTS_PATH)
-    all_rsids: set[str] = set()
-    for ws in weight_sets:
-        all_rsids.update(ws.rsid_set())
-
-    variants = []
-    for i, rsid in enumerate(sorted(all_rsids)):
-        alleles = ["A", "C", "G", "T"]
-        a1 = alleles[i % 4]
-        a2 = alleles[(i + 1) % 4]
-        variants.append(
-            {
-                "rsid": rsid,
-                "chrom": str((i % 22) + 1),
-                "pos": 100000 + i * 1000,
-                "genotype": f"{a1}{a2}",
-                "annotation_coverage": 0,
-            }
-        )
-
     with sample_no_ancestry.begin() as conn:
-        conn.execute(sa.insert(annotated_variants), variants)
+        conn.execute(sa.insert(annotated_variants), _build_prs_variants())
     return sample_no_ancestry
 
 

@@ -468,7 +468,8 @@ def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
     inferred = detail.get("top_population") or detail.get("inferred_ancestry")
     if inferred:
         logger.info("inferred_ancestry_found", ancestry=inferred)
-    return inferred
+        return inferred
+    return None
 
 
 # ── Ancestry mismatch warning ───────────────────────────────────────────
