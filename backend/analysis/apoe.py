@@ -1,6 +1,7 @@
-"""APOE genotype determination (rs429358 + rs7412 → diplotype).
+"""APOE genotype determination and findings generation.
 
 Implements P3-22a: Determine the APOE diplotype from two defining SNPs.
+Implements P3-22b: Generate three APOE findings (CV risk, Alzheimer's, lipid/dietary).
 
 APOE alleles are defined by combinations at two positions on chromosome 19:
   - rs429358 (codon 112): T→C corresponds to Cys→Arg
@@ -26,8 +27,9 @@ Usage::
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 import sqlalchemy as sa
 import structlog
@@ -358,3 +360,424 @@ def store_apoe_finding(
         e4_count=result.e4_count,
     )
     return 1
+
+
+# ── APOE three findings generation (P3-22b) ─────────────────────────────
+#
+# Three findings per diplotype:
+#   1. Cardiovascular risk   (★★★★) — Type III HLP, LDL metabolism, statin response
+#   2. Alzheimer's risk      (★★★★) — Relative risk by diplotype, prominently caveated
+#   3. Lipid/dietary context (★★★☆) — Saturated fat response differential
+
+APOE_FINDING_CV = "cardiovascular_risk"
+APOE_FINDING_ALZHEIMERS = "alzheimers_risk"
+APOE_FINDING_LIPID = "lipid_dietary"
+
+# All three APOE finding categories
+APOE_FINDING_CATEGORIES = (APOE_FINDING_CV, APOE_FINDING_ALZHEIMERS, APOE_FINDING_LIPID)
+
+
+@dataclass
+class APOEFinding:
+    """A single APOE-derived finding."""
+
+    category: str
+    evidence_level: int
+    finding_text: str
+    conditions: str
+    phenotype: str
+    pmid_citations: list[str]
+    detail_json: dict[str, Any] = field(default_factory=dict)
+
+
+# ── Per-diplotype cardiovascular risk content ────────────────────────────
+
+_CV_RISK: dict[str, dict[str, Any]] = {
+    "ε2/ε2": {
+        "finding_text": (
+            "APOE ε2/ε2 is associated with Type III hyperlipoproteinemia "
+            "(familial dysbetalipoproteinemia), characterised by elevated "
+            "remnant lipoproteins. LDL cholesterol may appear paradoxically "
+            "low due to impaired hepatic uptake of VLDL remnants. "
+            "Statin response is generally preserved."
+        ),
+        "risk_level": "elevated",
+        "conditions": "Type III hyperlipoproteinemia; LDL metabolism; statin response",
+        "phenotype": "Type III hyperlipoproteinemia risk (elevated)",
+    },
+    "ε2/ε3": {
+        "finding_text": (
+            "APOE ε2/ε3 is associated with modestly lower LDL cholesterol "
+            "relative to the ε3/ε3 reference. The ε2 allele reduces hepatic "
+            "LDL receptor binding efficiency but rarely causes clinical "
+            "dyslipidaemia in heterozygous form. Statin response is typical."
+        ),
+        "risk_level": "slightly_reduced",
+        "conditions": "LDL metabolism; statin response",
+        "phenotype": "Cardiovascular risk (slightly reduced vs reference)",
+    },
+    "ε2/ε4": {
+        "finding_text": (
+            "APOE ε2/ε4 carries one copy each of the ε2 and ε4 alleles, "
+            "which have opposing effects on LDL metabolism. Net cardiovascular "
+            "risk is approximately similar to ε3/ε3. LDL cholesterol levels "
+            "are variable. Statin response is typical."
+        ),
+        "risk_level": "average",
+        "conditions": "LDL metabolism; statin response",
+        "phenotype": "Cardiovascular risk (approximately average)",
+    },
+    "ε3/ε3": {
+        "finding_text": (
+            "APOE ε3/ε3 is the most common genotype (population frequency "
+            "~60%). This is the reference genotype for APOE-related "
+            "cardiovascular risk. LDL metabolism and statin response "
+            "are typical for the general population."
+        ),
+        "risk_level": "reference",
+        "conditions": "LDL metabolism; statin response",
+        "phenotype": "Cardiovascular risk (population reference)",
+    },
+    "ε3/ε4": {
+        "finding_text": (
+            "APOE ε3/ε4 is associated with modestly higher LDL cholesterol "
+            "relative to the ε3/ε3 reference. The ε4 allele increases "
+            "hepatic LDL receptor binding, leading to higher circulating LDL. "
+            "Statin response is generally good, with some evidence of "
+            "enhanced LDL reduction."
+        ),
+        "risk_level": "modestly_elevated",
+        "conditions": "LDL metabolism; statin response",
+        "phenotype": "Cardiovascular risk (modestly elevated)",
+    },
+    "ε4/ε4": {
+        "finding_text": (
+            "APOE ε4/ε4 is associated with higher LDL cholesterol and "
+            "elevated cardiovascular risk relative to the ε3/ε3 reference. "
+            "LDL levels are typically 10–30% higher than non-carriers. "
+            "Statin response is generally good, with some evidence of "
+            "enhanced LDL reduction."
+        ),
+        "risk_level": "elevated",
+        "conditions": "LDL metabolism; statin response",
+        "phenotype": "Cardiovascular risk (elevated)",
+    },
+}
+
+# ── Per-diplotype Alzheimer's risk content ───────────────────────────────
+#
+# Relative risk estimates from Genin et al. 2011 (PMID: 21460841) and
+# Farrer et al. 1997 (PMID: 9343467). These are approximate population-
+# level odds ratios vs ε3/ε3 reference.
+
+_ALZHEIMERS_RISK: dict[str, dict[str, Any]] = {
+    "ε2/ε2": {
+        "finding_text": (
+            "APOE ε2/ε2 is associated with substantially reduced risk of "
+            "late-onset Alzheimer's disease relative to ε3/ε3 "
+            "(approximate OR 0.6). This genotype is rare (~1% of the population). "
+            "This is a probabilistic association, not a diagnosis. Most "
+            "Alzheimer's cases occur in people without ε4 alleles, and many "
+            "protective-genotype carriers still develop the disease."
+        ),
+        "relative_risk": "substantially_reduced",
+        "approximate_or": 0.6,
+        "phenotype": "Alzheimer's disease risk (substantially reduced vs reference)",
+    },
+    "ε2/ε3": {
+        "finding_text": (
+            "APOE ε2/ε3 is associated with reduced risk of late-onset "
+            "Alzheimer's disease relative to ε3/ε3 (approximate OR 0.6). "
+            "The ε2 allele appears to be protective. This is a probabilistic "
+            "association, not a diagnosis. Environmental factors, other "
+            "genetic variants, and lifestyle contribute substantially."
+        ),
+        "relative_risk": "reduced",
+        "approximate_or": 0.6,
+        "phenotype": "Alzheimer's disease risk (reduced vs reference)",
+    },
+    "ε2/ε4": {
+        "finding_text": (
+            "APOE ε2/ε4 carries one protective (ε2) and one risk-elevating "
+            "(ε4) allele. The net effect on Alzheimer's risk is "
+            "approximately 2.6× that of ε3/ε3 — the ε4 allele dominates "
+            "the risk profile. This is a probabilistic association, not a "
+            "diagnosis. Many ε4 carriers never develop Alzheimer's disease."
+        ),
+        "relative_risk": "elevated",
+        "approximate_or": 2.6,
+        "phenotype": "Alzheimer's disease risk (elevated vs reference)",
+    },
+    "ε3/ε3": {
+        "finding_text": (
+            "APOE ε3/ε3 is the most common genotype and serves as the "
+            "population reference for Alzheimer's risk assessment. "
+            "Lifetime risk of Alzheimer's disease for ε3/ε3 carriers is "
+            "approximately 10–15% by age 85. Other genetic and "
+            "environmental factors contribute substantially to individual risk."
+        ),
+        "relative_risk": "reference",
+        "approximate_or": 1.0,
+        "phenotype": "Alzheimer's disease risk (population reference)",
+    },
+    "ε3/ε4": {
+        "finding_text": (
+            "APOE ε3/ε4 is associated with approximately 3.2× the risk of "
+            "late-onset Alzheimer's disease relative to ε3/ε3. "
+            "Approximately 25% of the general population carries one ε4 "
+            "allele. This is a probabilistic risk factor — most ε3/ε4 "
+            "carriers do not develop Alzheimer's disease. No approved "
+            "prevention currently exists, and clinical utility of this "
+            "information is limited."
+        ),
+        "relative_risk": "elevated",
+        "approximate_or": 3.2,
+        "phenotype": "Alzheimer's disease risk (elevated vs reference)",
+    },
+    "ε4/ε4": {
+        "finding_text": (
+            "APOE ε4/ε4 is associated with approximately 8–12× the risk of "
+            "late-onset Alzheimer's disease relative to ε3/ε3. "
+            "Approximately 2–3% of the general population is ε4 homozygous. "
+            "Despite this elevated relative risk, the absolute lifetime risk "
+            "is still probabilistic — not all ε4/ε4 carriers develop "
+            "Alzheimer's disease. This is not a diagnosis. No approved "
+            "prevention currently exists. Genetic counselling is recommended "
+            "for individuals who wish to discuss the implications of this result."
+        ),
+        "relative_risk": "substantially_elevated",
+        "approximate_or": 11.6,
+        "phenotype": "Alzheimer's disease risk (substantially elevated vs reference)",
+    },
+}
+
+# ── Per-diplotype lipid/dietary context content ──────────────────────────
+
+_LIPID_DIETARY: dict[str, dict[str, Any]] = {
+    "ε2/ε2": {
+        "finding_text": (
+            "APOE ε2/ε2 carriers may show an atypical lipid response to "
+            "dietary saturated fat. The impaired remnant clearance associated "
+            "with ε2 homozygosity means standard dietary cholesterol "
+            "guidelines may not apply. A lipid panel is recommended to "
+            "assess individual response."
+        ),
+        "dietary_response": "atypical",
+        "phenotype": "Dietary fat response (atypical — remnant clearance impaired)",
+    },
+    "ε2/ε3": {
+        "finding_text": (
+            "APOE ε2/ε3 carriers tend to show a slightly reduced LDL "
+            "response to dietary saturated fat compared to ε3/ε3 carriers. "
+            "Standard dietary recommendations generally apply. Lipid panel "
+            "monitoring is recommended for personalised guidance."
+        ),
+        "dietary_response": "slightly_reduced",
+        "phenotype": "Dietary fat response (slightly reduced LDL sensitivity)",
+    },
+    "ε2/ε4": {
+        "finding_text": (
+            "APOE ε2/ε4 carriers have opposing allele effects on dietary "
+            "fat response. Net LDL response to saturated fat intake is "
+            "variable and difficult to predict from genotype alone. "
+            "Lipid panel monitoring is recommended for personalised guidance."
+        ),
+        "dietary_response": "variable",
+        "phenotype": "Dietary fat response (variable — opposing allele effects)",
+    },
+    "ε3/ε3": {
+        "finding_text": (
+            "APOE ε3/ε3 carriers have a typical LDL response to dietary "
+            "saturated fat intake. This is the reference genotype — standard "
+            "dietary recommendations for saturated fat reduction are expected "
+            "to produce the typical population-level LDL response."
+        ),
+        "dietary_response": "typical",
+        "phenotype": "Dietary fat response (typical — population reference)",
+    },
+    "ε3/ε4": {
+        "finding_text": (
+            "APOE ε3/ε4 carriers tend to show a greater LDL increase in "
+            "response to dietary saturated fat compared to ε3/ε3 carriers. "
+            "Dietary saturated fat reduction may produce a larger-than-average "
+            "LDL lowering effect. Lipid panel monitoring is recommended."
+        ),
+        "dietary_response": "enhanced",
+        "phenotype": "Dietary fat response (enhanced LDL sensitivity)",
+    },
+    "ε4/ε4": {
+        "finding_text": (
+            "APOE ε4/ε4 carriers tend to show the greatest LDL increase in "
+            "response to dietary saturated fat among all APOE genotypes. "
+            "Dietary saturated fat reduction may produce a larger-than-average "
+            "LDL lowering effect. Lipid panel monitoring is recommended."
+        ),
+        "dietary_response": "markedly_enhanced",
+        "phenotype": "Dietary fat response (markedly enhanced LDL sensitivity)",
+    },
+}
+
+# PubMed citations shared across findings
+_CV_PMIDS = ["21460841", "9343467", "17309940", "28577312"]
+_ALZHEIMERS_PMIDS = ["21460841", "9343467", "24162737", "23571587"]
+_LIPID_DIETARY_PMIDS = ["9343467", "17309940", "26109578", "24820091"]
+
+
+def generate_apoe_findings(result: APOEResult) -> list[APOEFinding]:
+    """Generate the three APOE findings from a determined genotype.
+
+    Produces findings for:
+      1. Cardiovascular risk   (★★★★)
+      2. Alzheimer's risk      (★★★★)
+      3. Lipid/dietary context (★★★☆)
+
+    Args:
+        result: A determined APOEResult (is_determined must be True).
+
+    Returns:
+        List of three APOEFinding objects, or empty list if not determined.
+    """
+    if not result.is_determined:
+        return []
+
+    diplotype = result.diplotype
+    generated: list[APOEFinding] = []
+
+    if diplotype not in _CV_RISK:
+        raise ValueError(f"Unknown APOE diplotype: {diplotype}")
+
+    # 1. Cardiovascular risk (★★★★)
+    cv_data = _CV_RISK[diplotype]
+    generated.append(
+        APOEFinding(
+            category=APOE_FINDING_CV,
+            evidence_level=4,
+            finding_text=cv_data["finding_text"],
+            conditions=cv_data["conditions"],
+            phenotype=cv_data["phenotype"],
+            pmid_citations=_CV_PMIDS,
+            detail_json={
+                "diplotype": diplotype,
+                "risk_level": cv_data["risk_level"],
+                "scope": "Type III hyperlipoproteinemia, LDL metabolism, statin response",
+            },
+        )
+    )
+
+    # 2. Alzheimer's risk (★★★★)
+    alz_data = _ALZHEIMERS_RISK[diplotype]
+    generated.append(
+        APOEFinding(
+            category=APOE_FINDING_ALZHEIMERS,
+            evidence_level=4,
+            finding_text=alz_data["finding_text"],
+            conditions="Alzheimer's disease",
+            phenotype=alz_data["phenotype"],
+            pmid_citations=_ALZHEIMERS_PMIDS,
+            detail_json={
+                "diplotype": diplotype,
+                "relative_risk": alz_data["relative_risk"],
+                "approximate_or": alz_data["approximate_or"],
+                "non_actionable": True,
+                "caveats": (
+                    "This is a probabilistic risk factor, not a diagnosis. "
+                    "Clinical utility is limited. No approved prevention exists."
+                ),
+            },
+        )
+    )
+
+    # 3. Lipid/dietary context (★★★☆)
+    lipid_data = _LIPID_DIETARY[diplotype]
+    generated.append(
+        APOEFinding(
+            category=APOE_FINDING_LIPID,
+            evidence_level=3,
+            finding_text=lipid_data["finding_text"],
+            conditions="Saturated fat response differential",
+            phenotype=lipid_data["phenotype"],
+            pmid_citations=_LIPID_DIETARY_PMIDS,
+            detail_json={
+                "diplotype": diplotype,
+                "dietary_response": lipid_data["dietary_response"],
+                "scope": "Saturated fat response differential",
+            },
+        )
+    )
+
+    return generated
+
+
+def store_apoe_three_findings(
+    result: APOEResult,
+    sample_engine: sa.Engine,
+) -> int:
+    """Generate and store the three APOE findings in the sample database.
+
+    Creates three findings with module='apoe' and categories:
+      - cardiovascular_risk
+      - alzheimers_risk
+      - lipid_dietary
+
+    Always clears previous APOE analysis findings before inserting,
+    ensuring idempotent re-runs. Does NOT touch the genotype finding.
+
+    Args:
+        result: APOEResult from determine_apoe_genotype.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of findings inserted (0 or 3).
+    """
+    if not result.is_determined:
+        logger.info(
+            "apoe_three_findings_skipped",
+            status=result.status.value,
+            reason="APOE genotype not determined",
+        )
+        # Clear previous findings even when not determined
+        with sample_engine.begin() as conn:
+            conn.execute(
+                sa.delete(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            )
+        return 0
+
+    apoe_findings = generate_apoe_findings(result)
+
+    rows = [
+        {
+            "module": "apoe",
+            "category": f.category,
+            "evidence_level": f.evidence_level,
+            "gene_symbol": "APOE",
+            "rsid": None,
+            "finding_text": f.finding_text,
+            "phenotype": f.phenotype,
+            "conditions": f.conditions,
+            "diplotype": result.diplotype,
+            "pmid_citations": json.dumps(f.pmid_citations),
+            "detail_json": json.dumps(f.detail_json),
+        }
+        for f in apoe_findings
+    ]
+
+    with sample_engine.begin() as conn:
+        # Atomic: clear previous + insert new in single transaction
+        conn.execute(
+            sa.delete(findings).where(
+                findings.c.module == "apoe",
+                findings.c.category.in_(APOE_FINDING_CATEGORIES),
+            )
+        )
+        conn.execute(sa.insert(findings), rows)
+
+    logger.info(
+        "apoe_three_findings_stored",
+        diplotype=result.diplotype,
+        count=len(rows),
+        categories=[f.category for f in apoe_findings],
+    )
+    return len(rows)

@@ -1,6 +1,7 @@
-"""Tests for APOE genotype determination (P3-22a).
+"""Tests for APOE genotype determination (P3-22a) and findings generation (P3-22b).
 
 Covers:
+  P3-22a:
   - All 6 standard APOE diplotypes (ε2/ε2 through ε4/ε4)
   - rs429358 TT + rs7412 CC → ε3/ε3 (T3-17 golden fixture)
   - Missing SNPs (one or both)
@@ -10,6 +11,16 @@ Covers:
   - Finding storage (module='apoe', category='genotype')
   - Idempotent re-runs (clear previous findings)
   - Finding skipped when genotype not determined
+
+  P3-22b:
+  - Three findings generation (CV risk, Alzheimer's, lipid/dietary)
+  - T3-18: ε4/ε4 Alzheimer's risk finding with caveats and non-actionable framing
+  - Evidence levels (★★★★ for CV and Alzheimer's, ★★★☆ for lipid/dietary)
+  - All 6 diplotypes produce valid findings
+  - Finding text content validation per diplotype
+  - Three findings storage (idempotent, independent of genotype finding)
+  - PubMed citations present
+  - Detail JSON structure
 """
 
 from __future__ import annotations
@@ -20,6 +31,10 @@ import pytest
 import sqlalchemy as sa
 
 from backend.analysis.apoe import (
+    APOE_FINDING_ALZHEIMERS,
+    APOE_FINDING_CATEGORIES,
+    APOE_FINDING_CV,
+    APOE_FINDING_LIPID,
     APOE_RS7412,
     APOE_RS429358,
     APOEAllele,
@@ -27,7 +42,9 @@ from backend.analysis.apoe import (
     APOEStatus,
     _normalise_genotype,
     determine_apoe_genotype,
+    generate_apoe_findings,
     store_apoe_finding,
+    store_apoe_three_findings,
 )
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import findings, raw_variants
@@ -527,3 +544,494 @@ class TestAPOEAlleleEnum:
     def test_sorting(self) -> None:
         alleles = sorted([APOEAllele.E4, APOEAllele.E2, APOEAllele.E3], key=lambda a: a.value)
         assert alleles == [APOEAllele.E2, APOEAllele.E3, APOEAllele.E4]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# P3-22b: APOE Three Findings Generation
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestAPOEFindingsGeneration:
+    """Test APOE three findings generation for all diplotypes."""
+
+    ALL_DIPLOTYPES = ["ε2/ε2", "ε2/ε3", "ε2/ε4", "ε3/ε3", "ε3/ε4", "ε4/ε4"]
+
+    # Genotype combos to produce each diplotype
+    DIPLOTYPE_GENOTYPES: dict[str, tuple[str, str]] = {
+        "ε2/ε2": ("TT", "TT"),
+        "ε2/ε3": ("TT", "CT"),
+        "ε2/ε4": ("CT", "CT"),
+        "ε3/ε3": ("TT", "CC"),
+        "ε3/ε4": ("CT", "CC"),
+        "ε4/ε4": ("CC", "CC"),
+    }
+
+    def _make_result(self, diplotype: str) -> APOEResult:
+        """Create a determined APOEResult for a given diplotype."""
+        allele_map = {"ε2": APOEAllele.E2, "ε3": APOEAllele.E3, "ε4": APOEAllele.E4}
+        a1_str, a2_str = diplotype.split("/")
+        a1, a2 = allele_map[a1_str], allele_map[a2_str]
+        return APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=a1,
+            allele2=a2,
+            diplotype=diplotype,
+            rs429358_genotype="TT",
+            rs7412_genotype="CC",
+        )
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_generates_exactly_three_findings(self, diplotype: str) -> None:
+        """Every determined diplotype produces exactly 3 findings."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        assert len(findings_list) == 3
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_finding_categories(self, diplotype: str) -> None:
+        """Three findings have the correct categories."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        categories = [f.category for f in findings_list]
+        assert categories == [APOE_FINDING_CV, APOE_FINDING_ALZHEIMERS, APOE_FINDING_LIPID]
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_evidence_levels(self, diplotype: str) -> None:
+        """CV and Alzheimer's are ★★★★, lipid/dietary is ★★★☆."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        assert findings_list[0].evidence_level == 4  # CV
+        assert findings_list[1].evidence_level == 4  # Alzheimer's
+        assert findings_list[2].evidence_level == 3  # Lipid/dietary
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_all_findings_have_pmid_citations(self, diplotype: str) -> None:
+        """Every finding has non-empty PubMed citations."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        for f in findings_list:
+            assert len(f.pmid_citations) > 0
+            assert all(pmid.isdigit() for pmid in f.pmid_citations)
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_all_findings_have_nonempty_text(self, diplotype: str) -> None:
+        """Every finding has non-empty finding_text, conditions, and phenotype."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        for f in findings_list:
+            assert len(f.finding_text) > 0
+            assert len(f.conditions) > 0
+            assert len(f.phenotype) > 0
+
+    @pytest.mark.parametrize("diplotype", ALL_DIPLOTYPES, ids=ALL_DIPLOTYPES)
+    def test_detail_json_contains_diplotype(self, diplotype: str) -> None:
+        """Every finding's detail_json contains the diplotype."""
+        result = self._make_result(diplotype)
+        findings_list = generate_apoe_findings(result)
+
+        for f in findings_list:
+            assert f.detail_json["diplotype"] == diplotype
+
+    def test_undetermined_returns_empty(self) -> None:
+        """Undetermined result produces no findings."""
+        result = APOEResult(status=APOEStatus.MISSING_SNPS)
+        findings_list = generate_apoe_findings(result)
+
+        assert findings_list == []
+
+
+class TestAPOEFindingsContentCV:
+    """Test cardiovascular risk finding content specifics."""
+
+    def test_e2_e2_type_iii_hlp(self) -> None:
+        """ε2/ε2 CV finding mentions Type III hyperlipoproteinemia."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E2,
+            allele2=APOEAllele.E2,
+            diplotype="ε2/ε2",
+        )
+        findings_list = generate_apoe_findings(result)
+        cv = findings_list[0]
+
+        assert "Type III hyperlipoproteinemia" in cv.finding_text
+        assert "Type III hyperlipoproteinemia" in cv.conditions
+        assert cv.detail_json["risk_level"] == "elevated"
+
+    def test_e3_e3_reference(self) -> None:
+        """ε3/ε3 CV finding is the population reference."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E3,
+            diplotype="ε3/ε3",
+        )
+        findings_list = generate_apoe_findings(result)
+        cv = findings_list[0]
+
+        assert "reference" in cv.finding_text.lower()
+        assert cv.detail_json["risk_level"] == "reference"
+
+    def test_e4_e4_elevated_ldl(self) -> None:
+        """ε4/ε4 CV finding mentions elevated LDL."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E4,
+            allele2=APOEAllele.E4,
+            diplotype="ε4/ε4",
+        )
+        findings_list = generate_apoe_findings(result)
+        cv = findings_list[0]
+
+        assert "higher LDL" in cv.finding_text
+        assert cv.detail_json["risk_level"] == "elevated"
+
+    def test_cv_conditions_include_statin(self) -> None:
+        """All CV findings mention statin response in conditions."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E4,
+            diplotype="ε3/ε4",
+        )
+        findings_list = generate_apoe_findings(result)
+        cv = findings_list[0]
+
+        assert "statin response" in cv.conditions
+
+
+class TestAPOEFindingsContentAlzheimers:
+    """Test Alzheimer's risk finding content specifics."""
+
+    def test_e4_e4_alzheimers_golden_fixture_t3_18(self) -> None:
+        """T3-18: ε4/ε4 Alzheimer's finding with caveats and non-actionable framing."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E4,
+            allele2=APOEAllele.E4,
+            diplotype="ε4/ε4",
+        )
+        findings_list = generate_apoe_findings(result)
+        alz = findings_list[1]
+
+        assert alz.category == APOE_FINDING_ALZHEIMERS
+        assert alz.evidence_level == 4
+        assert "Alzheimer" in alz.finding_text
+        assert "8–12×" in alz.finding_text
+        assert "not a diagnosis" in alz.finding_text.lower()
+        assert "probabilistic" in alz.finding_text.lower()
+        assert alz.detail_json["non_actionable"] is True
+        assert "not a diagnosis" in alz.detail_json["caveats"].lower()
+        assert alz.detail_json["approximate_or"] == 11.6
+        assert alz.detail_json["relative_risk"] == "substantially_elevated"
+
+    def test_e3_e4_alzheimers_moderate_risk(self) -> None:
+        """ε3/ε4 Alzheimer's finding mentions ~3.2× risk."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E4,
+            diplotype="ε3/ε4",
+        )
+        findings_list = generate_apoe_findings(result)
+        alz = findings_list[1]
+
+        assert "3.2×" in alz.finding_text
+        assert alz.detail_json["approximate_or"] == 3.2
+
+    def test_e3_e3_alzheimers_reference(self) -> None:
+        """ε3/ε3 Alzheimer's finding is the population reference."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E3,
+            diplotype="ε3/ε3",
+        )
+        findings_list = generate_apoe_findings(result)
+        alz = findings_list[1]
+
+        assert "reference" in alz.finding_text.lower()
+        assert alz.detail_json["approximate_or"] == 1.0
+
+    def test_e2_e3_alzheimers_reduced_risk(self) -> None:
+        """ε2/ε3 Alzheimer's finding mentions reduced risk."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E2,
+            allele2=APOEAllele.E3,
+            diplotype="ε2/ε3",
+        )
+        findings_list = generate_apoe_findings(result)
+        alz = findings_list[1]
+
+        assert "reduced" in alz.finding_text.lower()
+        assert alz.detail_json["approximate_or"] < 1.0
+
+    def test_all_alzheimers_conditions_field(self) -> None:
+        """All Alzheimer's findings have 'Alzheimer's disease' as conditions."""
+        for diplotype in ["ε2/ε2", "ε2/ε3", "ε2/ε4", "ε3/ε3", "ε3/ε4", "ε4/ε4"]:
+            allele_map = {"ε2": APOEAllele.E2, "ε3": APOEAllele.E3, "ε4": APOEAllele.E4}
+            a1, a2 = diplotype.split("/")
+            result = APOEResult(
+                status=APOEStatus.DETERMINED,
+                allele1=allele_map[a1],
+                allele2=allele_map[a2],
+                diplotype=diplotype,
+            )
+            findings_list = generate_apoe_findings(result)
+            alz = findings_list[1]
+            assert alz.conditions == "Alzheimer's disease"
+
+
+class TestAPOEFindingsContentLipid:
+    """Test lipid/dietary context finding content specifics."""
+
+    def test_e3_e3_typical_response(self) -> None:
+        """ε3/ε3 has typical dietary fat response."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E3,
+            diplotype="ε3/ε3",
+        )
+        findings_list = generate_apoe_findings(result)
+        lipid = findings_list[2]
+
+        assert "typical" in lipid.finding_text.lower()
+        assert lipid.evidence_level == 3
+        assert lipid.detail_json["dietary_response"] == "typical"
+
+    def test_e4_e4_enhanced_response(self) -> None:
+        """ε4/ε4 has markedly enhanced LDL sensitivity to saturated fat."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E4,
+            allele2=APOEAllele.E4,
+            diplotype="ε4/ε4",
+        )
+        findings_list = generate_apoe_findings(result)
+        lipid = findings_list[2]
+
+        assert "greatest LDL increase" in lipid.finding_text
+        assert lipid.detail_json["dietary_response"] == "markedly_enhanced"
+
+    def test_e2_e2_atypical_response(self) -> None:
+        """ε2/ε2 has atypical dietary fat response."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E2,
+            allele2=APOEAllele.E2,
+            diplotype="ε2/ε2",
+        )
+        findings_list = generate_apoe_findings(result)
+        lipid = findings_list[2]
+
+        assert "atypical" in lipid.finding_text.lower()
+        assert lipid.detail_json["dietary_response"] == "atypical"
+
+    def test_lipid_conditions_saturated_fat(self) -> None:
+        """All lipid findings reference saturated fat."""
+        result = APOEResult(
+            status=APOEStatus.DETERMINED,
+            allele1=APOEAllele.E3,
+            allele2=APOEAllele.E3,
+            diplotype="ε3/ε3",
+        )
+        findings_list = generate_apoe_findings(result)
+        lipid = findings_list[2]
+
+        assert "Saturated fat" in lipid.conditions
+
+
+# ── Three findings storage ──────────────────────────────────────────────
+
+
+class TestAPOEThreeFindingsStorage:
+    """Test APOE three findings persistence."""
+
+    def test_stores_three_findings(self, sample_engine: sa.Engine) -> None:
+        """Determined result creates exactly 3 analysis findings."""
+        _seed_apoe_variants(sample_engine, "CT", "CC")  # ε3/ε4
+        result = determine_apoe_genotype(sample_engine)
+        count = store_apoe_three_findings(result, sample_engine)
+
+        assert count == 3
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).fetchall()
+
+        assert len(rows) == 3
+        categories = {r.category for r in rows}
+        assert categories == {APOE_FINDING_CV, APOE_FINDING_ALZHEIMERS, APOE_FINDING_LIPID}
+
+    def test_all_rows_have_gene_symbol(self, sample_engine: sa.Engine) -> None:
+        """All three findings have gene_symbol='APOE'."""
+        _seed_apoe_variants(sample_engine, "TT", "CC")
+        result = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).fetchall()
+
+        for row in rows:
+            assert row.gene_symbol == "APOE"
+            assert row.diplotype == "ε3/ε3"
+
+    def test_pmid_citations_stored_as_json(self, sample_engine: sa.Engine) -> None:
+        """PubMed citations stored as JSON arrays."""
+        _seed_apoe_variants(sample_engine, "CT", "CC")
+        result = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).fetchall()
+
+        for row in rows:
+            pmids = json.loads(row.pmid_citations)
+            assert isinstance(pmids, list)
+            assert len(pmids) > 0
+
+    def test_detail_json_stored(self, sample_engine: sa.Engine) -> None:
+        """Detail JSON is valid and contains diplotype."""
+        _seed_apoe_variants(sample_engine, "CC", "CC")  # ε4/ε4
+        result = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).fetchall()
+
+        for row in rows:
+            detail = json.loads(row.detail_json)
+            assert detail["diplotype"] == "ε4/ε4"
+
+    def test_idempotent_rerun(self, sample_engine: sa.Engine) -> None:
+        """Re-running store replaces previous findings."""
+        _seed_apoe_variants(sample_engine, "TT", "CC")
+        result = determine_apoe_genotype(sample_engine)
+
+        store_apoe_three_findings(result, sample_engine)
+        store_apoe_three_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).scalar()
+
+        assert count == 3
+
+    def test_does_not_touch_genotype_finding(self, sample_engine: sa.Engine) -> None:
+        """Three findings storage does not affect the genotype finding."""
+        _seed_apoe_variants(sample_engine, "CT", "CC")
+        result = determine_apoe_genotype(sample_engine)
+
+        store_apoe_finding(result, sample_engine)  # genotype finding
+        store_apoe_three_findings(result, sample_engine)  # three analysis findings
+
+        with sample_engine.connect() as conn:
+            genotype_count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "apoe",
+                    findings.c.category == "genotype",
+                )
+            ).scalar()
+            analysis_count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).scalar()
+
+        assert genotype_count == 1
+        assert analysis_count == 3
+
+    def test_skipped_when_not_determined(self, sample_engine: sa.Engine) -> None:
+        """Undetermined result stores no analysis findings."""
+        result = determine_apoe_genotype(sample_engine)
+        count = store_apoe_three_findings(result, sample_engine)
+
+        assert count == 0
+
+    def test_clears_previous_when_not_determined(self, sample_engine: sa.Engine) -> None:
+        """Re-run with undetermined result clears previous analysis findings."""
+        _seed_apoe_variants(sample_engine, "CT", "CC")
+        result1 = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result1, sample_engine)
+
+        with sample_engine.begin() as conn:
+            conn.execute(sa.delete(raw_variants))
+
+        result2 = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result2, sample_engine)
+
+        with sample_engine.connect() as conn:
+            count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            ).scalar()
+
+        assert count == 0
+
+    def test_does_not_affect_other_modules(self, sample_engine: sa.Engine) -> None:
+        """Three findings storage doesn't touch other module findings."""
+        with sample_engine.begin() as conn:
+            conn.execute(
+                sa.insert(findings),
+                [
+                    {
+                        "module": "cardiovascular",
+                        "category": "monogenic_variant",
+                        "finding_text": "Test CV finding",
+                    }
+                ],
+            )
+
+        _seed_apoe_variants(sample_engine, "CT", "CC")
+        result = determine_apoe_genotype(sample_engine)
+        store_apoe_three_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            cv_count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(findings.c.module == "cardiovascular")
+            ).scalar()
+
+        assert cv_count == 1
