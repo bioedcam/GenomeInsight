@@ -2,7 +2,7 @@
 
 All disclaimer, gate, and carrier status text lives here.
 Referenced by the setup wizard (global disclaimer) and analysis modules
-(APOE gate, carrier status, cancer).
+(APOE gate, carrier status, cancer, cardiovascular).
 """
 
 # ── Global first-launch disclaimer ────────────────────────────────────
@@ -163,4 +163,48 @@ recommendations, and discussion of implications for family members.
 - National Cancer Institute Genetics: https://www.cancer.gov/about-cancer/causes-prevention/genetics
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/
 - FORCE (Facing Our Risk of Cancer Empowered): https://www.facingourrisk.org/\
+"""
+
+# ── Cardiovascular module disclaimer ───────────────────────────────
+
+CARDIOVASCULAR_DISCLAIMER_TITLE = "About Cardiovascular Genetic Results"
+
+CARDIOVASCULAR_DISCLAIMER_TEXT = """\
+This section reports genetic variants associated with cardiovascular \
+conditions including familial hypercholesterolemia (FH), \
+cardiomyopathies, channelopathies, and lipid metabolism disorders. \
+Results are based on a curated panel of 16 genes with established \
+links to cardiovascular risk.
+
+**Please understand the following before reviewing:**
+
+1. **Genetic predisposition is not diagnosis.** Carrying a pathogenic \
+variant in a cardiovascular gene means you may have an increased risk \
+for the associated condition. It does NOT mean you currently have or \
+will develop heart disease.
+
+2. **Familial Hypercholesterolemia (FH).** FH is one of the most \
+common genetic conditions affecting cholesterol metabolism. Early \
+identification and treatment with lipid-lowering therapy can \
+significantly reduce cardiovascular risk. If an FH-associated variant \
+is identified, discuss cholesterol management with your physician.
+
+3. **Absence of findings does not mean absence of risk.** Consumer \
+genotyping chips test only a subset of known variants. A negative \
+result does NOT rule out hereditary cardiovascular conditions. \
+Clinical-grade genetic testing is required for comprehensive assessment.
+
+4. **Variant classification evolves.** ClinVar classifications can \
+change as new evidence emerges. A variant classified as pathogenic \
+today may be reclassified in the future.
+
+5. **Professional guidance is essential.** If you have a pathogenic or \
+likely pathogenic finding, consult a cardiologist, certified genetic \
+counselor, or medical geneticist for proper risk assessment and \
+management recommendations.
+
+**Resources:**
+- FH Foundation: https://thefhfoundation.org/
+- American Heart Association: https://www.heart.org/en/health-topics/cholesterol
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
 """
