@@ -115,7 +115,7 @@ export default function APOEFindingCard({ finding }: APOEFindingCardProps) {
           )}
 
           {/* Risk level from detail_json */}
-          {finding.detail_json?.risk_level && (
+          {typeof finding.detail_json?.risk_level === "string" && (
             <div className="mb-3">
               <span className="text-xs text-muted-foreground">Risk level: </span>
               <span className={cn(
