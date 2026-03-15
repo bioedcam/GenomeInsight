@@ -151,8 +151,8 @@ def _is_gate_acknowledged(sample_engine: sa.Engine) -> tuple[bool, str | None]:
     return True, ack_at
 
 
-def _ensure_gate_not_acknowledged(sample_engine: sa.Engine) -> None:
-    """Raise 403 if the APOE gate has NOT been acknowledged."""
+def _ensure_gate_acknowledged(sample_engine: sa.Engine) -> None:
+    """Raise 403 if the APOE gate has not been acknowledged."""
     acknowledged, _ = _is_gate_acknowledged(sample_engine)
     if not acknowledged:
         raise HTTPException(
@@ -238,7 +238,11 @@ def acknowledge_gate(
                 )
             )
 
-    logger.info("apoe_gate_acknowledged", sample_id=sample_id, acknowledged_at=now.isoformat())
+    logger.info(
+        "apoe_gate_acknowledged sample_id=%s acknowledged_at=%s",
+        sample_id,
+        now.isoformat(),
+    )
 
     return APOEGateAcknowledgeResponse(
         acknowledged=True,
@@ -305,7 +309,7 @@ def list_apoe_findings(
     Example: ``GET /api/analysis/apoe/findings?sample_id=1``
     """
     sample_engine = _get_sample_engine(sample_id)
-    _ensure_gate_not_acknowledged(sample_engine)
+    _ensure_gate_acknowledged(sample_engine)
 
     with sample_engine.connect() as conn:
         rows = conn.execute(
