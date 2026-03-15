@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.api.routes.apoe import router as apoe_router
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.cancer import router as cancer_router
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": VERSION}
 
     # API routes (must be included BEFORE static mount)
+    api_router.include_router(apoe_router)
     api_router.include_router(annotation_router)
     api_router.include_router(annotations_api_router)
     api_router.include_router(cancer_router)

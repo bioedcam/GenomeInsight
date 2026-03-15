@@ -1,0 +1,387 @@
+"""APOE genotype and findings API with opt-in disclosure gate (P3-22c).
+
+The APOE ε4 opt-in gate blocks access to APOE findings until the user
+has explicitly acknowledged the disclosure. Gate state is persisted in
+the per-sample DB (apoe_gate table) and checked on every findings request.
+
+GET  /api/analysis/apoe/disclaimer                   — APOE gate disclosure text
+GET  /api/analysis/apoe/gate-status?sample_id=N      — Check gate acknowledgment
+POST /api/analysis/apoe/acknowledge-gate?sample_id=N — Acknowledge the gate
+GET  /api/analysis/apoe/genotype?sample_id=N         — Basic genotype (no findings)
+GET  /api/analysis/apoe/findings?sample_id=N         — Findings (gate-protected)
+POST /api/analysis/apoe/run?sample_id=N              — Run APOE analysis
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+import sqlalchemy as sa
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+
+from backend.db.connection import get_registry
+from backend.db.tables import apoe_gate, findings, samples
+from backend.disclaimers import (
+    APOE_GATE_ACCEPT_LABEL,
+    APOE_GATE_DECLINE_LABEL,
+    APOE_GATE_TEXT,
+    APOE_GATE_TITLE,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/analysis/apoe", tags=["apoe"])
+
+
+# ── Response models ──────────────────────────────────────────────────
+
+
+class APOEGateDisclaimerResponse(BaseModel):
+    """APOE gate disclosure text (hardcoded in disclaimers.py)."""
+
+    title: str
+    text: str
+    accept_label: str
+    decline_label: str
+
+
+class APOEGateStatusResponse(BaseModel):
+    """Current APOE gate acknowledgment state for a sample."""
+
+    acknowledged: bool
+    acknowledged_at: str | None = None
+
+
+class APOEGateAcknowledgeResponse(BaseModel):
+    """Result of acknowledging the APOE gate."""
+
+    acknowledged: bool
+    acknowledged_at: str
+
+
+class APOEGenotypeResponse(BaseModel):
+    """Basic APOE genotype information (not gate-protected)."""
+
+    status: str  # determined / missing_snps / no_call / ambiguous / not_run
+    diplotype: str | None = None
+    has_e4: bool | None = None
+    e4_count: int | None = None
+    has_e2: bool | None = None
+    e2_count: int | None = None
+    rs429358_genotype: str | None = None
+    rs7412_genotype: str | None = None
+
+
+class APOEFindingResponse(BaseModel):
+    """A single APOE finding (CV risk, Alzheimer's, lipid/dietary)."""
+
+    category: str
+    evidence_level: int
+    finding_text: str
+    phenotype: str | None = None
+    conditions: str | None = None
+    diplotype: str | None = None
+    pmid_citations: list[str] = []
+    detail_json: dict[str, Any] = {}
+
+
+class APOEFindingsListResponse(BaseModel):
+    """All APOE findings for a sample (gate-protected)."""
+
+    items: list[APOEFindingResponse]
+    total: int
+
+
+class APOERunResponse(BaseModel):
+    """Result of running APOE analysis."""
+
+    genotype_stored: bool
+    findings_count: int
+    diplotype: str | None = None
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+
+def _get_sample_engine(sample_id: int) -> sa.Engine:
+    """Resolve sample_id to a per-sample DB engine."""
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(samples.c.db_path).where(samples.c.id == sample_id)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
+
+    sample_db_path = registry.settings.data_dir / row.db_path
+    if not sample_db_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample database file not found for sample {sample_id}.",
+        )
+    return registry.get_sample_engine(sample_db_path)
+
+
+def _is_gate_acknowledged(sample_engine: sa.Engine) -> tuple[bool, str | None]:
+    """Check whether the APOE gate has been acknowledged for this sample.
+
+    Returns:
+        Tuple of (acknowledged: bool, acknowledged_at: str | None).
+    """
+    with sample_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(apoe_gate.c.acknowledged, apoe_gate.c.acknowledged_at).where(
+                apoe_gate.c.id == 1
+            )
+        ).fetchone()
+
+    if row is None or not row.acknowledged:
+        return False, None
+
+    ack_at = row.acknowledged_at
+    if ack_at is not None:
+        if isinstance(ack_at, datetime):
+            ack_at = ack_at.isoformat()
+        else:
+            ack_at = str(ack_at)
+    return True, ack_at
+
+
+def _ensure_gate_not_acknowledged(sample_engine: sa.Engine) -> None:
+    """Raise 403 if the APOE gate has NOT been acknowledged."""
+    acknowledged, _ = _is_gate_acknowledged(sample_engine)
+    if not acknowledged:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "APOE disclosure gate has not been acknowledged. "
+                "You must acknowledge the APOE gate before viewing findings."
+            ),
+        )
+
+
+# ── Endpoints ────────────────────────────────────────────────────────
+
+
+@router.get("/disclaimer")
+def get_apoe_disclaimer() -> APOEGateDisclaimerResponse:
+    """Return the APOE gate disclosure text.
+
+    This text is hardcoded in ``disclaimers.py`` and is not configurable.
+    The gate is non-dismissible — the user must actively choose to view
+    or skip APOE information.
+
+    Example: ``GET /api/analysis/apoe/disclaimer``
+    """
+    return APOEGateDisclaimerResponse(
+        title=APOE_GATE_TITLE,
+        text=APOE_GATE_TEXT,
+        accept_label=APOE_GATE_ACCEPT_LABEL,
+        decline_label=APOE_GATE_DECLINE_LABEL,
+    )
+
+
+@router.get("/gate-status")
+def get_gate_status(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> APOEGateStatusResponse:
+    """Check whether the APOE gate has been acknowledged for a sample.
+
+    Example: ``GET /api/analysis/apoe/gate-status?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    acknowledged, acknowledged_at = _is_gate_acknowledged(sample_engine)
+    return APOEGateStatusResponse(
+        acknowledged=acknowledged,
+        acknowledged_at=acknowledged_at,
+    )
+
+
+@router.post("/acknowledge-gate")
+def acknowledge_gate(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> APOEGateAcknowledgeResponse:
+    """Acknowledge the APOE disclosure gate for a sample.
+
+    Persists the acknowledgment state in the sample database. Once
+    acknowledged, the gate does not re-appear for this sample.
+
+    Example: ``POST /api/analysis/apoe/acknowledge-gate?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    now = datetime.now(tz=UTC)
+
+    with sample_engine.begin() as conn:
+        row = conn.execute(sa.select(apoe_gate.c.id).where(apoe_gate.c.id == 1)).fetchone()
+
+        if row is None:
+            # Insert initial row
+            conn.execute(
+                sa.insert(apoe_gate).values(
+                    id=1,
+                    acknowledged=True,
+                    acknowledged_at=now,
+                )
+            )
+        else:
+            # Update existing row
+            conn.execute(
+                sa.update(apoe_gate)
+                .where(apoe_gate.c.id == 1)
+                .values(
+                    acknowledged=True,
+                    acknowledged_at=now,
+                )
+            )
+
+    logger.info("apoe_gate_acknowledged", sample_id=sample_id, acknowledged_at=now.isoformat())
+
+    return APOEGateAcknowledgeResponse(
+        acknowledged=True,
+        acknowledged_at=now.isoformat(),
+    )
+
+
+@router.get("/genotype")
+def get_apoe_genotype(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> APOEGenotypeResponse:
+    """Get basic APOE genotype information for a sample.
+
+    This endpoint returns the genotype determination result (diplotype,
+    has_e4, e4_count, etc.) WITHOUT the detailed findings. It is NOT
+    gate-protected — it indicates whether ε4 is present but does not
+    reveal the clinical implications.
+
+    Example: ``GET /api/analysis/apoe/genotype?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    with sample_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(findings).where(
+                findings.c.module == "apoe",
+                findings.c.category == "genotype",
+            )
+        ).fetchone()
+
+    if row is None:
+        return APOEGenotypeResponse(status="not_run")
+
+    detail: dict[str, Any] = {}
+    if row.detail_json:
+        try:
+            detail = json.loads(row.detail_json)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse genotype detail_json")
+
+    return APOEGenotypeResponse(
+        status="determined",
+        diplotype=row.diplotype,
+        has_e4=detail.get("has_e4"),
+        e4_count=detail.get("e4_count"),
+        has_e2=detail.get("has_e2"),
+        e2_count=detail.get("e2_count"),
+        rs429358_genotype=detail.get("rs429358_genotype"),
+        rs7412_genotype=detail.get("rs7412_genotype"),
+    )
+
+
+@router.get("/findings")
+def list_apoe_findings(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> APOEFindingsListResponse:
+    """List all APOE findings for a sample (gate-protected).
+
+    Returns the three APOE findings (cardiovascular risk, Alzheimer's risk,
+    lipid/dietary context) ONLY if the APOE disclosure gate has been
+    acknowledged for this sample. Returns 403 if the gate is not yet
+    acknowledged.
+
+    Example: ``GET /api/analysis/apoe/findings?sample_id=1``
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    _ensure_gate_not_acknowledged(sample_engine)
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(findings)
+            .where(
+                findings.c.module == "apoe",
+                findings.c.category != "genotype",
+            )
+            .order_by(findings.c.evidence_level.desc(), findings.c.category)
+        ).fetchall()
+
+    items: list[APOEFindingResponse] = []
+    for row in rows:
+        detail: dict[str, Any] = {}
+        if row.detail_json:
+            try:
+                detail = json.loads(row.detail_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Failed to parse detail_json for finding id=%s", row.id)
+
+        pmids: list[str] = []
+        if row.pmid_citations:
+            try:
+                pmids = json.loads(row.pmid_citations)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Failed to parse pmid_citations for finding id=%s", row.id)
+
+        items.append(
+            APOEFindingResponse(
+                category=row.category or "",
+                evidence_level=row.evidence_level or 1,
+                finding_text=row.finding_text or "",
+                phenotype=row.phenotype,
+                conditions=row.conditions,
+                diplotype=row.diplotype,
+                pmid_citations=pmids,
+                detail_json=detail,
+            )
+        )
+
+    return APOEFindingsListResponse(items=items, total=len(items))
+
+
+@router.post("/run")
+def run_apoe_analysis(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> APOERunResponse:
+    """Run or re-run APOE genotype determination and findings generation.
+
+    Determines the APOE diplotype from rs429358 + rs7412, stores the
+    genotype finding, and generates the three APOE findings (CV risk,
+    Alzheimer's, lipid/dietary).
+
+    Note: Running the analysis does NOT acknowledge the gate. The user
+    must still explicitly acknowledge the disclosure before findings
+    are visible via the findings endpoint.
+
+    Example: ``POST /api/analysis/apoe/run?sample_id=1``
+    """
+    from backend.analysis.apoe import (
+        determine_apoe_genotype,
+        store_apoe_finding,
+        store_apoe_three_findings,
+    )
+
+    sample_engine = _get_sample_engine(sample_id)
+
+    # P3-22a: Genotype determination
+    result = determine_apoe_genotype(sample_engine)
+    genotype_stored = store_apoe_finding(result, sample_engine) > 0
+
+    # P3-22b: Three findings generation
+    findings_count = store_apoe_three_findings(result, sample_engine)
+
+    return APOERunResponse(
+        genotype_stored=genotype_stored,
+        findings_count=findings_count,
+        diplotype=result.diplotype,
+    )
