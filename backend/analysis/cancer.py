@@ -1,6 +1,10 @@
-"""Cancer predisposition gene panel definition and loader.
+"""Cancer predisposition gene panel definition, loader, and analysis module.
 
-Implements P3-12: Curated cancer gene panel with expected ClinVar entries.
+Implements P3-12 (panel) and P3-13 (ClinVar P/LP extraction):
+  - P3-12: Curated cancer gene panel with expected ClinVar entries.
+  - P3-13: Extract ClinVar Pathogenic/Likely pathogenic variants in the
+    cancer gene panel and generate findings with accession, review stars,
+    syndrome, and inheritance pattern.
 
 The panel covers 28 genes (22 gene groups per PRD) associated with
 hereditary cancer syndromes:
@@ -20,22 +24,29 @@ Usage::
 
     from backend.analysis.cancer import (
         load_cancer_panel,
+        extract_cancer_variants,
+        store_cancer_findings,
         CancerPanel,
         CancerGene,
+        CancerVariantResult,
+        CancerAnalysisResult,
     )
 
     panel = load_cancer_panel()
-    assert len(panel.genes) == 28
-    brca1 = panel.get_gene("BRCA1")
+    result = extract_cancer_variants(panel, sample_engine)
+    store_cancer_findings(result, sample_engine)
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import sqlalchemy as sa
 import structlog
+
+from backend.db.tables import annotated_variants, findings
 
 logger = structlog.get_logger(__name__)
 
@@ -168,3 +179,248 @@ def load_cancer_panel(panel_path: Path | None = None) -> CancerPanel:
     )
 
     return panel
+
+
+# ── P3-13: Cancer predisposition analysis ─────────────────────────────────
+
+# ClinVar significance values considered pathogenic
+_PATHOGENIC_SIGNIFICANCE = {"Pathogenic", "Likely pathogenic", "Pathogenic/Likely pathogenic"}
+
+
+@dataclass
+class CancerVariantResult:
+    """A single ClinVar P/LP variant found in the cancer gene panel."""
+
+    rsid: str
+    gene_symbol: str
+    genotype: str
+    zygosity: str | None
+    clinvar_significance: str
+    clinvar_review_stars: int
+    clinvar_accession: str | None
+    clinvar_conditions: str | None
+    syndromes: list[str]
+    cancer_types: list[str]
+    inheritance: str
+    evidence_level: int
+    cross_links: list[str]
+    pmids: list[str]
+
+
+@dataclass
+class CancerAnalysisResult:
+    """Complete cancer predisposition analysis result for a sample."""
+
+    variants: list[CancerVariantResult] = field(default_factory=list)
+    panel_genes_checked: int = 0
+    variants_in_panel_genes: int = 0
+
+    @property
+    def pathogenic_count(self) -> int:
+        """Number of P/LP variants found."""
+        return len(self.variants)
+
+    @property
+    def dual_role_variants(self) -> list[CancerVariantResult]:
+        """Variants in genes with cross-links (e.g. BRCA1/2)."""
+        return [v for v in self.variants if v.cross_links]
+
+
+def _assign_evidence_level(
+    clinvar_significance: str,
+    clinvar_review_stars: int,
+    gene_evidence_level: int,
+) -> int:
+    """Assign evidence level (1-4 stars) based on ClinVar data.
+
+    Evidence star criteria from PRD §3.4:
+      ★★★★ — ClinVar P/LP with ≥2-star review
+      ★★★☆ — ClinVar LP with 1-star review
+      ★★☆☆ — ClinVar VUS with functional evidence
+      ★☆☆☆ — Single study, candidate gene
+
+    For P/LP variants in the cancer panel:
+      - ≥2 review stars → 4 (Definitive/Pathogenic)
+      - 1 review star + Pathogenic → 4
+      - 1 review star + Likely pathogenic → 3 (Strong)
+      - 0 review stars → min(gene baseline, 2)
+    """
+    if clinvar_review_stars >= 2:
+        return 4
+
+    if clinvar_review_stars == 1:
+        if clinvar_significance == "Pathogenic":
+            return 4
+        return 3  # Likely pathogenic with 1 star
+
+    # 0 review stars — cap at gene baseline or 2
+    return min(gene_evidence_level, 2)
+
+
+def extract_cancer_variants(
+    panel: CancerPanel,
+    sample_engine: sa.Engine,
+) -> CancerAnalysisResult:
+    """Extract ClinVar P/LP variants in the cancer gene panel from annotated variants.
+
+    Queries the annotated_variants table for variants where:
+      1. gene_symbol is in the cancer panel genes
+      2. clinvar_significance is Pathogenic or Likely pathogenic
+
+    For each matching variant, enriches with panel metadata (syndromes,
+    cancer types, inheritance, cross-links, PMIDs).
+
+    Args:
+        panel: Loaded CancerPanel.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        CancerAnalysisResult with all P/LP variants found.
+    """
+    gene_symbols = panel.all_gene_symbols()
+    # Build gene lookup for enrichment
+    gene_map = {g.gene_symbol.upper(): g for g in panel.genes}
+
+    # Query annotated variants in panel genes with ClinVar P/LP
+    with sample_engine.connect() as conn:
+        # Count total variants in panel genes (for stats)
+        count_stmt = (
+            sa.select(sa.func.count())
+            .select_from(annotated_variants)
+            .where(annotated_variants.c.gene_symbol.in_(gene_symbols))
+        )
+        total_in_panel = conn.execute(count_stmt).scalar() or 0
+
+        # Fetch P/LP variants
+        stmt = (
+            sa.select(
+                annotated_variants.c.rsid,
+                annotated_variants.c.gene_symbol,
+                annotated_variants.c.genotype,
+                annotated_variants.c.zygosity,
+                annotated_variants.c.clinvar_significance,
+                annotated_variants.c.clinvar_review_stars,
+                annotated_variants.c.clinvar_accession,
+                annotated_variants.c.clinvar_conditions,
+            )
+            .where(
+                annotated_variants.c.gene_symbol.in_(gene_symbols),
+                annotated_variants.c.clinvar_significance.in_(list(_PATHOGENIC_SIGNIFICANCE)),
+            )
+            .order_by(annotated_variants.c.gene_symbol, annotated_variants.c.rsid)
+        )
+        rows = conn.execute(stmt).fetchall()
+
+    variants: list[CancerVariantResult] = []
+    for row in rows:
+        gene_info = gene_map.get((row.gene_symbol or "").upper())
+        if gene_info is None:
+            continue
+
+        evidence = _assign_evidence_level(
+            row.clinvar_significance or "",
+            row.clinvar_review_stars or 0,
+            gene_info.evidence_level,
+        )
+
+        variants.append(
+            CancerVariantResult(
+                rsid=row.rsid,
+                gene_symbol=row.gene_symbol,
+                genotype=row.genotype or "",
+                zygosity=row.zygosity,
+                clinvar_significance=row.clinvar_significance,
+                clinvar_review_stars=row.clinvar_review_stars or 0,
+                clinvar_accession=row.clinvar_accession,
+                clinvar_conditions=row.clinvar_conditions,
+                syndromes=gene_info.syndromes,
+                cancer_types=gene_info.cancer_types,
+                inheritance=gene_info.inheritance,
+                evidence_level=evidence,
+                cross_links=gene_info.cross_links,
+                pmids=gene_info.pmids,
+            )
+        )
+
+    logger.info(
+        "cancer_variants_extracted",
+        panel_genes=len(gene_symbols),
+        variants_in_panel_genes=total_in_panel,
+        pathogenic_variants=len(variants),
+        dual_role_variants=len([v for v in variants if v.cross_links]),
+    )
+
+    return CancerAnalysisResult(
+        variants=variants,
+        panel_genes_checked=len(gene_symbols),
+        variants_in_panel_genes=total_in_panel,
+    )
+
+
+# ── Findings storage ─────────────────────────────────────────────────────
+
+
+def store_cancer_findings(
+    result: CancerAnalysisResult,
+    sample_engine: sa.Engine,
+) -> int:
+    """Store cancer predisposition findings in the sample database.
+
+    Creates one finding per P/LP variant with module='cancer' and
+    category='monogenic_variant'. Each finding includes ClinVar accession,
+    review stars, syndrome, inheritance, and cross-link metadata.
+
+    Args:
+        result: CancerAnalysisResult from extract_cancer_variants.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of findings inserted.
+    """
+    rows: list[dict] = []
+
+    for v in result.variants:
+        # Build human-readable finding text
+        sig_display = v.clinvar_significance
+        syndrome_text = ", ".join(v.syndromes) if v.syndromes else "Cancer predisposition"
+        finding_text = (
+            f"{v.gene_symbol} {v.rsid} ({v.genotype}) — {sig_display} for {syndrome_text}"
+        )
+
+        detail = {
+            "clinvar_accession": v.clinvar_accession,
+            "clinvar_review_stars": v.clinvar_review_stars,
+            "clinvar_conditions": v.clinvar_conditions,
+            "syndromes": v.syndromes,
+            "cancer_types": v.cancer_types,
+            "inheritance": v.inheritance,
+            "cross_links": v.cross_links,
+        }
+
+        rows.append(
+            {
+                "module": "cancer",
+                "category": "monogenic_variant",
+                "evidence_level": v.evidence_level,
+                "gene_symbol": v.gene_symbol,
+                "rsid": v.rsid,
+                "finding_text": finding_text,
+                "conditions": v.clinvar_conditions,
+                "zygosity": v.zygosity,
+                "clinvar_significance": v.clinvar_significance,
+                "pmid_citations": json.dumps(v.pmids),
+                "detail_json": json.dumps(detail),
+            }
+        )
+
+    if not rows:
+        logger.info("no_cancer_findings_to_store")
+        return 0
+
+    with sample_engine.begin() as conn:
+        # Clear previous cancer findings
+        conn.execute(sa.delete(findings).where(findings.c.module == "cancer"))
+        conn.execute(sa.insert(findings), rows)
+
+    logger.info("cancer_findings_stored", count=len(rows))
+    return len(rows)
