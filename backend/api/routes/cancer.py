@@ -317,9 +317,14 @@ def run_cancer_analysis(
     result = extract_cancer_variants(panel, sample_engine)
     count = store_cancer_findings(result, sample_engine)
 
-    # PRS computation (P3-15)
+    # PRS computation (P3-15) with ancestry mismatch check (P3-16)
+    from backend.analysis.prs import get_inferred_ancestry
+
     weight_sets = load_cancer_prs_weights()
-    prs_result = run_cancer_prs(weight_sets, sample_engine)
+    inferred_ancestry = get_inferred_ancestry(sample_engine)
+    prs_result = run_cancer_prs(
+        weight_sets, sample_engine, inferred_ancestry=inferred_ancestry
+    )
     prs_count = store_cancer_prs_findings(prs_result, sample_engine)
 
     return CancerRunResponse(
