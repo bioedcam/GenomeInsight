@@ -439,8 +439,13 @@ def store_cardiovascular_findings(
         )
 
     with sample_engine.begin() as conn:
-        # Clear previous cardiovascular findings
-        conn.execute(sa.delete(findings).where(findings.c.module == "cardiovascular"))
+        # Clear previous cardiovascular monogenic findings only
+        conn.execute(
+            sa.delete(findings).where(
+                findings.c.module == "cardiovascular",
+                findings.c.category == "monogenic_variant",
+            )
+        )
         if rows:
             conn.execute(sa.insert(findings), rows)
         else:
@@ -455,9 +460,6 @@ def store_cardiovascular_findings(
 # FH status values
 FH_STATUS_POSITIVE = "Positive"
 FH_STATUS_NEGATIVE = "Negative"
-
-# FH genes (subset of cardiovascular panel)
-FH_GENE_SYMBOLS = {"LDLR", "PCSK9", "APOB"}
 
 
 @dataclass
