@@ -1,4 +1,4 @@
-"""Tests for the cardiovascular gene panel and analysis module (P3-19).
+"""Tests for the cardiovascular gene panel and analysis module (P3-19, P3-20).
 
 Covers:
   - Panel JSON loading and validation
@@ -13,6 +13,9 @@ Covers:
   - Findings storage (module='cardiovascular', category='monogenic_variant')
   - Category-based variant grouping (FH, cardiomyopathy, channelopathy)
   - T3-19: LDLR pathogenic variant → cardiovascular finding with ★★★★
+  - P3-20: FH variant status reporting (Positive/Negative determination)
+  - FH status summary finding storage (category='fh_status')
+  - FH status with heterozygous and homozygous variants
 """
 
 from __future__ import annotations
@@ -28,13 +31,18 @@ from backend.analysis.cardiovascular import (
     CATEGORY_CHANNELOPATHY,
     CATEGORY_FH,
     CATEGORY_LIPID,
+    FH_STATUS_NEGATIVE,
+    FH_STATUS_POSITIVE,
     CardiovascularAnalysisResult,
     CardiovascularPanel,
     CardiovascularVariantResult,
+    FHStatus,
     _assign_evidence_level,
+    determine_fh_status,
     extract_cardiovascular_variants,
     load_cardiovascular_panel,
     store_cardiovascular_findings,
+    store_fh_status_finding,
 )
 from backend.db.tables import annotated_variants, findings
 
@@ -859,3 +867,358 @@ class TestCardiovascularAnalysisResult:
         assert result.cardiomyopathy_variants == []
         assert result.channelopathy_variants == []
         assert result.lipid_variants == []
+
+
+# ── P3-20: FH status determination tests ───────────────────────────
+
+
+class TestDetermineFHStatus:
+    """Test FH variant status reporting (P3-20)."""
+
+    def _make_fh_variant(
+        self,
+        gene: str = "LDLR",
+        rsid: str = "rs28942078",
+        zygosity: str = "het",
+        evidence: int = 4,
+        significance: str = "Pathogenic",
+        review_stars: int = 3,
+    ) -> CardiovascularVariantResult:
+        return CardiovascularVariantResult(
+            rsid=rsid,
+            gene_symbol=gene,
+            genotype="CT",
+            zygosity=zygosity,
+            clinvar_significance=significance,
+            clinvar_review_stars=review_stars,
+            clinvar_accession="VCV000018390",
+            clinvar_conditions="Familial hypercholesterolemia",
+            conditions=["Familial Hypercholesterolemia"],
+            cardiovascular_category=CATEGORY_FH,
+            inheritance="AD",
+            evidence_level=evidence,
+            cross_links=[],
+            pmids=["25487149"],
+        )
+
+    def test_positive_with_fh_variants(self) -> None:
+        result = CardiovascularAnalysisResult(variants=[self._make_fh_variant()])
+        fh = determine_fh_status(result)
+        assert fh.status == FH_STATUS_POSITIVE
+        assert fh.is_positive is True
+
+    def test_negative_with_no_fh_variants(self) -> None:
+        """Non-FH cardiovascular variants do not trigger FH positive."""
+        cm_variant = CardiovascularVariantResult(
+            rsid="rs121912485",
+            gene_symbol="MYBPC3",
+            genotype="AG",
+            zygosity="het",
+            clinvar_significance="Pathogenic",
+            clinvar_review_stars=3,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            conditions=["Hypertrophic Cardiomyopathy"],
+            cardiovascular_category=CATEGORY_CARDIOMYOPATHY,
+            inheritance="AD",
+            evidence_level=4,
+            cross_links=[],
+            pmids=[],
+        )
+        result = CardiovascularAnalysisResult(variants=[cm_variant])
+        fh = determine_fh_status(result)
+        assert fh.status == FH_STATUS_NEGATIVE
+        assert fh.is_positive is False
+
+    def test_negative_with_empty_result(self) -> None:
+        result = CardiovascularAnalysisResult()
+        fh = determine_fh_status(result)
+        assert fh.status == FH_STATUS_NEGATIVE
+        assert fh.variant_count == 0
+        assert fh.affected_genes == []
+
+    def test_affected_genes_listed(self) -> None:
+        result = CardiovascularAnalysisResult(
+            variants=[
+                self._make_fh_variant(gene="LDLR", rsid="rs1"),
+                self._make_fh_variant(gene="PCSK9", rsid="rs2"),
+            ]
+        )
+        fh = determine_fh_status(result)
+        assert fh.affected_genes == ["LDLR", "PCSK9"]
+
+    def test_variant_count(self) -> None:
+        result = CardiovascularAnalysisResult(
+            variants=[
+                self._make_fh_variant(gene="LDLR", rsid="rs1"),
+                self._make_fh_variant(gene="LDLR", rsid="rs2"),
+            ]
+        )
+        fh = determine_fh_status(result)
+        assert fh.variant_count == 2
+
+    def test_heterozygous_flag(self) -> None:
+        result = CardiovascularAnalysisResult(variants=[self._make_fh_variant(zygosity="het")])
+        fh = determine_fh_status(result)
+        assert fh.has_homozygous is False
+
+    def test_homozygous_flag(self) -> None:
+        result = CardiovascularAnalysisResult(variants=[self._make_fh_variant(zygosity="hom_alt")])
+        fh = determine_fh_status(result)
+        assert fh.has_homozygous is True
+
+    def test_highest_evidence_level(self) -> None:
+        result = CardiovascularAnalysisResult(
+            variants=[
+                self._make_fh_variant(gene="LDLR", rsid="rs1", evidence=4),
+                self._make_fh_variant(gene="PCSK9", rsid="rs2", evidence=2),
+            ]
+        )
+        fh = determine_fh_status(result)
+        assert fh.highest_evidence_level == 4
+
+    def test_summary_text_positive(self) -> None:
+        result = CardiovascularAnalysisResult(variants=[self._make_fh_variant()])
+        fh = determine_fh_status(result)
+        assert "Familial Hypercholesterolemia" in fh.summary_text
+        assert "LDLR" in fh.summary_text
+
+    def test_summary_text_negative(self) -> None:
+        result = CardiovascularAnalysisResult()
+        fh = determine_fh_status(result)
+        assert "No pathogenic" in fh.summary_text
+        assert "LDLR" in fh.summary_text
+
+    def test_summary_text_homozygous_note(self) -> None:
+        result = CardiovascularAnalysisResult(variants=[self._make_fh_variant(zygosity="hom_alt")])
+        fh = determine_fh_status(result)
+        assert "homozygous" in fh.summary_text
+
+    def test_fh_from_full_extraction(
+        self, panel: CardiovascularPanel, sample_with_cv_variants: sa.Engine
+    ) -> None:
+        """Integration: extract cardiovascular variants → determine FH status."""
+        result = extract_cardiovascular_variants(panel, sample_with_cv_variants)
+        fh = determine_fh_status(result)
+        assert fh.status == FH_STATUS_POSITIVE
+        assert "LDLR" in fh.affected_genes
+        assert "PCSK9" in fh.affected_genes
+        assert fh.variant_count == 2
+
+    def test_fh_from_empty_extraction(
+        self, panel: CardiovascularPanel, empty_sample: sa.Engine
+    ) -> None:
+        result = extract_cardiovascular_variants(panel, empty_sample)
+        fh = determine_fh_status(result)
+        assert fh.status == FH_STATUS_NEGATIVE
+
+
+# ── P3-20: FH status finding storage tests ────────────────────────
+
+
+class TestStoreFHStatusFinding:
+    """Test FH status summary finding storage."""
+
+    def _make_fh_variant(
+        self,
+        gene: str = "LDLR",
+        rsid: str = "rs28942078",
+        evidence: int = 4,
+    ) -> CardiovascularVariantResult:
+        return CardiovascularVariantResult(
+            rsid=rsid,
+            gene_symbol=gene,
+            genotype="CT",
+            zygosity="het",
+            clinvar_significance="Pathogenic",
+            clinvar_review_stars=3,
+            clinvar_accession="VCV000018390",
+            clinvar_conditions="Familial hypercholesterolemia",
+            conditions=["Familial Hypercholesterolemia"],
+            cardiovascular_category=CATEGORY_FH,
+            inheritance="AD",
+            evidence_level=evidence,
+            cross_links=[],
+            pmids=["25487149"],
+        )
+
+    def test_stores_positive_finding(self, sample_engine: sa.Engine) -> None:
+        fh = FHStatus(
+            status=FH_STATUS_POSITIVE,
+            affected_genes=["LDLR"],
+            variant_count=1,
+            variants=[self._make_fh_variant()],
+            has_homozygous=False,
+            highest_evidence_level=4,
+        )
+        count = store_fh_status_finding(fh, sample_engine)
+        assert count == 1
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "cardiovascular",
+                    findings.c.category == "fh_status",
+                )
+            ).fetchone()
+        assert row is not None
+        assert "Familial Hypercholesterolemia" in row.finding_text
+        assert row.evidence_level == 4
+        assert row.conditions == "Familial Hypercholesterolemia"
+
+    def test_stores_negative_finding(self, sample_engine: sa.Engine) -> None:
+        fh = FHStatus(
+            status=FH_STATUS_NEGATIVE,
+            affected_genes=[],
+            variant_count=0,
+            variants=[],
+            has_homozygous=False,
+            highest_evidence_level=0,
+        )
+        count = store_fh_status_finding(fh, sample_engine)
+        assert count == 1
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(
+                    findings.c.module == "cardiovascular",
+                    findings.c.category == "fh_status",
+                )
+            ).fetchone()
+        assert row is not None
+        assert "No pathogenic" in row.finding_text
+        assert row.evidence_level is None
+        assert row.conditions is None
+
+    def test_detail_json_has_fh_data(self, sample_engine: sa.Engine) -> None:
+        fh = FHStatus(
+            status=FH_STATUS_POSITIVE,
+            affected_genes=["LDLR", "PCSK9"],
+            variant_count=2,
+            variants=[
+                self._make_fh_variant(gene="LDLR", rsid="rs1"),
+                self._make_fh_variant(gene="PCSK9", rsid="rs2"),
+            ],
+            has_homozygous=False,
+            highest_evidence_level=4,
+        )
+        store_fh_status_finding(fh, sample_engine)
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(findings.c.category == "fh_status")
+            ).fetchone()
+
+        detail = json.loads(row.detail_json)
+        assert detail["status"] == FH_STATUS_POSITIVE
+        assert detail["affected_genes"] == ["LDLR", "PCSK9"]
+        assert detail["variant_count"] == 2
+        assert detail["has_homozygous"] is False
+        assert len(detail["fh_variants"]) == 2
+
+    def test_fh_variant_detail_fields(self, sample_engine: sa.Engine) -> None:
+        fh = FHStatus(
+            status=FH_STATUS_POSITIVE,
+            affected_genes=["LDLR"],
+            variant_count=1,
+            variants=[self._make_fh_variant()],
+            has_homozygous=False,
+            highest_evidence_level=4,
+        )
+        store_fh_status_finding(fh, sample_engine)
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(findings.c.category == "fh_status")
+            ).fetchone()
+
+        detail = json.loads(row.detail_json)
+        v = detail["fh_variants"][0]
+        assert v["rsid"] == "rs28942078"
+        assert v["gene_symbol"] == "LDLR"
+        assert v["clinvar_significance"] == "Pathogenic"
+        assert v["clinvar_review_stars"] == 3
+        assert v["evidence_level"] == 4
+
+    def test_clears_previous_fh_status_on_rerun(self, sample_engine: sa.Engine) -> None:
+        fh_pos = FHStatus(
+            status=FH_STATUS_POSITIVE,
+            affected_genes=["LDLR"],
+            variant_count=1,
+            variants=[self._make_fh_variant()],
+            has_homozygous=False,
+            highest_evidence_level=4,
+        )
+        store_fh_status_finding(fh_pos, sample_engine)
+
+        # Second run with negative status
+        fh_neg = FHStatus(
+            status=FH_STATUS_NEGATIVE,
+            affected_genes=[],
+            variant_count=0,
+            variants=[],
+            has_homozygous=False,
+            highest_evidence_level=0,
+        )
+        store_fh_status_finding(fh_neg, sample_engine)
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(findings.c.category == "fh_status")
+            ).fetchall()
+        assert len(rows) == 1
+        assert "No pathogenic" in rows[0].finding_text
+
+    def test_does_not_affect_monogenic_findings(
+        self, panel: CardiovascularPanel, sample_with_cv_variants: sa.Engine
+    ) -> None:
+        """FH status finding is separate from monogenic_variant findings."""
+        result = extract_cardiovascular_variants(panel, sample_with_cv_variants)
+        store_cardiovascular_findings(result, sample_with_cv_variants)
+
+        fh = determine_fh_status(result)
+        store_fh_status_finding(fh, sample_with_cv_variants)
+
+        with sample_with_cv_variants.connect() as conn:
+            monogenic_count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "cardiovascular",
+                    findings.c.category == "monogenic_variant",
+                )
+            ).scalar()
+            fh_count = conn.execute(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
+                    findings.c.module == "cardiovascular",
+                    findings.c.category == "fh_status",
+                )
+            ).scalar()
+
+        assert monogenic_count == 5  # Unchanged
+        assert fh_count == 1
+
+    def test_full_pipeline_integration(
+        self, panel: CardiovascularPanel, sample_with_cv_variants: sa.Engine
+    ) -> None:
+        """Full pipeline: extract → store monogenic → determine FH → store FH status."""
+        result = extract_cardiovascular_variants(panel, sample_with_cv_variants)
+        store_cardiovascular_findings(result, sample_with_cv_variants)
+        fh = determine_fh_status(result)
+        store_fh_status_finding(fh, sample_with_cv_variants)
+
+        assert fh.status == FH_STATUS_POSITIVE
+        assert fh.variant_count == 2  # LDLR + PCSK9
+
+        with sample_with_cv_variants.connect() as conn:
+            fh_row = conn.execute(
+                sa.select(findings).where(findings.c.category == "fh_status")
+            ).fetchone()
+
+        assert fh_row is not None
+        detail = json.loads(fh_row.detail_json)
+        assert detail["status"] == FH_STATUS_POSITIVE
+        assert "LDLR" in detail["affected_genes"]
+        assert "PCSK9" in detail["affected_genes"]

@@ -1,12 +1,15 @@
 """Cardiovascular gene panel definition, loader, and analysis module.
 
-Implements P3-19 (cardiovascular module annotation):
+Implements P3-19 (cardiovascular module annotation) and P3-20 (FH variant
+status reporting):
   - Curated cardiovascular gene panel covering familial hypercholesterolemia
     (LDLR, PCSK9, APOB), lipid metabolism (LPA, ABCG5/8),
     channelopathies (KCNQ1, SCN5A, KCNH2, RYR2), and
     cardiomyopathies (MYBPC3, MYH7, TNNT2, LMNA, DSP, PKP2).
   - Extract ClinVar Pathogenic/Likely pathogenic variants in the
     cardiovascular gene panel and generate findings.
+  - Determine FH status based on P/LP variants in LDLR, PCSK9, APOB
+    and store a summary finding.
 
 The panel covers 16 genes across 4 cardiovascular categories:
   - Familial hypercholesterolemia: LDLR, PCSK9, APOB
@@ -20,15 +23,20 @@ Usage::
         load_cardiovascular_panel,
         extract_cardiovascular_variants,
         store_cardiovascular_findings,
+        determine_fh_status,
+        store_fh_status_finding,
         CardiovascularPanel,
         CardiovascularGene,
         CardiovascularVariantResult,
         CardiovascularAnalysisResult,
+        FHStatus,
     )
 
     panel = load_cardiovascular_panel()
     result = extract_cardiovascular_variants(panel, sample_engine)
     store_cardiovascular_findings(result, sample_engine)
+    fh = determine_fh_status(result)
+    store_fh_status_finding(fh, sample_engine)
 """
 
 from __future__ import annotations
@@ -440,3 +448,173 @@ def store_cardiovascular_findings(
 
     logger.info("cardiovascular_findings_stored", count=len(rows))
     return len(rows)
+
+
+# ── P3-20: FH variant status reporting ───────────────────────────────
+
+# FH status values
+FH_STATUS_POSITIVE = "Positive"
+FH_STATUS_NEGATIVE = "Negative"
+
+# FH genes (subset of cardiovascular panel)
+FH_GENE_SYMBOLS = {"LDLR", "PCSK9", "APOB"}
+
+
+@dataclass
+class FHStatus:
+    """Familial hypercholesterolemia status determination.
+
+    Summarises whether the sample has P/LP variants in FH genes
+    (LDLR, PCSK9, APOB) and the clinical significance of each.
+    """
+
+    status: str  # Positive or Negative
+    affected_genes: list[str]
+    variant_count: int
+    variants: list[CardiovascularVariantResult]
+    has_homozygous: bool
+    highest_evidence_level: int
+
+    @property
+    def is_positive(self) -> bool:
+        return self.status == FH_STATUS_POSITIVE
+
+    @property
+    def summary_text(self) -> str:
+        """Human-readable FH status summary."""
+        if not self.is_positive:
+            return (
+                "No pathogenic or likely pathogenic variants identified in "
+                "FH-associated genes (LDLR, PCSK9, APOB)."
+            )
+
+        genes_str = ", ".join(sorted(self.affected_genes))
+        zygosity_note = " (includes homozygous variant)" if self.has_homozygous else ""
+        return (
+            f"Familial Hypercholesterolemia — {self.variant_count} pathogenic/"
+            f"likely pathogenic variant(s) identified in {genes_str}"
+            f"{zygosity_note}."
+        )
+
+
+def determine_fh_status(result: CardiovascularAnalysisResult) -> FHStatus:
+    """Determine FH status from cardiovascular analysis results.
+
+    Examines the FH-category variants (LDLR, PCSK9, APOB) from the
+    cardiovascular extraction and classifies the sample as FH Positive
+    or Negative.
+
+    Args:
+        result: CardiovascularAnalysisResult from extract_cardiovascular_variants.
+
+    Returns:
+        FHStatus with status determination and affected gene details.
+    """
+    fh_vars = result.fh_variants
+
+    if not fh_vars:
+        return FHStatus(
+            status=FH_STATUS_NEGATIVE,
+            affected_genes=[],
+            variant_count=0,
+            variants=[],
+            has_homozygous=False,
+            highest_evidence_level=0,
+        )
+
+    affected_genes = sorted({v.gene_symbol for v in fh_vars})
+    has_hom = any(v.zygosity == "hom_alt" for v in fh_vars)
+    max_evidence = max(v.evidence_level for v in fh_vars)
+
+    status = FHStatus(
+        status=FH_STATUS_POSITIVE,
+        affected_genes=affected_genes,
+        variant_count=len(fh_vars),
+        variants=fh_vars,
+        has_homozygous=has_hom,
+        highest_evidence_level=max_evidence,
+    )
+
+    logger.info(
+        "fh_status_determined",
+        status=status.status,
+        affected_genes=affected_genes,
+        variant_count=len(fh_vars),
+        has_homozygous=has_hom,
+        highest_evidence_level=max_evidence,
+    )
+
+    return status
+
+
+def store_fh_status_finding(
+    fh_status: FHStatus,
+    sample_engine: sa.Engine,
+) -> int:
+    """Store the FH status summary finding in the sample database.
+
+    Creates a single summary finding with module='cardiovascular' and
+    category='fh_status'. This is separate from the per-variant
+    monogenic_variant findings and provides an at-a-glance FH determination.
+
+    Always clears previous fh_status findings before inserting,
+    ensuring idempotent re-runs.
+
+    Args:
+        fh_status: FHStatus from determine_fh_status.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of findings inserted (0 or 1).
+    """
+    detail = {
+        "status": fh_status.status,
+        "affected_genes": fh_status.affected_genes,
+        "variant_count": fh_status.variant_count,
+        "has_homozygous": fh_status.has_homozygous,
+        "highest_evidence_level": fh_status.highest_evidence_level,
+        "fh_variants": [
+            {
+                "rsid": v.rsid,
+                "gene_symbol": v.gene_symbol,
+                "genotype": v.genotype,
+                "zygosity": v.zygosity,
+                "clinvar_significance": v.clinvar_significance,
+                "clinvar_review_stars": v.clinvar_review_stars,
+                "clinvar_accession": v.clinvar_accession,
+                "evidence_level": v.evidence_level,
+            }
+            for v in fh_status.variants
+        ],
+    }
+
+    row = {
+        "module": "cardiovascular",
+        "category": "fh_status",
+        "evidence_level": fh_status.highest_evidence_level if fh_status.is_positive else None,
+        "gene_symbol": None,
+        "rsid": None,
+        "finding_text": fh_status.summary_text,
+        "conditions": "Familial Hypercholesterolemia" if fh_status.is_positive else None,
+        "zygosity": None,
+        "clinvar_significance": None,
+        "pmid_citations": None,
+        "detail_json": json.dumps(detail),
+    }
+
+    with sample_engine.begin() as conn:
+        # Clear previous FH status finding
+        conn.execute(
+            sa.delete(findings).where(
+                findings.c.module == "cardiovascular",
+                findings.c.category == "fh_status",
+            )
+        )
+        conn.execute(sa.insert(findings), [row])
+
+    logger.info(
+        "fh_status_finding_stored",
+        status=fh_status.status,
+        variant_count=fh_status.variant_count,
+    )
+    return 1

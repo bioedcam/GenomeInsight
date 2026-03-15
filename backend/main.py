@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.cancer import router as cancer_router
+from backend.api.routes.cardiovascular import router as cardiovascular_router
 from backend.api.routes.column_presets import router as column_presets_router
 from backend.api.routes.databases import (
     cleanup_interrupted_sessions,
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     api_router.include_router(annotation_router)
     api_router.include_router(annotations_api_router)
     api_router.include_router(cancer_router)
+    api_router.include_router(cardiovascular_router)
     api_router.include_router(column_presets_router)
     api_router.include_router(databases_router)
     api_router.include_router(encode_ccres_router)
