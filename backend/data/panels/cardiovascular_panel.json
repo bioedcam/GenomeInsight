@@ -1,0 +1,328 @@
+{
+  "module": "cardiovascular",
+  "version": "1.0.0",
+  "description": "Curated cardiovascular gene panel for GenomeInsight (P3-19). Covers genes associated with familial hypercholesterolemia, cardiomyopathies, and channelopathies.",
+  "genes": [
+    {
+      "gene_symbol": "LDLR",
+      "name": "Low Density Lipoprotein Receptor",
+      "chromosome": "19",
+      "conditions": ["Familial Hypercholesterolemia"],
+      "cardiovascular_category": "familial_hypercholesterolemia",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28942078",
+        "rs28942079",
+        "rs28942080",
+        "rs121908025",
+        "rs121908026",
+        "rs121908027",
+        "rs121908028",
+        "rs121908029",
+        "rs121908030",
+        "rs121908031"
+      ],
+      "pmids": ["20301462", "29581339"],
+      "notes": "Most common cause of familial hypercholesterolemia. Over 2000 known variants. Autosomal dominant with high penetrance."
+    },
+    {
+      "gene_symbol": "PCSK9",
+      "name": "Proprotein Convertase Subtilisin/Kexin Type 9",
+      "chromosome": "1",
+      "conditions": ["Familial Hypercholesterolemia"],
+      "cardiovascular_category": "familial_hypercholesterolemia",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28362286",
+        "rs28362263",
+        "rs505151",
+        "rs11591147",
+        "rs67608943",
+        "rs28362261"
+      ],
+      "pmids": ["20301462", "26547463"],
+      "notes": "Gain-of-function variants cause hypercholesterolemia. Loss-of-function variants are cardioprotective. PCSK9 inhibitors are a major therapeutic class."
+    },
+    {
+      "gene_symbol": "APOB",
+      "name": "Apolipoprotein B",
+      "chromosome": "2",
+      "conditions": ["Familial Hypercholesterolemia", "Familial Defective Apolipoprotein B-100"],
+      "cardiovascular_category": "familial_hypercholesterolemia",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs5742904",
+        "rs144467873",
+        "rs13306206",
+        "rs12713559",
+        "rs1801696",
+        "rs1801695"
+      ],
+      "pmids": ["20301462", "27914672"],
+      "notes": "APOB p.Arg3527Gln (rs5742904) is the most common FDB mutation. Third most common cause of FH after LDLR and PCSK9."
+    },
+    {
+      "gene_symbol": "LPA",
+      "name": "Lipoprotein(a)",
+      "chromosome": "6",
+      "conditions": ["Elevated Lipoprotein(a)", "Coronary Artery Disease Risk"],
+      "cardiovascular_category": "lipid_metabolism",
+      "inheritance": "AD",
+      "evidence_level": 3,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs10455872",
+        "rs3798220",
+        "rs6415084",
+        "rs6907156",
+        "rs1652507"
+      ],
+      "pmids": ["20301582", "30580001"],
+      "notes": "Elevated Lp(a) is an independent cardiovascular risk factor. rs10455872 and rs3798220 are well-established risk alleles."
+    },
+    {
+      "gene_symbol": "ABCG5",
+      "name": "ATP Binding Cassette Subfamily G Member 5",
+      "chromosome": "2",
+      "conditions": ["Sitosterolemia"],
+      "cardiovascular_category": "lipid_metabolism",
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs119480069",
+        "rs119480070",
+        "rs119480071",
+        "rs137852988",
+        "rs137852989"
+      ],
+      "pmids": ["20301451", "27095798"],
+      "notes": "Sitosterolemia causes elevated plant sterol levels and premature atherosclerosis. Biallelic pathogenic variants required."
+    },
+    {
+      "gene_symbol": "ABCG8",
+      "name": "ATP Binding Cassette Subfamily G Member 8",
+      "chromosome": "2",
+      "conditions": ["Sitosterolemia"],
+      "cardiovascular_category": "lipid_metabolism",
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs137852990",
+        "rs137852991",
+        "rs137852992",
+        "rs137852993",
+        "rs137852994"
+      ],
+      "pmids": ["20301451", "27095798"],
+      "notes": "ABCG8 acts with ABCG5 as an obligate heterodimer for sterol excretion. Same disease as ABCG5."
+    },
+    {
+      "gene_symbol": "KCNQ1",
+      "name": "Potassium Voltage-Gated Channel Subfamily Q Member 1",
+      "chromosome": "11",
+      "conditions": ["Long QT Syndrome Type 1", "Short QT Syndrome", "Jervell and Lange-Nielsen Syndrome"],
+      "cardiovascular_category": "channelopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs120074175",
+        "rs120074176",
+        "rs120074177",
+        "rs120074178",
+        "rs120074179",
+        "rs120074180",
+        "rs199472709"
+      ],
+      "pmids": ["20301308", "29798782"],
+      "notes": "Most common cause of congenital long QT syndrome (LQT1). Homozygous variants cause Jervell and Lange-Nielsen syndrome (with deafness)."
+    },
+    {
+      "gene_symbol": "SCN5A",
+      "name": "Sodium Voltage-Gated Channel Alpha Subunit 5",
+      "chromosome": "3",
+      "conditions": ["Long QT Syndrome Type 3", "Brugada Syndrome", "Cardiac Conduction Disease"],
+      "cardiovascular_category": "channelopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28937318",
+        "rs28937319",
+        "rs28937320",
+        "rs137854604",
+        "rs137854605",
+        "rs137854606",
+        "rs199473048",
+        "rs199473049"
+      ],
+      "pmids": ["20301308", "29798782"],
+      "notes": "Associated with Long QT Syndrome Type 3, Brugada Syndrome, and progressive cardiac conduction disease. Diverse phenotypic spectrum."
+    },
+    {
+      "gene_symbol": "MYBPC3",
+      "name": "Myosin Binding Protein C3",
+      "chromosome": "11",
+      "conditions": ["Hypertrophic Cardiomyopathy"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121912485",
+        "rs121912486",
+        "rs121912487",
+        "rs121912488",
+        "rs121912489",
+        "rs200411226",
+        "rs397516083"
+      ],
+      "pmids": ["20301725", "29798782"],
+      "notes": "Most common cause of hypertrophic cardiomyopathy (HCM). Truncating variants predominate. Variable expressivity and age-dependent penetrance."
+    },
+    {
+      "gene_symbol": "MYH7",
+      "name": "Myosin Heavy Chain 7",
+      "chromosome": "14",
+      "conditions": ["Hypertrophic Cardiomyopathy", "Dilated Cardiomyopathy"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121913625",
+        "rs121913626",
+        "rs121913627",
+        "rs121913628",
+        "rs121913629",
+        "rs121913630"
+      ],
+      "pmids": ["20301725", "29798782"],
+      "notes": "Second most common cause of HCM. Missense variants in converter and mesa domains are hotspots."
+    },
+    {
+      "gene_symbol": "TNNT2",
+      "name": "Troponin T2, Cardiac Type",
+      "chromosome": "1",
+      "conditions": ["Hypertrophic Cardiomyopathy", "Dilated Cardiomyopathy"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121964855",
+        "rs121964856",
+        "rs121964857",
+        "rs121964858",
+        "rs121964860"
+      ],
+      "pmids": ["20301725", "11735260"],
+      "notes": "Associated with HCM and DCM. TNNT2 variants may cause severe HCM with minimal hypertrophy but high arrhythmia risk."
+    },
+    {
+      "gene_symbol": "LMNA",
+      "name": "Lamin A/C",
+      "chromosome": "1",
+      "conditions": ["Dilated Cardiomyopathy", "Emery-Dreifuss Muscular Dystrophy", "Cardiac Conduction Disease"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs57621804",
+        "rs267607602",
+        "rs267607603",
+        "rs267607604",
+        "rs267607605",
+        "rs267607606"
+      ],
+      "pmids": ["20301725", "29798782"],
+      "notes": "LMNA cardiomyopathy has high risk of sudden cardiac death. Early ICD implantation may be warranted. Conduction disease often precedes cardiomyopathy."
+    },
+    {
+      "gene_symbol": "DSP",
+      "name": "Desmoplakin",
+      "chromosome": "6",
+      "conditions": ["Arrhythmogenic Cardiomyopathy", "Dilated Cardiomyopathy"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121912653",
+        "rs121912654",
+        "rs397516862",
+        "rs397516863",
+        "rs397516864"
+      ],
+      "pmids": ["20301310", "29798782"],
+      "notes": "Desmoplakin variants cause arrhythmogenic cardiomyopathy (formerly ARVC). Left-dominant pattern is characteristic of DSP-related disease."
+    },
+    {
+      "gene_symbol": "PKP2",
+      "name": "Plakophilin 2",
+      "chromosome": "12",
+      "conditions": ["Arrhythmogenic Right Ventricular Cardiomyopathy"],
+      "cardiovascular_category": "cardiomyopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs200014290",
+        "rs397516095",
+        "rs397516096",
+        "rs397516097",
+        "rs397516098"
+      ],
+      "pmids": ["20301310", "29798782"],
+      "notes": "Most common cause of arrhythmogenic right ventricular cardiomyopathy (ARVC). Exercise restriction is recommended for variant carriers."
+    },
+    {
+      "gene_symbol": "KCNH2",
+      "name": "Potassium Voltage-Gated Channel Subfamily H Member 2",
+      "chromosome": "7",
+      "conditions": ["Long QT Syndrome Type 2", "Short QT Syndrome"],
+      "cardiovascular_category": "channelopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs104893758",
+        "rs104893759",
+        "rs104893760",
+        "rs104893761",
+        "rs104893762",
+        "rs104893763"
+      ],
+      "pmids": ["20301308", "29798782"],
+      "notes": "Second most common cause of Long QT Syndrome (LQT2). Auditory triggers for cardiac events are characteristic."
+    },
+    {
+      "gene_symbol": "RYR2",
+      "name": "Ryanodine Receptor 2",
+      "chromosome": "1",
+      "conditions": ["Catecholaminergic Polymorphic Ventricular Tachycardia"],
+      "cardiovascular_category": "channelopathy",
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121918577",
+        "rs121918578",
+        "rs121918579",
+        "rs121918580",
+        "rs121918581"
+      ],
+      "pmids": ["20301466", "29798782"],
+      "notes": "CPVT presents with exercise-induced ventricular arrhythmias. Beta-blocker therapy and exercise restriction are mainstays of management."
+    }
+  ]
+}
