@@ -89,7 +89,8 @@ def small_bundle() -> AncestryBundle:
 
 
 def _insert_raw_genotypes(
-    sample_engine: sa.Engine, genotypes: list[dict],
+    sample_engine: sa.Engine,
+    genotypes: list[dict],
 ) -> sa.Engine:
     """Insert raw variants for testing."""
     with sample_engine.begin() as conn:
@@ -98,7 +99,8 @@ def _insert_raw_genotypes(
 
 
 def _insert_annotated_genotypes(
-    sample_engine: sa.Engine, genotypes: list[dict],
+    sample_engine: sa.Engine,
+    genotypes: list[dict],
 ) -> sa.Engine:
     """Insert annotated variants for testing."""
     with sample_engine.begin() as conn:
@@ -239,7 +241,8 @@ class TestProjectOntoPCA:
         assert len(pc_scores) == 2
 
     def test_missing_snps_imputed_as_zero(
-        self, small_bundle: AncestryBundle,
+        self,
+        small_bundle: AncestryBundle,
     ) -> None:
         # Only rs1 present
         genotype_map = {"rs1": "AG"}
@@ -313,7 +316,9 @@ class TestInferAncestry:
     """Test full ancestry inference pipeline."""
 
     def test_infer_with_full_coverage(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         assert result.snps_used == 4
@@ -323,13 +328,17 @@ class TestInferAncestry:
         assert result.top_population in ("AFR", "EUR", "EAS")
 
     def test_infer_returns_pc_scores(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         assert len(result.pc_scores) == 2
 
     def test_infer_returns_population_distances(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         assert "AFR" in result.population_distances
@@ -337,7 +346,9 @@ class TestInferAncestry:
         assert "EAS" in result.population_distances
 
     def test_insufficient_coverage(
-        self, small_bundle: AncestryBundle, partial_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        partial_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, partial_sample)
         assert result.snps_used == 1
@@ -345,32 +356,48 @@ class TestInferAncestry:
         assert result.is_sufficient is False
 
     def test_empty_sample(
-        self, small_bundle: AncestryBundle, sample_engine: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        sample_engine: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, sample_engine)
         assert result.snps_used == 0
         assert result.is_sufficient is False
 
     def test_uses_annotated_variants_when_available(
-        self, small_bundle: AncestryBundle, sample_engine: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        sample_engine: sa.Engine,
     ) -> None:
         """When annotated_variants has data, use it instead of raw_variants."""
         genotypes = [
             {
-                "rsid": "rs1", "chrom": "1", "pos": 100,
-                "genotype": "GG", "annotation_coverage": 1,
+                "rsid": "rs1",
+                "chrom": "1",
+                "pos": 100,
+                "genotype": "GG",
+                "annotation_coverage": 1,
             },
             {
-                "rsid": "rs2", "chrom": "2", "pos": 200,
-                "genotype": "TT", "annotation_coverage": 1,
+                "rsid": "rs2",
+                "chrom": "2",
+                "pos": 200,
+                "genotype": "TT",
+                "annotation_coverage": 1,
             },
             {
-                "rsid": "rs3", "chrom": "3", "pos": 300,
-                "genotype": "AA", "annotation_coverage": 1,
+                "rsid": "rs3",
+                "chrom": "3",
+                "pos": 300,
+                "genotype": "AA",
+                "annotation_coverage": 1,
             },
             {
-                "rsid": "rs4", "chrom": "4", "pos": 400,
-                "genotype": "CC", "annotation_coverage": 1,
+                "rsid": "rs4",
+                "chrom": "4",
+                "pos": 400,
+                "genotype": "CC",
+                "annotation_coverage": 1,
             },
         ]
         _insert_annotated_genotypes(sample_engine, genotypes)
@@ -378,14 +405,15 @@ class TestInferAncestry:
         assert result.snps_used == 4
 
     def test_projection_under_1_second(
-        self, bundle: AncestryBundle, sample_engine: sa.Engine,
+        self,
+        bundle: AncestryBundle,
+        sample_engine: sa.Engine,
     ) -> None:
         """Performance: PCA projection should complete in < 1 second."""
         # Insert some raw variants that match bundle SNPs
         bundle_snps = list(bundle.snps)[:50]
         genotypes = [
-            {"rsid": s.rsid, "chrom": s.chrom, "pos": s.pos, "genotype": "AG"}
-            for s in bundle_snps
+            {"rsid": s.rsid, "chrom": s.chrom, "pos": s.pos, "genotype": "AG"} for s in bundle_snps
         ]
         if genotypes:
             _insert_raw_genotypes(sample_engine, genotypes)
@@ -403,7 +431,9 @@ class TestEURClassification:
     """T3-25: PCA projection places known EUR-ancestry sample in EUR cluster."""
 
     def test_eur_sample_classified_as_eur_or_nearest(
-        self, bundle: AncestryBundle, sample_engine: sa.Engine,
+        self,
+        bundle: AncestryBundle,
+        sample_engine: sa.Engine,
     ) -> None:
         """With realistic bundle, a EUR-like genotype pattern should classify
         near EUR. We insert genotypes that are homozygous ref for most AIMs
@@ -426,9 +456,9 @@ class TestEURClassification:
         assert result.is_sufficient
         assert result.snps_used == bundle.snp_count
         # The top population should be one of the known populations
-        assert (
-            result.top_population in bundle.populations
-        ), f"Top population {result.top_population} not in known populations"
+        assert result.top_population in bundle.populations, (
+            f"Top population {result.top_population} not in known populations"
+        )
 
 
 # ── Findings storage tests ───────────────────────────────────────────────
@@ -438,14 +468,18 @@ class TestStoreAncestryFindings:
     """Test ancestry findings storage in the sample database."""
 
     def test_stores_single_finding(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         count = store_ancestry_findings(result, eur_sample)
         assert count == 1
 
     def test_finding_has_module_ancestry(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -459,7 +493,9 @@ class TestStoreAncestryFindings:
         assert rows[0].category == "pca_projection"
 
     def test_detail_json_has_top_population(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -473,7 +509,9 @@ class TestStoreAncestryFindings:
         assert detail["top_population"] == result.top_population
 
     def test_detail_json_has_pc_scores(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -487,7 +525,9 @@ class TestStoreAncestryFindings:
         assert len(detail["pc_scores"]) == 2
 
     def test_detail_json_has_inferred_ancestry(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         """Verify detail_json has 'inferred_ancestry' for prs.get_inferred_ancestry()."""
         result = infer_ancestry(small_bundle, eur_sample)
@@ -502,7 +542,9 @@ class TestStoreAncestryFindings:
         assert detail["inferred_ancestry"] == result.top_population
 
     def test_clears_previous_findings_on_rerun(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -517,14 +559,18 @@ class TestStoreAncestryFindings:
         assert count == 1  # Not 2
 
     def test_insufficient_coverage_stores_nothing(
-        self, small_bundle: AncestryBundle, partial_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        partial_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, partial_sample)
         count = store_ancestry_findings(result, partial_sample)
         assert count == 0
 
     def test_evidence_level_2(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -536,7 +582,9 @@ class TestStoreAncestryFindings:
         assert row.evidence_level == 2
 
     def test_finding_text_contains_population(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         result = infer_ancestry(small_bundle, eur_sample)
         store_ancestry_findings(result, eur_sample)
@@ -555,7 +603,9 @@ class TestPRSIntegration:
     """Test that ancestry findings are readable by prs.get_inferred_ancestry()."""
 
     def test_get_inferred_ancestry_reads_finding(
-        self, small_bundle: AncestryBundle, eur_sample: sa.Engine,
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
     ) -> None:
         from backend.analysis.prs import get_inferred_ancestry
 

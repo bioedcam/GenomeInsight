@@ -107,9 +107,7 @@ def get_ancestry_findings(
         top_population=detail.get("top_population", ""),
         pc_scores=detail.get("pc_scores", []),
         population_distances=detail.get("population_distances", {}),
-        population_ranking=[
-            PopulationDistance(**p) for p in detail.get("population_ranking", [])
-        ],
+        population_ranking=[PopulationDistance(**p) for p in detail.get("population_ranking", [])],
         snps_used=detail.get("snps_used", 0),
         snps_total=detail.get("snps_total", 0),
         coverage_fraction=detail.get("coverage_fraction", 0.0),
