@@ -75,7 +75,7 @@ export default function APOEGenotypeCard({ genotype }: APOEGenotypeCardProps) {
                   data-testid="apoe-e4-indicator"
                 >
                   {genotype.has_e4
-                    ? `ε4 present (${genotype.e4_count} ${genotype.e4_count === 1 ? "copy" : "copies"})`
+                    ? `ε4 present (${genotype.e4_count ?? 0} ${genotype.e4_count === 1 ? "copy" : "copies"})`
                     : "No ε4 alleles"
                   }
                 </span>
@@ -84,7 +84,7 @@ export default function APOEGenotypeCard({ genotype }: APOEGenotypeCardProps) {
                     className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 px-2.5 py-0.5 font-medium"
                     data-testid="apoe-e2-indicator"
                   >
-                    ε2 present ({genotype.e2_count} {genotype.e2_count === 1 ? "copy" : "copies"})
+                    ε2 present ({genotype.e2_count ?? 0} {genotype.e2_count === 1 ? "copy" : "copies"})
                   </span>
                 )}
               </div>

@@ -119,11 +119,14 @@ export default function APOEFindingCard({ finding }: APOEFindingCardProps) {
             <div className="mb-3">
               <span className="text-xs text-muted-foreground">Risk level: </span>
               <span className={cn(
-                "text-xs font-medium",
+                "text-xs font-medium text-foreground",
                 String(finding.detail_json.risk_level).includes("elevated") && "text-amber-600 dark:text-amber-400",
                 String(finding.detail_json.risk_level).includes("markedly") && "text-red-600 dark:text-red-400",
+                String(finding.detail_json.risk_level).includes("enhanced") && "text-amber-600 dark:text-amber-400",
                 String(finding.detail_json.risk_level).includes("reference") && "text-green-600 dark:text-green-400",
+                String(finding.detail_json.risk_level).includes("typical") && "text-green-600 dark:text-green-400",
                 String(finding.detail_json.risk_level).includes("reduced") && "text-blue-600 dark:text-blue-400",
+                String(finding.detail_json.risk_level).includes("atypical") && "text-violet-600 dark:text-violet-400",
               )}>
                 {String(finding.detail_json.risk_level)}
               </span>

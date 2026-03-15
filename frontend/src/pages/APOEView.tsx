@@ -58,7 +58,11 @@ export default function APOEView() {
   const hasError = genotypeQuery.isError || gateStatusQuery.isError
 
   const handleAccept = () => {
-    acknowledgeMutation.mutate(sampleId)
+    acknowledgeMutation.mutate(sampleId, {
+      onError: (error) => {
+        console.error("Failed to acknowledge APOE gate:", error)
+      },
+    })
   }
 
   const handleDecline = () => {
@@ -182,6 +186,33 @@ export default function APOEView() {
               {disclaimerQuery.isLoading && (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+
+              {disclaimerQuery.isError && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium text-destructive">Failed to load disclaimer</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {disclaimerQuery.error instanceof Error
+                          ? disclaimerQuery.error.message
+                          : "An unexpected error occurred."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {acknowledgeMutation.isError && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 mt-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                    <p className="text-sm text-destructive">
+                      Failed to acknowledge gate. Please try again.
+                    </p>
+                  </div>
                 </div>
               )}
             </section>
