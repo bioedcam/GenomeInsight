@@ -2,7 +2,7 @@
 
 All disclaimer, gate, and carrier status text lives here.
 Referenced by the setup wizard (global disclaimer) and analysis modules
-(APOE gate, carrier status).
+(APOE gate, carrier status, cancer).
 """
 
 # ── Global first-launch disclaimer ────────────────────────────────────
@@ -120,4 +120,47 @@ detect all known variants in these genes.
 reproductive planning.
 - Consult a genetic counselor for personalized interpretation of these \
 results.\
+"""
+
+# ── Cancer module disclaimer ─────────────────────────────────────────
+
+CANCER_DISCLAIMER_TITLE = "About Cancer Predisposition Results"
+
+CANCER_DISCLAIMER_TEXT = """\
+This section reports genetic variants associated with hereditary cancer \
+predisposition syndromes. These results are based on a curated panel of \
+28 genes with established links to cancer risk.
+
+**Please understand the following before reviewing:**
+
+1. **Predisposition is not diagnosis.** Carrying a pathogenic variant in \
+a cancer predisposition gene means you may have an increased lifetime \
+risk for certain cancers. It does NOT mean you have cancer or will \
+develop cancer. Many carriers never develop the associated condition.
+
+2. **Absence of findings does not mean absence of risk.** Consumer \
+genotyping chips test only a small fraction of known variants in these \
+genes. A negative result here does NOT rule out hereditary cancer risk. \
+Clinical-grade genetic testing (full gene sequencing and deletion/ \
+duplication analysis) is required for comprehensive assessment.
+
+3. **Polygenic Risk Scores are research-grade.** The PRS results in this \
+module are derived from published GWAS data and are presented for \
+educational purposes only. They reflect statistical associations across \
+populations and may not accurately predict individual risk. PRS results \
+should never be used to make clinical decisions.
+
+4. **Variant classification evolves.** ClinVar classifications can change \
+as new evidence emerges. A variant classified as pathogenic today may be \
+reclassified, and variants not flagged now may be flagged in the future.
+
+5. **Professional guidance is essential.** If you have a pathogenic or \
+likely pathogenic finding in this module, consult a certified genetic \
+counselor or medical geneticist for proper risk assessment, management \
+recommendations, and discussion of implications for family members.
+
+**Resources:**
+- National Cancer Institute Genetics: https://www.cancer.gov/about-cancer/causes-prevention/genetics
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/
+- FORCE (Facing Our Risk of Cancer Empowered): https://www.facingourrisk.org/\
 """

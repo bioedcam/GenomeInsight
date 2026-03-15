@@ -25,6 +25,8 @@ from backend.config import Settings
 from backend.db.connection import reset_registry
 from backend.db.tables import reference_metadata
 from backend.disclaimers import (
+    CANCER_DISCLAIMER_TEXT,
+    CANCER_DISCLAIMER_TITLE,
     GLOBAL_DISCLAIMER_ACCEPT_LABEL,
     GLOBAL_DISCLAIMER_TEXT,
     GLOBAL_DISCLAIMER_TITLE,
@@ -241,6 +243,30 @@ class TestDisclaimersModule:
 
     def test_accept_label_not_empty(self) -> None:
         assert len(GLOBAL_DISCLAIMER_ACCEPT_LABEL) > 0
+
+    def test_cancer_disclaimer_mentions_key_topics(self) -> None:
+        """Cancer disclaimer should cover essential cancer-specific topics (P3-17)."""
+        text = CANCER_DISCLAIMER_TEXT.lower()
+        assert "predisposition" in text
+        assert "genetic counselor" in text or "medical geneticist" in text
+        assert "polygenic risk" in text or "prs" in text
+        assert "clinical" in text
+        assert "cancer" in text
+
+    def test_cancer_disclaimer_title_not_empty(self) -> None:
+        """Cancer disclaimer title should be non-empty (P3-17)."""
+        assert len(CANCER_DISCLAIMER_TITLE) > 0
+
+    def test_cancer_disclaimer_substantial_length(self) -> None:
+        """Cancer disclaimer should be substantial (P3-17)."""
+        assert len(CANCER_DISCLAIMER_TEXT) > 500
+
+    def test_cancer_disclaimer_includes_resources(self) -> None:
+        """Cancer disclaimer should include professional resource links (P3-17)."""
+        text = CANCER_DISCLAIMER_TEXT
+        assert "cancer.gov" in text
+        assert "nsgc.org" in text or "findageneticcounselor" in text
+        assert "facingourrisk.org" in text
 
 
 # ═══════════════════════════════════════════════════════════════════════

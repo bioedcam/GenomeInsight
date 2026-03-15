@@ -1,9 +1,11 @@
-"""Cancer predisposition findings API (P3-13, P3-15).
+"""Cancer predisposition findings API (P3-13, P3-15, P3-17).
 
 ClinVar P/LP extraction results from the 28-gene cancer panel — monogenic
 pathogenic variants with accession, review stars, syndrome, and inheritance.
 Cancer PRS (breast, prostate, colorectal, melanoma) with bootstrap CI gauges.
+Module-specific disclaimer text (P3-17).
 
+GET  /api/analysis/cancer/disclaimer                         — Cancer module disclaimer
 GET  /api/analysis/cancer/variants?sample_id=N               — All cancer P/LP findings
 GET  /api/analysis/cancer/gene/{gene_symbol}?sample_id=N     — Findings for a single gene
 GET  /api/analysis/cancer/prs?sample_id=N                    — Cancer PRS results
@@ -22,6 +24,7 @@ from pydantic import BaseModel
 
 from backend.db.connection import get_registry
 from backend.db.tables import findings, samples
+from backend.disclaimers import CANCER_DISCLAIMER_TEXT, CANCER_DISCLAIMER_TITLE
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +91,13 @@ class CancerPRSListResponse(BaseModel):
     total: int
     sufficient_count: int
     insufficient_traits: list[str]
+
+
+class CancerDisclaimerResponse(BaseModel):
+    """Cancer module disclaimer text (P3-17)."""
+
+    title: str
+    text: str
 
 
 class CancerRunResponse(BaseModel):
@@ -184,6 +194,21 @@ def _findings_to_response(
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
+
+
+@router.get("/disclaimer")
+def get_cancer_disclaimer() -> CancerDisclaimerResponse:
+    """Return cancer module disclaimer text (P3-17).
+
+    Module-specific disclaimer for the cancer predisposition section,
+    covering monogenic findings and PRS limitations.
+
+    Example: ``GET /api/analysis/cancer/disclaimer``
+    """
+    return CancerDisclaimerResponse(
+        title=CANCER_DISCLAIMER_TITLE,
+        text=CANCER_DISCLAIMER_TEXT,
+    )
 
 
 @router.get("/variants")
