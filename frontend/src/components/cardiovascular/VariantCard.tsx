@@ -7,6 +7,11 @@
 import { cn } from "@/lib/utils"
 import type { CardiovascularVariant } from "@/types/cardiovascular"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import {
+  INHERITANCE_LABELS,
+  CATEGORY_CONFIG,
+  DEFAULT_CATEGORY,
+} from "@/constants/cardiovascular"
 
 interface VariantCardProps {
   variant: CardiovascularVariant
@@ -36,39 +41,6 @@ const DEFAULT_CONFIG = {
   color: "text-muted-foreground",
   bg: "bg-card",
   border: "border-border",
-  badge: "bg-muted text-muted-foreground",
-}
-
-const INHERITANCE_LABELS: Record<string, string> = {
-  AD: "Autosomal Dominant",
-  AR: "Autosomal Recessive",
-  XL: "X-linked",
-  XLD: "X-linked Dominant",
-  XLR: "X-linked Recessive",
-  MT: "Mitochondrial",
-}
-
-const CATEGORY_CONFIG: Record<string, { label: string; badge: string }> = {
-  FH: {
-    label: "Familial Hypercholesterolemia",
-    badge: "bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300",
-  },
-  Lipid: {
-    label: "Lipid Metabolism",
-    badge: "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300",
-  },
-  Channelopathy: {
-    label: "Channelopathy",
-    badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300",
-  },
-  Cardiomyopathy: {
-    label: "Cardiomyopathy",
-    badge: "bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300",
-  },
-}
-
-const DEFAULT_CATEGORY = {
-  label: "Cardiovascular",
   badge: "bg-muted text-muted-foreground",
 }
 

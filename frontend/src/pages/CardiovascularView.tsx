@@ -162,10 +162,16 @@ export default function CardiovascularView() {
                     variant={variant}
                     onClick={() =>
                       setSelectedVariant(
-                        selectedVariant?.rsid === variant.rsid ? null : variant,
+                        selectedVariant?.rsid === variant.rsid &&
+                          selectedVariant?.gene_symbol === variant.gene_symbol
+                          ? null
+                          : variant,
                       )
                     }
-                    selected={selectedVariant?.rsid === variant.rsid}
+                    selected={
+                      selectedVariant?.rsid === variant.rsid &&
+                      selectedVariant?.gene_symbol === variant.gene_symbol
+                    }
                   />
                 ))}
               </div>

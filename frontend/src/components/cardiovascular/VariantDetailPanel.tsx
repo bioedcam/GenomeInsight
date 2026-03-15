@@ -8,26 +8,11 @@ import { cn } from "@/lib/utils"
 import type { CardiovascularVariant } from "@/types/cardiovascular"
 import EvidenceStars from "@/components/ui/EvidenceStars"
 import { X, ExternalLink } from "lucide-react"
+import { INHERITANCE_LABELS, CATEGORY_LABELS } from "@/constants/cardiovascular"
 
 interface VariantDetailPanelProps {
   variant: CardiovascularVariant
   onClose: () => void
-}
-
-const INHERITANCE_LABELS: Record<string, string> = {
-  AD: "Autosomal Dominant",
-  AR: "Autosomal Recessive",
-  XL: "X-linked",
-  XLD: "X-linked Dominant",
-  XLR: "X-linked Recessive",
-  MT: "Mitochondrial",
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  FH: "Familial Hypercholesterolemia",
-  Lipid: "Lipid Metabolism",
-  Channelopathy: "Channelopathy",
-  Cardiomyopathy: "Cardiomyopathy",
 }
 
 export default function VariantDetailPanel({
