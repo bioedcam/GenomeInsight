@@ -380,9 +380,7 @@ class TestAPOEFindingStorage:
         assert count == 1
 
         with sample_engine.connect() as conn:
-            rows = conn.execute(
-                sa.select(findings).where(findings.c.module == "apoe")
-            ).fetchall()
+            rows = conn.execute(sa.select(findings).where(findings.c.module == "apoe")).fetchall()
 
         assert len(rows) == 1
         row = rows[0]
@@ -409,9 +407,7 @@ class TestAPOEFindingStorage:
         store_apoe_finding(result, sample_engine)
 
         with sample_engine.connect() as conn:
-            row = conn.execute(
-                sa.select(findings).where(findings.c.module == "apoe")
-            ).fetchone()
+            row = conn.execute(sa.select(findings).where(findings.c.module == "apoe")).fetchone()
 
         assert row is not None
         assert "ε4" not in row.finding_text
@@ -424,9 +420,7 @@ class TestAPOEFindingStorage:
         store_apoe_finding(result, sample_engine)
 
         with sample_engine.connect() as conn:
-            row = conn.execute(
-                sa.select(findings).where(findings.c.module == "apoe")
-            ).fetchone()
+            row = conn.execute(sa.select(findings).where(findings.c.module == "apoe")).fetchone()
 
         assert row is not None
         assert "2× ε4" in row.finding_text
@@ -441,7 +435,9 @@ class TestAPOEFindingStorage:
 
         with sample_engine.connect() as conn:
             count = conn.execute(
-                sa.select(sa.func.count()).select_from(findings).where(
+                sa.select(sa.func.count())
+                .select_from(findings)
+                .where(
                     findings.c.module == "apoe",
                     findings.c.category == "genotype",
                 )
@@ -458,9 +454,7 @@ class TestAPOEFindingStorage:
 
         with sample_engine.connect() as conn:
             count = conn.execute(
-                sa.select(sa.func.count()).select_from(findings).where(
-                    findings.c.module == "apoe"
-                )
+                sa.select(sa.func.count()).select_from(findings).where(findings.c.module == "apoe")
             ).scalar()
 
         assert count == 0
@@ -481,9 +475,7 @@ class TestAPOEFindingStorage:
 
         with sample_engine.connect() as conn:
             count = conn.execute(
-                sa.select(sa.func.count()).select_from(findings).where(
-                    findings.c.module == "apoe"
-                )
+                sa.select(sa.func.count()).select_from(findings).where(findings.c.module == "apoe")
             ).scalar()
 
         assert count == 0
@@ -514,9 +506,7 @@ class TestAPOEFindingStorage:
                 .where(findings.c.module == "cardiovascular")
             ).scalar()
             apoe_count = conn.execute(
-                sa.select(sa.func.count())
-                .select_from(findings)
-                .where(findings.c.module == "apoe")
+                sa.select(sa.func.count()).select_from(findings).where(findings.c.module == "apoe")
             ).scalar()
 
         assert cv_count == 1
