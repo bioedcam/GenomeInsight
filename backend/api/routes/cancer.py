@@ -43,7 +43,7 @@ class CancerVariantResponse(BaseModel):
     syndromes: list[str] = []
     cancer_types: list[str] = []
     inheritance: str = "AD"
-    evidence_level: int = 4
+    evidence_level: int = 1
     cross_links: list[str] = []
     pmids: list[str] = []
 
@@ -53,7 +53,6 @@ class CancerVariantsListResponse(BaseModel):
 
     items: list[CancerVariantResponse]
     total: int
-    panel_genes_checked: int = 0
 
 
 class CancerRunResponse(BaseModel):
