@@ -560,6 +560,8 @@ def store_prs_findings(
 
         detail = {
             "trait": r.trait,
+            "name": r.weight_set_name,
+            "is_sufficient": r.is_sufficient,
             "source_ancestry": r.source_ancestry,
             "source_study": r.source_study,
             "source_pmid": r.source_pmid,

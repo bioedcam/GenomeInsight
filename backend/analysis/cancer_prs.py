@@ -121,31 +121,38 @@ def load_cancer_prs_weights(
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
-    weight_sets: list[PRSWeightSet] = []
-    for ws_data in data["weight_sets"]:
-        weights = [
-            PRSSNPWeight(
-                rsid=w["rsid"],
-                effect_allele=w["effect_allele"],
-                weight=w["weight"],
-            )
-            for w in ws_data["weights"]
-        ]
+    if "weight_sets" not in data:
+        raise ValueError(f"Invalid cancer PRS weights file: missing 'weight_sets' key in {path}")
 
-        weight_sets.append(
-            PRSWeightSet(
-                name=ws_data["name"],
-                trait=ws_data["trait"],
-                module="cancer",
-                source_ancestry=ws_data["source_ancestry"],
-                source_study=ws_data["source_study"],
-                source_pmid=ws_data["source_pmid"],
-                sample_size=ws_data["sample_size"],
-                weights=weights,
-                reference_mean=ws_data["reference_mean"],
-                reference_std=ws_data["reference_std"],
+    weight_sets: list[PRSWeightSet] = []
+    for idx, ws_data in enumerate(data["weight_sets"]):
+        try:
+            weights = [
+                PRSSNPWeight(
+                    rsid=w["rsid"],
+                    effect_allele=w["effect_allele"],
+                    weight=w["weight"],
+                )
+                for w in ws_data["weights"]
+            ]
+
+            weight_sets.append(
+                PRSWeightSet(
+                    name=ws_data["name"],
+                    trait=ws_data["trait"],
+                    module="cancer",
+                    source_ancestry=ws_data["source_ancestry"],
+                    source_study=ws_data["source_study"],
+                    source_pmid=ws_data["source_pmid"],
+                    sample_size=ws_data["sample_size"],
+                    weights=weights,
+                    reference_mean=ws_data["reference_mean"],
+                    reference_std=ws_data["reference_std"],
+                )
             )
-        )
+        except KeyError as e:
+            name = ws_data.get("name", f"index {idx}")
+            raise ValueError(f"Missing required field {e} in weight set '{name}'") from e
 
     logger.info(
         "cancer_prs_weights_loaded",

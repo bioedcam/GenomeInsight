@@ -255,7 +255,7 @@ def list_cancer_prs(
         items.append(
             CancerPRSResponse(
                 trait=detail.get("trait", ""),
-                name=row.finding_text.split(":")[0] if row.finding_text else "",
+                name=detail.get("name", ""),
                 percentile=row.prs_percentile,
                 z_score=detail.get("z_score"),
                 bootstrap_ci_lower=detail.get("bootstrap_ci_lower"),
@@ -264,7 +264,7 @@ def list_cancer_prs(
                 snps_used=detail.get("snps_used", 0),
                 snps_total=detail.get("snps_total", 0),
                 coverage_fraction=detail.get("coverage_fraction", 0.0),
-                is_sufficient=detail.get("coverage_fraction", 0.0) >= 0.5,
+                is_sufficient=detail.get("is_sufficient", False),
                 source_ancestry=detail.get("source_ancestry", "EUR"),
                 source_study=detail.get("source_study", ""),
                 source_pmid=detail.get("source_pmid", ""),

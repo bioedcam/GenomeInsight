@@ -253,6 +253,22 @@ class TestRunCancerPRS:
         for r in result.results:
             assert r.ancestry_mismatch is False
 
+    def test_partial_coverage_mostly_insufficient(
+        self, cancer_weight_sets: list[PRSWeightSet], sample_partial_coverage: sa.Engine
+    ) -> None:
+        """Only 2 SNPs present — all 4 traits should be insufficient (<50% coverage)."""
+        result = run_cancer_prs(
+            cancer_weight_sets,
+            sample_partial_coverage,
+            n_bootstrap=100,
+            rng_seed=42,
+        )
+        # 2 SNPs out of 15-25 per trait is well below 50%
+        assert result.sufficient_count == 0
+        assert len(result.insufficient_traits) == 4
+        for r in result.results:
+            assert r.is_sufficient is False
+
     def test_empty_sample_all_insufficient(
         self, cancer_weight_sets: list[PRSWeightSet], sample_engine: sa.Engine
     ) -> None:
