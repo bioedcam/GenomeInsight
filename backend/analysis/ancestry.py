@@ -187,14 +187,10 @@ def load_ancestry_bundle(bundle_path: Path | None = None) -> AncestryBundle:
     # Parse loadings: shape (n_components, n_snps)
     loadings_raw = data["loadings"]
     if len(loadings_raw) != n_components:
-        raise ValueError(
-            f"Expected {n_components} loading vectors, got {len(loadings_raw)}"
-        )
+        raise ValueError(f"Expected {n_components} loading vectors, got {len(loadings_raw)}")
     for i, row in enumerate(loadings_raw):
         if len(row) != n_snps:
-            raise ValueError(
-                f"Loading vector {i} has {len(row)} values, expected {n_snps}"
-            )
+            raise ValueError(f"Loading vector {i} has {len(row)} values, expected {n_snps}")
     loadings = np.array(loadings_raw, dtype=np.float64)
 
     # Parse reference centroids
@@ -397,9 +393,7 @@ def infer_ancestry(
     projection_ms = (time.perf_counter() - t0) * 1000.0
 
     # Classify
-    top_pop, distances = _classify_nearest_centroid(
-        pc_scores, bundle.reference_centroids
-    )
+    top_pop, distances = _classify_nearest_centroid(pc_scores, bundle.reference_centroids)
 
     coverage = snps_used / bundle.snp_count if bundle.snp_count > 0 else 0.0
     is_sufficient = coverage >= _MIN_COVERAGE
@@ -458,9 +452,7 @@ def store_ancestry_findings(
         return 0
 
     # Sort populations by distance (ascending) for display
-    sorted_pops = sorted(
-        result.population_distances.items(), key=lambda x: x[1]
-    )
+    sorted_pops = sorted(result.population_distances.items(), key=lambda x: x[1])
 
     finding_text = (
         f"Inferred ancestry: {result.top_population} "
@@ -473,9 +465,7 @@ def store_ancestry_findings(
         "inferred_ancestry": result.top_population,
         "pc_scores": result.pc_scores,
         "population_distances": result.population_distances,
-        "population_ranking": [
-            {"population": pop, "distance": dist} for pop, dist in sorted_pops
-        ],
+        "population_ranking": [{"population": pop, "distance": dist} for pop, dist in sorted_pops],
         "snps_used": result.snps_used,
         "snps_total": result.snps_total,
         "coverage_fraction": result.coverage_fraction,
