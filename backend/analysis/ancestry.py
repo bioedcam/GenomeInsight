@@ -320,6 +320,9 @@ def _classify_nearest_centroid(
     Returns:
         Tuple of (top_population code, distances dict).
     """
+    if not centroids:
+        raise ValueError("No population centroids provided for classification")
+
     distances: dict[str, float] = {}
     best_pop = ""
     best_dist = float("inf")
@@ -368,9 +371,10 @@ def infer_ancestry(
                 sa.select(sa.func.count()).select_from(annotated_variants)
             ).scalar()
         except sa.exc.OperationalError:
+            logger.debug("annotated_variants_not_available", msg="Using raw_variants fallback")
             count = 0
 
-        if count and count > 0:
+        if count > 0:
             stmt = sa.select(
                 annotated_variants.c.rsid,
                 annotated_variants.c.genotype,

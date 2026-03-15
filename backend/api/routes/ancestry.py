@@ -77,7 +77,7 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
 
 
 @router.get("/findings")
-async def get_ancestry_findings(
+def get_ancestry_findings(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> AncestryFindingResponse | None:
     """Get ancestry inference results for a sample.
@@ -121,7 +121,7 @@ async def get_ancestry_findings(
 
 
 @router.post("/run")
-async def run_ancestry(
+def run_ancestry(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> AncestryRunResponse:
     """Run ancestry inference for a sample.
