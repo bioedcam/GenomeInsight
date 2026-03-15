@@ -249,7 +249,7 @@ class TestDisclaimersModule:
         text = CANCER_DISCLAIMER_TEXT.lower()
         assert "predisposition" in text
         assert "genetic counselor" in text or "medical geneticist" in text
-        assert "polygenic risk" in text or "prs" in text.lower()
+        assert "polygenic risk" in text or "prs" in text
         assert "clinical" in text
         assert "cancer" in text
 
