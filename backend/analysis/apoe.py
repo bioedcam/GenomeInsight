@@ -88,18 +88,12 @@ _DIPLOTYPE_TABLE: dict[tuple[str, str], tuple[APOEAllele, APOEAllele]] = {
     # rs429358=CT (one Cys112, one Arg112) × rs7412 options
     ("CT", "CT"): (APOEAllele.E2, APOEAllele.E4),  # ε2/ε4
     ("CT", "CC"): (APOEAllele.E3, APOEAllele.E4),  # ε3/ε4
-    ("CT", "TT"): (APOEAllele.E2, APOEAllele.E2),  # ε2/ε2 (alt phasing not possible, see note)
     # rs429358=CC (both Arg112) × rs7412 options
     ("CC", "CC"): (APOEAllele.E4, APOEAllele.E4),  # ε4/ε4
-    ("CC", "CT"): (APOEAllele.E4, APOEAllele.E4),  # impossible without ε1, treat as ε4/ε4
-    ("CC", "TT"): (APOEAllele.E4, APOEAllele.E4),  # impossible without ε1, treat as ε4/ε4
+    # NOTE: CT/TT, CC/CT, CC/TT are biologically impossible without the
+    # extremely rare ε1 allele. They are intentionally omitted so that a
+    # lookup miss falls through to AMBIGUOUS status.
 }
-
-# Note on CT/TT: rs429358=CT means one ε2-or-ε3 + one ε4 chromosome.
-# rs7412=TT means both have T at 158 → both ε2. But the ε4 allele
-# requires C at 158. This combination is biologically contradictory
-# without invoking the extremely rare ε1 allele (C at 112, T at 158).
-# We handle it defensively but it should essentially never occur.
 
 
 class APOEStatus(StrEnum):

@@ -176,6 +176,36 @@ class TestAPOEDiplotypes:
         assert result.e2_count == 1
 
 
+# ── Biologically impossible combinations ──────────────────────────────────
+
+
+class TestAPOEAmbiguousCases:
+    """Test biologically impossible genotype combinations return AMBIGUOUS."""
+
+    @pytest.mark.parametrize(
+        ("rs429358_gt", "rs7412_gt"),
+        [
+            ("CT", "TT"),  # Would require ε1 allele
+            ("CC", "CT"),  # Would require ε1 allele
+            ("CC", "TT"),  # Would require ε1 allele
+        ],
+        ids=["CT/TT", "CC/CT", "CC/TT"],
+    )
+    def test_impossible_combinations_return_ambiguous(
+        self,
+        sample_engine: sa.Engine,
+        rs429358_gt: str,
+        rs7412_gt: str,
+    ) -> None:
+        """Biologically impossible combinations should be AMBIGUOUS."""
+        _seed_apoe_variants(sample_engine, rs429358_gt, rs7412_gt)
+        result = determine_apoe_genotype(sample_engine)
+
+        assert not result.is_determined
+        assert result.status == APOEStatus.AMBIGUOUS
+        assert result.diplotype is None
+
+
 # ── Genotype ordering ────────────────────────────────────────────────────
 
 
