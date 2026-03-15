@@ -161,27 +161,19 @@ def sample_with_prs_snps_no_ancestry(sample_no_ancestry: sa.Engine) -> sa.Engine
 class TestGetInferredAncestry:
     """Test retrieval of inferred ancestry from sample DB."""
 
-    def test_returns_eur_when_present(
-        self, sample_with_ancestry_eur: sa.Engine
-    ) -> None:
+    def test_returns_eur_when_present(self, sample_with_ancestry_eur: sa.Engine) -> None:
         result = get_inferred_ancestry(sample_with_ancestry_eur)
         assert result == "EUR"
 
-    def test_returns_afr_when_present(
-        self, sample_with_ancestry_afr: sa.Engine
-    ) -> None:
+    def test_returns_afr_when_present(self, sample_with_ancestry_afr: sa.Engine) -> None:
         result = get_inferred_ancestry(sample_with_ancestry_afr)
         assert result == "AFR"
 
-    def test_returns_none_when_no_ancestry(
-        self, sample_no_ancestry: sa.Engine
-    ) -> None:
+    def test_returns_none_when_no_ancestry(self, sample_no_ancestry: sa.Engine) -> None:
         result = get_inferred_ancestry(sample_no_ancestry)
         assert result is None
 
-    def test_returns_none_for_empty_detail_json(
-        self, sample_engine: sa.Engine
-    ) -> None:
+    def test_returns_none_for_empty_detail_json(self, sample_engine: sa.Engine) -> None:
         """If detail_json is empty or missing, should return None."""
         with sample_engine.begin() as conn:
             conn.execute(
@@ -199,9 +191,7 @@ class TestGetInferredAncestry:
         result = get_inferred_ancestry(sample_engine)
         assert result is None
 
-    def test_returns_none_for_malformed_json(
-        self, sample_engine: sa.Engine
-    ) -> None:
+    def test_returns_none_for_malformed_json(self, sample_engine: sa.Engine) -> None:
         with sample_engine.begin() as conn:
             conn.execute(
                 sa.insert(findings),
@@ -218,9 +208,7 @@ class TestGetInferredAncestry:
         result = get_inferred_ancestry(sample_engine)
         assert result is None
 
-    def test_uses_most_recent_finding(
-        self, sample_engine: sa.Engine
-    ) -> None:
+    def test_uses_most_recent_finding(self, sample_engine: sa.Engine) -> None:
         """If multiple ancestry findings exist, use the most recent (highest id)."""
         with sample_engine.begin() as conn:
             conn.execute(
@@ -245,9 +233,7 @@ class TestGetInferredAncestry:
         result = get_inferred_ancestry(sample_engine)
         assert result == "SAS"
 
-    def test_accepts_inferred_ancestry_key(
-        self, sample_engine: sa.Engine
-    ) -> None:
+    def test_accepts_inferred_ancestry_key(self, sample_engine: sa.Engine) -> None:
         """Also supports 'inferred_ancestry' key in detail_json."""
         with sample_engine.begin() as conn:
             conn.execute(
