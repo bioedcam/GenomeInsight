@@ -11,9 +11,9 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.routes.apoe import router as apoe_router
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
+from backend.api.routes.apoe import router as apoe_router
 from backend.api.routes.cancer import router as cancer_router
 from backend.api.routes.cardiovascular import router as cardiovascular_router
 from backend.api.routes.column_presets import router as column_presets_router
