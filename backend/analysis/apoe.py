@@ -643,6 +643,9 @@ def generate_apoe_findings(result: APOEResult) -> list[APOEFinding]:
     diplotype = result.diplotype
     generated: list[APOEFinding] = []
 
+    if diplotype not in _CV_RISK:
+        raise ValueError(f"Unknown APOE diplotype: {diplotype}")
+
     # 1. Cardiovascular risk (★★★★)
     cv_data = _CV_RISK[diplotype]
     generated.append(
@@ -726,21 +729,20 @@ def store_apoe_three_findings(
     Returns:
         Number of findings inserted (0 or 3).
     """
-    with sample_engine.begin() as conn:
-        # Clear previous APOE analysis findings (not the genotype finding)
-        conn.execute(
-            sa.delete(findings).where(
-                findings.c.module == "apoe",
-                findings.c.category.in_(APOE_FINDING_CATEGORIES),
-            )
-        )
-
     if not result.is_determined:
         logger.info(
             "apoe_three_findings_skipped",
             status=result.status.value,
             reason="APOE genotype not determined",
         )
+        # Clear previous findings even when not determined
+        with sample_engine.begin() as conn:
+            conn.execute(
+                sa.delete(findings).where(
+                    findings.c.module == "apoe",
+                    findings.c.category.in_(APOE_FINDING_CATEGORIES),
+                )
+            )
         return 0
 
     apoe_findings = generate_apoe_findings(result)
@@ -763,6 +765,13 @@ def store_apoe_three_findings(
     ]
 
     with sample_engine.begin() as conn:
+        # Atomic: clear previous + insert new in single transaction
+        conn.execute(
+            sa.delete(findings).where(
+                findings.c.module == "apoe",
+                findings.c.category.in_(APOE_FINDING_CATEGORIES),
+            )
+        )
         conn.execute(sa.insert(findings), rows)
 
     logger.info(

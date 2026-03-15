@@ -774,7 +774,7 @@ class TestAPOEFindingsContentAlzheimers:
 
     def test_all_alzheimers_conditions_field(self) -> None:
         """All Alzheimer's findings have 'Alzheimer's disease' as conditions."""
-        for diplotype in ["ε2/ε2", "ε2/ε3", "ε3/ε3", "ε3/ε4", "ε4/ε4"]:
+        for diplotype in ["ε2/ε2", "ε2/ε3", "ε2/ε4", "ε3/ε3", "ε3/ε4", "ε4/ε4"]:
             allele_map = {"ε2": APOEAllele.E2, "ε3": APOEAllele.E3, "ε4": APOEAllele.E4}
             a1, a2 = diplotype.split("/")
             result = APOEResult(
