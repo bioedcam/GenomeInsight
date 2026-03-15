@@ -41,6 +41,7 @@ export default function VariantDetailPanel({
             <p className="text-sm font-mono text-muted-foreground">{variant.rsid}</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-md p-1.5 hover:bg-muted transition-colors"
             aria-label="Close panel"
@@ -100,7 +101,11 @@ export default function VariantDetailPanel({
         <section className="mb-5">
           <h3 className="text-sm font-semibold text-foreground mb-2">Inheritance</h3>
           <p className="text-sm text-foreground">
-            {variant.inheritance === "AD" ? "Autosomal Dominant" : "Autosomal Recessive"}
+            {variant.inheritance === "AD"
+              ? "Autosomal Dominant"
+              : variant.inheritance === "AR"
+                ? "Autosomal Recessive"
+                : variant.inheritance}
           </p>
         </section>
 

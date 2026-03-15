@@ -43,6 +43,15 @@ const DEFAULT_CONFIG = {
   badge: "bg-muted text-muted-foreground",
 }
 
+const INHERITANCE_LABELS: Record<string, string> = {
+  AD: "Autosomal Dominant",
+  AR: "Autosomal Recessive",
+  XL: "X-linked",
+  XLD: "X-linked Dominant",
+  XLR: "X-linked Recessive",
+  MT: "Mitochondrial",
+}
+
 export default function VariantCard({ variant, onClick, selected, sampleId }: VariantCardProps) {
   const config = SIGNIFICANCE_CONFIG[variant.clinvar_significance] || DEFAULT_CONFIG
   const hasCrossLink = variant.cross_links.includes("carrier")
@@ -134,7 +143,7 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
         <EvidenceStars level={variant.evidence_level} />
         <span className="text-xs text-muted-foreground">
-          {variant.inheritance === "AD" ? "Autosomal Dominant" : "Autosomal Recessive"}
+          {INHERITANCE_LABELS[variant.inheritance] ?? variant.inheritance}
         </span>
       </div>
 

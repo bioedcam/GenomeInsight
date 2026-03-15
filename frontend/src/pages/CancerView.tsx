@@ -12,7 +12,7 @@
  * PRS in secondary tier with "Research Use Only" badge.
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { ShieldAlert, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -29,6 +29,17 @@ export default function CancerView() {
 
   const [selectedVariant, setSelectedVariant] = useState<CancerVariant | null>(null)
   const [disclaimerExpanded, setDisclaimerExpanded] = useState(false)
+
+  // Close detail panel on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedVariant) {
+        setSelectedVariant(null)
+      }
+    }
+    document.addEventListener("keydown", handleEscape)
+    return () => document.removeEventListener("keydown", handleEscape)
+  }, [selectedVariant])
 
   const variantsQuery = useCancerVariants(sampleId)
   const prsQuery = useCancerPRS(sampleId)
@@ -76,6 +87,7 @@ export default function CancerView() {
       {disclaimerQuery.data && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 mb-6" data-testid="cancer-disclaimer">
           <button
+            type="button"
             className="flex items-center justify-between w-full text-left"
             onClick={() => setDisclaimerExpanded(!disclaimerExpanded)}
             aria-expanded={disclaimerExpanded}
