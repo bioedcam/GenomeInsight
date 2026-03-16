@@ -30,6 +30,7 @@ from backend.api.routes.igv_tracks import router as igv_tracks_router
 from backend.api.routes.ingest import router as ingest_router
 from backend.api.routes.nutrigenomics import router as nutrigenomics_router
 from backend.api.routes.pharma import router as pharma_router
+from backend.api.routes.rare_variants import router as rare_variants_router
 from backend.api.routes.samples import router as samples_router
 from backend.api.routes.setup import router as setup_router
 from backend.api.routes.variant_detail import router as variant_detail_router
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     api_router.include_router(ingest_router)
     api_router.include_router(nutrigenomics_router)
     api_router.include_router(pharma_router)
+    api_router.include_router(rare_variants_router)
     api_router.include_router(samples_router)
     api_router.include_router(setup_router)
     api_router.include_router(variants_router)

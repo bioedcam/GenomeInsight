@@ -1,0 +1,625 @@
+"""Tests for rare variant finder API (P3-29).
+
+Covers:
+  - POST /api/analysis/rare-variants/search?sample_id=N — Search with filters
+  - GET  /api/analysis/rare-variants/findings?sample_id=N — Stored findings
+  - POST /api/analysis/rare-variants/run?sample_id=N — Run with defaults
+  - GET  /api/analysis/rare-variants/export/tsv?sample_id=N — TSV export
+  - GET  /api/analysis/rare-variants/export/vcf?sample_id=N — VCF export
+  - 404 for missing sample
+  - Filter validation (af_threshold range, gene_symbols, consequences)
+  - Evidence level ordering in findings
+"""
+
+from __future__ import annotations
+
+from collections.abc import Generator
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import sqlalchemy as sa
+from fastapi.testclient import TestClient
+
+from backend.config import Settings
+from backend.db.connection import reset_registry
+from backend.db.sample_schema import create_sample_tables
+from backend.db.tables import (
+    annotated_variants,
+    reference_metadata,
+    samples,
+)
+
+# ── Test data ────────────────────────────────────────────────────────
+
+ANNOTATED_VARIANTS_DATA = [
+    {
+        "rsid": "rs28897696",
+        "chrom": "17",
+        "pos": 41245466,
+        "ref": "G",
+        "alt": "A",
+        "genotype": "GA",
+        "zygosity": "het",
+        "gene_symbol": "BRCA1",
+        "consequence": "missense_variant",
+        "hgvs_coding": "c.5123C>T",
+        "hgvs_protein": "p.Ala1708Glu",
+        "gnomad_af_global": 0.00002,
+        "gnomad_af_afr": 0.00001,
+        "gnomad_af_amr": None,
+        "gnomad_af_eas": None,
+        "gnomad_af_eur": 0.00003,
+        "gnomad_af_fin": None,
+        "gnomad_af_sas": None,
+        "clinvar_significance": "Pathogenic",
+        "clinvar_review_stars": 3,
+        "clinvar_accession": "VCV000055399",
+        "clinvar_conditions": "Breast-ovarian cancer, familial",
+        "cadd_phred": 28.5,
+        "revel": 0.92,
+        "ensemble_pathogenic": True,
+        "evidence_conflict": False,
+        "disease_name": "Hereditary breast-ovarian cancer",
+        "inheritance_pattern": "AD",
+        "annotation_coverage": 31,
+    },
+    {
+        "rsid": "rs121913279",
+        "chrom": "7",
+        "pos": 117199644,
+        "ref": "C",
+        "alt": "T",
+        "genotype": "CT",
+        "zygosity": "het",
+        "gene_symbol": "CFTR",
+        "consequence": "stop_gained",
+        "hgvs_coding": "c.1657C>T",
+        "hgvs_protein": "p.Arg553Ter",
+        "gnomad_af_global": 0.0005,
+        "gnomad_af_afr": None,
+        "gnomad_af_amr": None,
+        "gnomad_af_eas": None,
+        "gnomad_af_eur": 0.001,
+        "gnomad_af_fin": None,
+        "gnomad_af_sas": None,
+        "clinvar_significance": "Likely pathogenic",
+        "clinvar_review_stars": 1,
+        "clinvar_accession": "VCV000007108",
+        "clinvar_conditions": "Cystic fibrosis",
+        "cadd_phred": 35.0,
+        "revel": None,
+        "ensemble_pathogenic": False,
+        "evidence_conflict": False,
+        "disease_name": "Cystic fibrosis",
+        "inheritance_pattern": "AR",
+        "annotation_coverage": 15,
+    },
+    {
+        "rsid": "rs999999999",
+        "chrom": "3",
+        "pos": 12345678,
+        "ref": "A",
+        "alt": "T",
+        "genotype": "AT",
+        "zygosity": "het",
+        "gene_symbol": "TP53",
+        "consequence": "missense_variant",
+        "hgvs_coding": None,
+        "hgvs_protein": None,
+        "gnomad_af_global": None,
+        "gnomad_af_afr": None,
+        "gnomad_af_amr": None,
+        "gnomad_af_eas": None,
+        "gnomad_af_eur": None,
+        "gnomad_af_fin": None,
+        "gnomad_af_sas": None,
+        "clinvar_significance": None,
+        "clinvar_review_stars": None,
+        "clinvar_accession": None,
+        "clinvar_conditions": None,
+        "cadd_phred": 22.0,
+        "revel": 0.75,
+        "ensemble_pathogenic": True,
+        "evidence_conflict": False,
+        "disease_name": None,
+        "inheritance_pattern": None,
+        "annotation_coverage": 9,
+    },
+    {
+        "rsid": "rs12345",
+        "chrom": "1",
+        "pos": 1000000,
+        "ref": "C",
+        "alt": "G",
+        "genotype": "GG",
+        "zygosity": "hom_alt",
+        "gene_symbol": "BRCA1",
+        "consequence": "synonymous_variant",
+        "hgvs_coding": None,
+        "hgvs_protein": None,
+        "gnomad_af_global": 0.15,
+        "gnomad_af_afr": 0.12,
+        "gnomad_af_amr": None,
+        "gnomad_af_eas": None,
+        "gnomad_af_eur": 0.18,
+        "gnomad_af_fin": None,
+        "gnomad_af_sas": None,
+        "clinvar_significance": "Benign",
+        "clinvar_review_stars": 2,
+        "clinvar_accession": "VCV000000001",
+        "clinvar_conditions": None,
+        "cadd_phred": 1.0,
+        "revel": None,
+        "ensemble_pathogenic": False,
+        "evidence_conflict": False,
+        "disease_name": None,
+        "inheritance_pattern": None,
+        "annotation_coverage": 31,
+    },
+]
+
+
+# ── Fixtures ─────────────────────────────────────────────────────────
+
+
+@pytest.fixture()
+def tmp_data_dir(tmp_path: Path) -> Path:
+    """Create a temporary data directory with samples subdirectory."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "samples").mkdir()
+    return data_dir
+
+
+@pytest.fixture()
+def sample_db_path(tmp_data_dir: Path) -> Path:
+    """Create a sample database with annotated variants."""
+    db_path = tmp_data_dir / "samples" / "sample_1.db"
+    engine = sa.create_engine(f"sqlite:///{db_path}")
+    create_sample_tables(engine)
+
+    with engine.begin() as conn:
+        conn.execute(sa.insert(annotated_variants), ANNOTATED_VARIANTS_DATA)
+
+    engine.dispose()
+    return db_path
+
+
+@pytest.fixture()
+def rare_client(tmp_data_dir: Path, sample_db_path: Path) -> Generator[TestClient, None, None]:
+    """FastAPI test client with a sample DB containing annotated variants."""
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+
+    # Create reference.db with samples table
+    ref_path = settings.reference_db_path
+    engine = sa.create_engine(f"sqlite:///{ref_path}")
+    reference_metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(samples),
+            [
+                {
+                    "id": 1,
+                    "name": "test_sample",
+                    "file_format": "23andme_v5",
+                    "file_hash": "abc123",
+                    "db_path": "samples/sample_1.db",
+                    "status": "complete",
+                }
+            ],
+        )
+    engine.dispose()
+
+    with (
+        patch("backend.main.get_settings", return_value=settings),
+        patch("backend.db.connection.get_settings", return_value=settings),
+    ):
+        reset_registry()
+
+        from backend.main import create_app
+
+        app = create_app()
+        with TestClient(app) as tc:
+            yield tc
+
+        reset_registry()
+
+
+@pytest.fixture()
+def empty_client(tmp_data_dir: Path) -> Generator[TestClient, None, None]:
+    """FastAPI test client with no samples."""
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+
+    ref_path = settings.reference_db_path
+    engine = sa.create_engine(f"sqlite:///{ref_path}")
+    reference_metadata.create_all(engine)
+    engine.dispose()
+
+    with (
+        patch("backend.main.get_settings", return_value=settings),
+        patch("backend.db.connection.get_settings", return_value=settings),
+    ):
+        reset_registry()
+
+        from backend.main import create_app
+
+        app = create_app()
+        with TestClient(app) as tc:
+            yield tc
+
+        reset_registry()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/analysis/rare-variants/search
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSearchEndpoint:
+    """Tests for the search endpoint."""
+
+    def test_search_default_filters(self, rare_client: TestClient) -> None:
+        """Default search returns rare + novel variants (AF < 0.01)."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 2  # BRCA1 pathogenic + TP53 novel
+        assert data["total_variants_scanned"] == 4
+        # High AF variant (rs12345, 0.15) should be excluded
+        rsids = [item["rsid"] for item in data["items"]]
+        assert "rs12345" not in rsids
+        assert "rs28897696" in rsids  # BRCA1 pathogenic
+
+    def test_search_gene_filter(self, rare_client: TestClient) -> None:
+        """Gene panel filter restricts results to specified genes."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"gene_symbols": ["BRCA1"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["gene_symbol"] == "BRCA1"
+
+    def test_search_consequence_filter(self, rare_client: TestClient) -> None:
+        """Consequence filter restricts to matching SO terms."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"consequences": ["stop_gained"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert "stop_gained" in item["consequence"]
+
+    def test_search_clinvar_filter(self, rare_client: TestClient) -> None:
+        """ClinVar significance filter works."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"clinvar_significance": ["Pathogenic"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["clinvar_significance"] == "Pathogenic"
+
+    def test_search_af_threshold(self, rare_client: TestClient) -> None:
+        """Custom AF threshold changes results."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"af_threshold": 0.001, "include_novel": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["gnomad_af_global"] is not None
+            assert item["gnomad_af_global"] < 0.001
+
+    def test_search_exclude_novel(self, rare_client: TestClient) -> None:
+        """Excluding novel variants removes those with no gnomAD AF."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"include_novel": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["gnomad_af_global"] is not None
+
+    def test_search_zygosity_filter(self, rare_client: TestClient) -> None:
+        """Zygosity filter restricts to het or hom_alt."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"zygosity": "het"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["zygosity"] == "het"
+
+    def test_search_stores_findings(self, rare_client: TestClient) -> None:
+        """Search also stores findings in the sample DB."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        # Verify findings are stored
+        resp = rare_client.get("/api/analysis/rare-variants/findings?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] > 0
+
+    def test_search_response_metadata(self, rare_client: TestClient) -> None:
+        """Response includes metadata fields."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        data = resp.json()
+        assert "novel_count" in data
+        assert "pathogenic_count" in data
+        assert "genes_with_findings" in data
+        assert "filters_applied" in data
+        assert isinstance(data["genes_with_findings"], list)
+
+    def test_search_missing_sample_404(self, empty_client: TestClient) -> None:
+        """Missing sample returns 404."""
+        resp = empty_client.post(
+            "/api/analysis/rare-variants/search?sample_id=999",
+            json={},
+        )
+        assert resp.status_code == 404
+
+    def test_search_invalid_af_threshold(self, rare_client: TestClient) -> None:
+        """AF threshold outside 0–1 range is rejected."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={"af_threshold": 1.5},
+        )
+        assert resp.status_code == 422
+
+    def test_search_pathogenic_sorted_first(self, rare_client: TestClient) -> None:
+        """ClinVar P/LP variants appear before others in results."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        data = resp.json()
+        items = data["items"]
+        if len(items) >= 2:
+            # First items should be ClinVar P/LP
+            first = items[0]
+            assert first["clinvar_significance"] in [
+                "Pathogenic",
+                "Likely pathogenic",
+                "Pathogenic/Likely pathogenic",
+            ]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/analysis/rare-variants/findings
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestFindingsEndpoint:
+    """Tests for the findings endpoint."""
+
+    def test_findings_empty_before_search(self, rare_client: TestClient) -> None:
+        """Findings are empty before any search is run."""
+        resp = rare_client.get("/api/analysis/rare-variants/findings?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["items"] == []
+
+    def test_findings_after_search(self, rare_client: TestClient) -> None:
+        """Findings are populated after a search."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/findings?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] > 0
+        for item in data["items"]:
+            assert "category" in item
+            assert "evidence_level" in item
+            assert "finding_text" in item
+
+    def test_findings_sorted_by_evidence(self, rare_client: TestClient) -> None:
+        """Findings are sorted by evidence level descending."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/findings?sample_id=1")
+        items = resp.json()["items"]
+        if len(items) >= 2:
+            levels = [item["evidence_level"] for item in items]
+            # Should be non-increasing (desc order, but may have same-level items)
+            for i in range(len(levels) - 1):
+                assert levels[i] >= levels[i + 1], f"Evidence levels not sorted: {levels}"
+
+    def test_findings_contain_detail(self, rare_client: TestClient) -> None:
+        """Findings include parsed detail_json."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/findings?sample_id=1")
+        items = resp.json()["items"]
+        for item in items:
+            assert isinstance(item["detail"], dict)
+
+    def test_findings_missing_sample_404(self, empty_client: TestClient) -> None:
+        """Missing sample returns 404."""
+        resp = empty_client.get("/api/analysis/rare-variants/findings?sample_id=999")
+        assert resp.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/analysis/rare-variants/run
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestRunEndpoint:
+    """Tests for the run endpoint."""
+
+    def test_run_default_filters(self, rare_client: TestClient) -> None:
+        """Run with no body uses default filters."""
+        resp = rare_client.post("/api/analysis/rare-variants/run?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "variants_found" in data
+        assert "findings_stored" in data
+        assert data["variants_found"] >= 2
+        assert data["findings_stored"] == data["variants_found"]
+
+    def test_run_with_filters(self, rare_client: TestClient) -> None:
+        """Run with custom filter body."""
+        resp = rare_client.post(
+            "/api/analysis/rare-variants/run?sample_id=1",
+            json={"gene_symbols": ["BRCA1"], "af_threshold": 0.001},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["variants_found"] >= 1
+
+    def test_run_missing_sample_404(self, empty_client: TestClient) -> None:
+        """Missing sample returns 404."""
+        resp = empty_client.post("/api/analysis/rare-variants/run?sample_id=999")
+        assert resp.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/analysis/rare-variants/export/tsv
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestTSVExport:
+    """Tests for TSV export."""
+
+    def test_tsv_export_has_header(self, rare_client: TestClient) -> None:
+        """TSV export includes a header row."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/tsv?sample_id=1")
+        assert resp.status_code == 200
+        assert "text/tab-separated-values" in resp.headers["content-type"]
+        lines = resp.text.strip().split("\n")
+        assert len(lines) >= 2  # header + at least one data row
+        header = lines[0]
+        assert "rsid" in header
+        assert "gene_symbol" in header
+
+    def test_tsv_export_content_disposition(self, rare_client: TestClient) -> None:
+        """TSV has correct Content-Disposition header for download."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/tsv?sample_id=1")
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        assert ".tsv" in resp.headers.get("content-disposition", "")
+
+    def test_tsv_export_empty_no_findings(self, rare_client: TestClient) -> None:
+        """TSV export with no findings returns header only."""
+        resp = rare_client.get("/api/analysis/rare-variants/export/tsv?sample_id=1")
+        assert resp.status_code == 200
+        lines = resp.text.strip().split("\n")
+        assert len(lines) == 1  # header only
+
+    def test_tsv_export_missing_sample_404(self, empty_client: TestClient) -> None:
+        """Missing sample returns 404."""
+        resp = empty_client.get("/api/analysis/rare-variants/export/tsv?sample_id=999")
+        assert resp.status_code == 404
+
+    def test_tsv_tab_separated(self, rare_client: TestClient) -> None:
+        """TSV rows are tab-separated with correct column count."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/tsv?sample_id=1")
+        lines = resp.text.strip().split("\n")
+        header_cols = lines[0].split("\t")
+        for line in lines[1:]:
+            data_cols = line.split("\t")
+            assert len(data_cols) == len(header_cols)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/analysis/rare-variants/export/vcf
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestVCFExport:
+    """Tests for VCF export."""
+
+    def test_vcf_export_has_header(self, rare_client: TestClient) -> None:
+        """VCF export starts with proper VCF 4.2 header."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/vcf?sample_id=1")
+        assert resp.status_code == 200
+        text = resp.text
+        assert text.startswith("##fileformat=VCFv4.2")
+        assert "##source=GenomeInsight-RareVariantFinder" in text
+        assert "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" in text
+
+    def test_vcf_export_info_fields(self, rare_client: TestClient) -> None:
+        """VCF data lines include INFO fields."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/vcf?sample_id=1")
+        lines = resp.text.strip().split("\n")
+        data_lines = [line for line in lines if not line.startswith("#")]
+        assert len(data_lines) > 0
+        for line in data_lines:
+            assert "GENE=" in line
+            assert "EVLVL=" in line
+
+    def test_vcf_export_has_real_chrom_pos(self, rare_client: TestClient) -> None:
+        """VCF data lines contain real chromosome and position from annotated_variants."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/vcf?sample_id=1")
+        lines = resp.text.strip().split("\n")
+        data_lines = [line for line in lines if not line.startswith("#")]
+        for line in data_lines:
+            cols = line.split("\t")
+            chrom = cols[0]
+            pos = cols[1]
+            # chrom should be a real chromosome, not a placeholder
+            assert chrom != ".", f"CHROM should not be placeholder: {line}"
+            # pos should be a real integer > 0
+            assert int(pos) > 0, f"POS should be > 0: {line}"
+
+    def test_vcf_export_content_disposition(self, rare_client: TestClient) -> None:
+        """VCF has correct Content-Disposition header."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/vcf?sample_id=1")
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        assert ".vcf" in resp.headers.get("content-disposition", "")
+
+    def test_vcf_export_missing_sample_404(self, empty_client: TestClient) -> None:
+        """Missing sample returns 404."""
+        resp = empty_client.get("/api/analysis/rare-variants/export/vcf?sample_id=999")
+        assert resp.status_code == 404
