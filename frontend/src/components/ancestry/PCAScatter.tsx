@@ -40,7 +40,9 @@ export default function PCAScatter({ pcaData }: PCAScatterProps) {
   }
 
   // Population centroids
-  const centroidPops = Object.keys(pcaData.centroids)
+  const centroidPops = Object.keys(pcaData.centroids).filter(
+    (p) => pcaData.centroids[p]?.length >= 2
+  )
   if (centroidPops.length > 0) {
     traces.push({
       x: centroidPops.map((p) => pcaData.centroids[p][0]),
