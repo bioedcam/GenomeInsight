@@ -1,11 +1,152 @@
-import PlaceholderPage from "@/components/PlaceholderPage"
+/** Ancestry module page (P3-27).
+ *
+ * Layout:
+ * - Ancestry result summary card (top population, coverage, evidence)
+ * - Admixture bar chart (population fractions)
+ * - PCA scatter plot (user projected onto reference panel)
+ *
+ * PRD P3-27: Ancestry UI — admixture bar, PCA scatter.
+ */
+
+import { useSearchParams } from "react-router-dom"
+import { Globe, Loader2, AlertCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { parseSampleId } from "@/lib/format"
+import { useAncestryFindings, usePCACoordinates } from "@/api/ancestry"
+import AncestryResultCard from "@/components/ancestry/AncestryResultCard"
+import AdmixtureBar from "@/components/ancestry/AdmixtureBar"
+import PCAScatter from "@/components/ancestry/PCAScatter"
 
 export default function AncestryView() {
+  const [searchParams] = useSearchParams()
+  const sampleId = parseSampleId(searchParams.get("sample_id"))
+
+  const findingsQuery = useAncestryFindings(sampleId)
+  const pcaQuery = usePCACoordinates(sampleId)
+
+  // No sample selected
+  if (sampleId == null) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Ancestry</h1>
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            Select a sample to view ancestry results.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const isLoading = findingsQuery.isLoading
+  const hasError = findingsQuery.isError
+
   return (
-    <PlaceholderPage
-      moduleName="Ancestry"
-      phase={3}
-      description="Ancestry inference via PCA projection, admixture fractions, and haplogroup assignment (mtDNA and Y-chr)."
-    />
+    <div className="p-6">
+      {/* Page header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            "bg-primary/10 text-primary",
+          )}
+        >
+          <Globe className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Ancestry</h1>
+          <p className="text-sm text-muted-foreground">
+            Ancestry inference via PCA projection and admixture estimation
+          </p>
+        </div>
+      </div>
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Error state */}
+      {hasError && !isLoading && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-destructive">Failed to load ancestry data</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {findingsQuery.error instanceof Error
+                  ? findingsQuery.error.message
+                  : "An unexpected error occurred."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No results yet */}
+      {!isLoading && !hasError && !findingsQuery.data && (
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            Ancestry inference has not been run for this sample.
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Run the annotation pipeline to generate ancestry results.
+          </p>
+        </div>
+      )}
+
+      {/* Main content */}
+      {!isLoading && !hasError && findingsQuery.data && (
+        <>
+          {/* Ancestry Result Summary */}
+          <section aria-label="Ancestry inference summary" className="mb-8">
+            <AncestryResultCard finding={findingsQuery.data} />
+          </section>
+
+          {/* Admixture Bar Chart */}
+          <section aria-label="Admixture proportions" className="mb-8">
+            <div className="rounded-lg border bg-card p-5">
+              <h2 className="text-lg font-semibold mb-3">Admixture Proportions</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Estimated ancestry proportions based on PCA distance to reference populations
+              </p>
+              <AdmixtureBar admixture_fractions={findingsQuery.data.admixture_fractions} />
+            </div>
+          </section>
+
+          {/* PCA Scatter Plot */}
+          <section aria-label="PCA scatter plot">
+            <div className="rounded-lg border bg-card p-5">
+              <h2 className="text-lg font-semibold mb-3">PCA Projection</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Your sample projected onto the reference panel PCA space (PC1 vs PC2)
+              </p>
+              {pcaQuery.isLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {pcaQuery.isError && (
+                <div className="text-sm text-destructive">
+                  Failed to load PCA coordinates.
+                </div>
+              )}
+              {pcaQuery.data && (
+                <PCAScatter pcaData={pcaQuery.data} />
+              )}
+              {!pcaQuery.isLoading && !pcaQuery.isError && !pcaQuery.data && (
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  PCA coordinates not available.
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+    </div>
   )
 }
