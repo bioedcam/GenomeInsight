@@ -47,7 +47,7 @@ export default function PCAScatter({ pcaData }: PCAScatterProps) {
     traces.push({
       x: centroidPops.map((p) => pcaData.centroids[p][0]),
       y: centroidPops.map((p) => pcaData.centroids[p][1]),
-      mode: "markers+text",
+      mode: "text+markers",
       type: "scatter",
       name: "Centroids",
       text: centroidPops.map((p) => POPULATION_LABELS[p] ?? p),
