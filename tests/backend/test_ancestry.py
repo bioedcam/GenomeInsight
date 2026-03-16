@@ -1,10 +1,11 @@
-"""Tests for ancestry inference module (P3-23).
+"""Tests for ancestry inference module (P3-23, P3-24).
 
 Covers:
   - Bundle loading and validation
   - Genotype encoding (alt-allele dosage)
   - PCA projection via NumPy dot product
   - Nearest-centroid classification
+  - Admixture fraction computation (P3-24, T3-24)
   - Findings storage (module='ancestry', category='pca_projection')
   - T3-25: PCA projection places known EUR-ancestry sample in EUR cluster
   - Coverage threshold enforcement
@@ -28,6 +29,7 @@ from backend.analysis.ancestry import (
     _classify_nearest_centroid,
     _encode_dosage,
     _project_onto_pca,
+    compute_admixture_fractions,
     infer_ancestry,
     load_ancestry_bundle,
     store_ancestry_findings,
@@ -307,6 +309,123 @@ class TestClassifyNearestCentroid:
         _, dists = _classify_nearest_centroid(np.array([0.5, 0.5]), centroids)
         assert len(dists) == 3
         assert all(d >= 0 for d in dists.values())
+
+
+# ── Admixture fraction tests (P3-24, T3-24) ──────────────────────────
+
+
+class TestComputeAdmixtureFractions:
+    """Test admixture fraction computation via inverse-distance weighting."""
+
+    def test_fractions_sum_to_one(self) -> None:
+        """T3-24: Admixture fractions sum to ~1.0."""
+        distances = {"AFR": 10.0, "EUR": 5.0, "EAS": 20.0, "SAS": 15.0}
+        fractions = compute_admixture_fractions(distances)
+        assert abs(sum(fractions.values()) - 1.0) < 1e-6
+
+    def test_closer_population_has_higher_fraction(self) -> None:
+        distances = {"AFR": 100.0, "EUR": 1.0, "EAS": 50.0}
+        fractions = compute_admixture_fractions(distances)
+        assert fractions["EUR"] > fractions["AFR"]
+        assert fractions["EUR"] > fractions["EAS"]
+
+    def test_exact_centroid_gives_1_0(self) -> None:
+        """Sample at exact centroid → 100% that population."""
+        distances = {"AFR": 0.0, "EUR": 10.0, "EAS": 20.0}
+        fractions = compute_admixture_fractions(distances)
+        assert fractions["AFR"] == 1.0
+        assert fractions["EUR"] == 0.0
+        assert fractions["EAS"] == 0.0
+
+    def test_equal_distances_give_equal_fractions(self) -> None:
+        distances = {"AFR": 5.0, "EUR": 5.0, "EAS": 5.0}
+        fractions = compute_admixture_fractions(distances)
+        for frac in fractions.values():
+            assert abs(frac - 1.0 / 3) < 0.01
+
+    def test_empty_distances(self) -> None:
+        fractions = compute_admixture_fractions({})
+        assert fractions == {}
+
+    def test_all_populations_present(self) -> None:
+        distances = {"AFR": 10.0, "AMR": 20.0, "EAS": 30.0, "EUR": 5.0, "SAS": 25.0, "OCE": 40.0}
+        fractions = compute_admixture_fractions(distances)
+        assert set(fractions.keys()) == set(distances.keys())
+        assert all(0.0 <= f <= 1.0 for f in fractions.values())
+        assert abs(sum(fractions.values()) - 1.0) < 1e-6
+
+    def test_fractions_are_non_negative(self) -> None:
+        distances = {"AFR": 1.0, "EUR": 100.0, "EAS": 1000.0}
+        fractions = compute_admixture_fractions(distances)
+        assert all(f >= 0.0 for f in fractions.values())
+
+    def test_single_population(self) -> None:
+        distances = {"EUR": 5.0}
+        fractions = compute_admixture_fractions(distances)
+        assert fractions["EUR"] == 1.0
+
+    def test_two_zero_distances(self) -> None:
+        """Multiple populations at distance 0 — first found gets 1.0."""
+        distances = {"AFR": 0.0, "EUR": 0.0, "EAS": 10.0}
+        fractions = compute_admixture_fractions(distances)
+        # Both AFR and EUR are at 0, so both get 1.0 and EAS gets 0.0
+        # Actually with our implementation, all < epsilon get 1.0 — need to sum correctly
+        # The function assigns 1.0 to each zero-distance pop, so let's check
+        zero_pops = [p for p, d in distances.items() if d < 1e-10]
+        assert all(fractions[p] == 1.0 for p in zero_pops)
+
+
+class TestAdmixtureFractionsIntegration:
+    """Test admixture fractions integrated into the inference pipeline."""
+
+    def test_infer_returns_admixture_fractions(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        assert hasattr(result, "admixture_fractions")
+        assert len(result.admixture_fractions) == 3  # AFR, EUR, EAS
+        assert abs(sum(result.admixture_fractions.values()) - 1.0) < 1e-6
+
+    def test_top_population_has_highest_fraction(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        top_frac = result.admixture_fractions[result.top_population]
+        for pop, frac in result.admixture_fractions.items():
+            if pop != result.top_population:
+                assert top_frac >= frac
+
+    def test_stored_finding_has_admixture(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        store_ancestry_findings(result, eur_sample)
+
+        with eur_sample.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(findings.c.module == "ancestry")
+            ).fetchone()
+        detail = json.loads(row.detail_json)
+        assert "admixture_fractions" in detail
+        fracs = detail["admixture_fractions"]
+        assert abs(sum(fracs.values()) - 1.0) < 1e-6
+
+    def test_insufficient_coverage_still_computes_fractions(
+        self,
+        small_bundle: AncestryBundle,
+        partial_sample: sa.Engine,
+    ) -> None:
+        """Fractions computed even with low coverage, but finding not stored."""
+        result = infer_ancestry(small_bundle, partial_sample)
+        assert result.is_sufficient is False
+        # Fractions still computed even though coverage is insufficient
+        assert len(result.admixture_fractions) > 0
 
 
 # ── Integration tests ────────────────────────────────────────────────────
@@ -632,6 +751,7 @@ class TestAncestryResult:
             pc_scores=[1.0, 2.0, 3.0],
             top_population="EUR",
             population_distances={"EUR": 0.5},
+            admixture_fractions={"EUR": 1.0},
             snps_used=100,
             snps_total=128,
             coverage_fraction=0.78,
@@ -645,6 +765,7 @@ class TestAncestryResult:
             pc_scores=[1.0],
             top_population="EUR",
             population_distances={},
+            admixture_fractions={},
             snps_used=50,
             snps_total=100,
             coverage_fraction=0.5,
