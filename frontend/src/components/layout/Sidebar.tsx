@@ -13,6 +13,7 @@ import {
   Dna,
   FileText,
   Settings,
+  SearchCheck,
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/apoe', icon: Brain, label: 'APOE' },
   { to: '/carrier-status', icon: Baby, label: 'Carrier Status' },
   { to: '/ancestry', icon: Globe, label: 'Ancestry' },
+  { to: '/rare-variants', icon: SearchCheck, label: 'Rare Variants' },
   { to: '/genome-browser', icon: Dna, label: 'Genome Browser' },
   { to: '/reports', icon: FileText, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },

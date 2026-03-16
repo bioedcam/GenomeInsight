@@ -1,0 +1,244 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { render, screen, waitFor } from "./test-utils"
+import userEvent from "@testing-library/user-event"
+import RareVariantsView from "@/pages/RareVariantsView"
+import FilterPanel from "@/components/rare-variants/FilterPanel"
+import ResultsTable from "@/components/rare-variants/ResultsTable"
+import SearchSummary from "@/components/rare-variants/SearchSummary"
+import VariantDetailPanel from "@/components/rare-variants/VariantDetailPanel"
+import type { RareVariant } from "@/types/rare-variants"
+
+const mockFetch = vi.fn()
+
+function makeMockVariant(overrides: Partial<RareVariant> = {}): RareVariant {
+  return {
+    rsid: "rs12345",
+    chrom: "17",
+    pos: 43071077,
+    ref: "A",
+    alt: "G",
+    genotype: "AG",
+    zygosity: "het",
+    gene_symbol: "BRCA1",
+    consequence: "missense_variant",
+    hgvs_coding: "c.1234A>G",
+    hgvs_protein: "p.Asp412Gly",
+    gnomad_af_global: 0.00023,
+    gnomad_af_afr: 0.0001,
+    gnomad_af_amr: null,
+    gnomad_af_eas: null,
+    gnomad_af_eur: 0.0003,
+    gnomad_af_fin: null,
+    gnomad_af_sas: null,
+    clinvar_significance: "Pathogenic",
+    clinvar_review_stars: 2,
+    clinvar_accession: "VCV000012345",
+    clinvar_conditions: "Breast-ovarian cancer, familial 1",
+    cadd_phred: 28.5,
+    revel: 0.892,
+    ensemble_pathogenic: true,
+    evidence_conflict: false,
+    evidence_level: 4,
+    disease_name: "Breast cancer",
+    inheritance_pattern: "AD",
+    ...overrides,
+  }
+}
+
+describe("FilterPanel", () => {
+  it("renders all filter controls", () => {
+    render(<FilterPanel onSearch={vi.fn()} isSearching={false} />)
+    expect(screen.getByTestId("gene-panel-input")).toBeInTheDocument()
+    expect(screen.getByTestId("af-threshold-slider")).toBeInTheDocument()
+    expect(screen.getByTestId("consequence-filter")).toBeInTheDocument()
+    expect(screen.getByTestId("clinvar-filter")).toBeInTheDocument()
+    expect(screen.getByTestId("include-novel-checkbox")).toBeInTheDocument()
+    expect(screen.getByTestId("zygosity-select")).toBeInTheDocument()
+    expect(screen.getByTestId("search-button")).toBeInTheDocument()
+  })
+
+  it("calls onSearch with default filters", async () => {
+    const user = userEvent.setup()
+    const onSearch = vi.fn()
+    render(<FilterPanel onSearch={onSearch} isSearching={false} />)
+
+    await user.click(screen.getByTestId("search-button"))
+
+    expect(onSearch).toHaveBeenCalledTimes(1)
+    expect(onSearch).toHaveBeenCalledWith({
+      gene_symbols: null,
+      af_threshold: 0.01,
+      consequences: null,
+      clinvar_significance: null,
+      include_novel: true,
+      zygosity: null,
+    })
+  })
+
+  it("parses gene panel text input", async () => {
+    const user = userEvent.setup()
+    const onSearch = vi.fn()
+    render(<FilterPanel onSearch={onSearch} isSearching={false} />)
+
+    await user.type(screen.getByTestId("gene-panel-input"), "BRCA1, TP53\nMLH1")
+    await user.click(screen.getByTestId("search-button"))
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gene_symbols: ["BRCA1", "TP53", "MLH1"],
+      }),
+    )
+  })
+
+  it("toggles consequence filters", async () => {
+    const user = userEvent.setup()
+    const onSearch = vi.fn()
+    render(<FilterPanel onSearch={onSearch} isSearching={false} />)
+
+    await user.click(screen.getByText("missense variant"))
+    await user.click(screen.getByTestId("search-button"))
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        consequences: ["missense_variant"],
+      }),
+    )
+  })
+
+  it("disables search button when searching", () => {
+    render(<FilterPanel onSearch={vi.fn()} isSearching={true} />)
+    expect(screen.getByTestId("search-button")).toBeDisabled()
+    expect(screen.getByText("Searching...")).toBeInTheDocument()
+  })
+
+  it("resets filters when reset button clicked", async () => {
+    const user = userEvent.setup()
+    const onSearch = vi.fn()
+    render(<FilterPanel onSearch={onSearch} isSearching={false} />)
+
+    // Type genes
+    await user.type(screen.getByTestId("gene-panel-input"), "BRCA1")
+    expect(screen.getByTestId("gene-panel-input")).toHaveValue("BRCA1")
+
+    // Reset
+    await user.click(screen.getByLabelText("Reset filters"))
+    expect(screen.getByTestId("gene-panel-input")).toHaveValue("")
+  })
+})
+
+describe("ResultsTable", () => {
+  it("renders empty state when no items", () => {
+    render(<ResultsTable items={[]} selectedRsid={null} onSelect={vi.fn()} />)
+    expect(screen.getByTestId("no-results")).toBeInTheDocument()
+  })
+
+  it("renders variant rows", () => {
+    const variants = [
+      makeMockVariant(),
+      makeMockVariant({ rsid: "rs67890", gene_symbol: "TP53", evidence_level: 2 }),
+    ]
+    render(<ResultsTable items={variants} selectedRsid={null} onSelect={vi.fn()} />)
+    expect(screen.getAllByTestId("result-row")).toHaveLength(2)
+    expect(screen.getByText("BRCA1")).toBeInTheDocument()
+    expect(screen.getByText("TP53")).toBeInTheDocument()
+  })
+
+  it("calls onSelect when row is clicked", async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    const variant = makeMockVariant()
+    render(<ResultsTable items={[variant]} selectedRsid={null} onSelect={onSelect} />)
+
+    await user.click(screen.getByTestId("result-row"))
+    expect(onSelect).toHaveBeenCalledWith(variant)
+  })
+
+  it("shows Novel for variants without gnomAD AF", () => {
+    const variant = makeMockVariant({ gnomad_af_global: null })
+    render(<ResultsTable items={[variant]} selectedRsid={null} onSelect={vi.fn()} />)
+    expect(screen.getByText("Novel")).toBeInTheDocument()
+  })
+
+  it("shows evidence conflict indicator", () => {
+    const variant = makeMockVariant({ evidence_conflict: true })
+    render(<ResultsTable items={[variant]} selectedRsid={null} onSelect={vi.fn()} />)
+    expect(screen.getByTitle("Evidence conflict")).toBeInTheDocument()
+  })
+})
+
+describe("SearchSummary", () => {
+  it("renders stats and export buttons", () => {
+    render(
+      <SearchSummary
+        total={42}
+        totalScanned={600000}
+        novelCount={5}
+        pathogenicCount={3}
+        genesWithFindings={["BRCA1", "TP53"]}
+        sampleId={1}
+      />,
+    )
+    expect(screen.getByTestId("total-found")).toHaveTextContent("42")
+    expect(screen.getByText("600,000")).toBeInTheDocument()
+    expect(screen.getByTestId("export-tsv")).toHaveAttribute(
+      "href",
+      "/api/analysis/rare-variants/export/tsv?sample_id=1",
+    )
+    expect(screen.getByTestId("export-vcf")).toHaveAttribute(
+      "href",
+      "/api/analysis/rare-variants/export/vcf?sample_id=1",
+    )
+    expect(screen.getByText("BRCA1")).toBeInTheDocument()
+    expect(screen.getByText("TP53")).toBeInTheDocument()
+  })
+})
+
+describe("VariantDetailPanel", () => {
+  it("renders variant details", () => {
+    const variant = makeMockVariant()
+    render(<VariantDetailPanel variant={variant} onClose={vi.fn()} />)
+    expect(screen.getByTestId("variant-detail-panel")).toBeInTheDocument()
+    expect(screen.getByText("BRCA1")).toBeInTheDocument()
+    expect(screen.getByText("rs12345")).toBeInTheDocument()
+    expect(screen.getByText("Pathogenic")).toBeInTheDocument()
+    expect(screen.getByText("28.5")).toBeInTheDocument()
+    expect(screen.getByText("VCV000012345")).toBeInTheDocument()
+  })
+
+  it("calls onClose when close button clicked", async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<VariantDetailPanel variant={makeMockVariant()} onClose={onClose} />)
+    await user.click(screen.getByLabelText("Close panel"))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows novel variant state when no gnomAD data", () => {
+    const variant = makeMockVariant({
+      gnomad_af_global: null,
+      gnomad_af_afr: null,
+      gnomad_af_eur: null,
+    })
+    render(<VariantDetailPanel variant={variant} onClose={vi.fn()} />)
+    expect(screen.getByText("Not found in gnomAD (novel variant)")).toBeInTheDocument()
+  })
+
+  it("shows evidence conflict warning", () => {
+    const variant = makeMockVariant({ evidence_conflict: true })
+    render(<VariantDetailPanel variant={variant} onClose={vi.fn()} />)
+    expect(screen.getByText(/Evidence conflict detected/)).toBeInTheDocument()
+  })
+})
+
+describe("RareVariantsView", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", mockFetch)
+    mockFetch.mockReset()
+  })
+
+  it("shows empty state when no sample selected", () => {
+    render(<RareVariantsView />)
+    expect(screen.getByText("Rare Variant Finder")).toBeInTheDocument()
+    expect(screen.getByText("Select a sample to search for rare variants.")).toBeInTheDocument()
+  })
+})
