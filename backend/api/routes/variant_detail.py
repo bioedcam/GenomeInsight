@@ -1,7 +1,10 @@
-"""Variant detail API (P2-20).
+"""Variant detail API (P2-20, P3-26).
 
 Single variant endpoint returning all annotations, all VEP transcripts,
 gene-phenotype records (including OMIM links), and evidence conflict details.
+
+P3-26: Includes ``ancestry_matched_af`` and ``ancestry_matched_population``
+fields based on the sample's inferred ancestry from PCA projection.
 
 GET  /api/variants/{rsid}  — Full variant detail with all annotations
 """
@@ -16,6 +19,7 @@ import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.analysis.ancestry import get_ancestry_matched_af_column, get_inferred_ancestry
 from backend.db.connection import get_registry
 from backend.db.tables import annotated_variants, gene_phenotype, samples
 
@@ -111,6 +115,9 @@ class VariantDetailResponse(BaseModel):
     gnomad_homozygous_count: int | None = None
     rare_flag: bool | None = None
     ultra_rare_flag: bool | None = None
+    # P3-26: Ancestry-matched allele frequency
+    ancestry_matched_af: float | None = None
+    ancestry_matched_population: str | None = None
 
     # dbNSFP
     cadd_phred: float | None = None
@@ -376,13 +383,20 @@ def get_variant_detail(
     for col in _TABLE.c:
         data[col.name] = getattr(row, col.name, None)
 
-    # 3. Fetch all VEP transcripts
+    # 3. P3-26: Ancestry-matched AF display
+    ancestry_population = get_inferred_ancestry(sample_engine)
+    if ancestry_population:
+        af_col = get_ancestry_matched_af_column(ancestry_population)
+        data["ancestry_matched_af"] = getattr(row, af_col, None)
+        data["ancestry_matched_population"] = ancestry_population
+
+    # 4. Fetch all VEP transcripts
     transcripts = _fetch_all_transcripts(rsid)
 
-    # 4. Fetch gene-phenotype records (including OMIM links)
+    # 5. Fetch gene-phenotype records (including OMIM links)
     gene_phenotypes = _fetch_gene_phenotypes(data.get("gene_symbol"))
 
-    # 5. Build evidence conflict detail
+    # 6. Build evidence conflict detail
     evidence_conflict_detail = _build_evidence_conflict_detail(row)
 
     return VariantDetailResponse(
