@@ -23,7 +23,6 @@ from backend.analysis.ancestry import (
 )
 from backend.db.tables import annotated_variants, findings
 
-
 # ── Unit tests: population → gnomAD column mapping ───────────────────────
 
 
