@@ -30,6 +30,7 @@ from backend.analysis.rare_variant_finder import (
     find_rare_variants,
     store_rare_variant_findings,
 )
+from backend.annotation.vep_bundle import CONSEQUENCE_SEVERITY
 from backend.db.tables import annotated_variants, findings
 
 # ── Test variant fixtures ─────────────────────────────────────────────────
@@ -621,7 +622,7 @@ class TestRareVariantResultProperties:
             ensemble_pathogenic=False, evidence_conflict=False,
             evidence_level=1, disease_name=None, inheritance_pattern=None,
         )
-        assert v.consequence_severity_score == 32  # stop_gained
+        assert v.consequence_severity_score == CONSEQUENCE_SEVERITY["stop_gained"]
 
 
 class TestRareVariantFinderResultProperties:

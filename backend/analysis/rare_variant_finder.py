@@ -243,8 +243,8 @@ def find_rare_variants(
 
     Queries the annotated_variants table with all filter conditions
     combined via AND logic. Results are sorted by clinical relevance:
-    ClinVar P/LP first, then by AF ascending, then by consequence
-    severity descending.
+    ClinVar P/LP first, then by AF ascending (novel variants last),
+    then by chromosome and position for deterministic ordering.
 
     Args:
         filters: Filter parameters (gene panel, AF, consequence, ClinVar).
@@ -310,11 +310,9 @@ def find_rare_variants(
 
     # Consequence filter
     if filters.consequences:
-        # Match any of the specified consequences (exact or compound)
+        # Match any of the specified consequences (exact or compound SO terms)
         consequence_conditions = []
         for cons in filters.consequences:
-            consequence_conditions.append(av.c.consequence == cons)
-            # Also match compound consequences containing this term
             consequence_conditions.append(av.c.consequence.like(f"%{cons}%"))
         conditions.append(sa.or_(*consequence_conditions))
 
