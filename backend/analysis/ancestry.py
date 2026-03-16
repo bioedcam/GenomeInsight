@@ -721,8 +721,6 @@ def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
     Returns:
         Inferred top ancestry code (e.g. "EUR", "EAS", "AFR") or None.
     """
-    import json as _json
-
     with sample_engine.connect() as conn:
         row = conn.execute(
             sa.select(findings.c.detail_json)
@@ -736,7 +734,7 @@ def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
         return None
 
     try:
-        detail = _json.loads(row.detail_json)
+        detail = json.loads(row.detail_json)
         return detail.get("top_population")
     except (ValueError, TypeError):
         return None
