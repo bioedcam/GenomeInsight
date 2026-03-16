@@ -32,6 +32,10 @@ Algorithm:
 The ``top_population`` output is consumed by the PRS ancestry mismatch
 check (P3-16) via ``prs.get_inferred_ancestry()``.
 
+The ``get_ancestry_matched_af_column()`` utility (P3-26) maps inferred
+ancestry to the corresponding gnomAD per-population AF column name,
+enabling variant endpoints to display ancestry-matched allele frequencies.
+
 Usage::
 
     from backend.analysis.ancestry import (
@@ -40,6 +44,8 @@ Usage::
         compute_admixture_fractions,
         store_ancestry_findings,
         get_pca_coordinates,
+        get_ancestry_matched_af_column,
+        get_inferred_ancestry,
         AncestryBundle,
         AncestryResult,
         PCACoordinates,
@@ -664,6 +670,74 @@ def get_pca_coordinates(
         n_components=bundle.n_components,
         pc_labels=pc_labels,
     )
+
+
+# ── Ancestry-matched AF display (P3-26) ──────────────────────────────────
+
+# Maps ancestry super-population codes to gnomAD per-population AF column
+# names in the annotated_variants table. gnomAD stores Non-Finnish European
+# as "nfe", which is mapped to "eur" in our schema (see gnomad.py).
+# OCE (Oceanian) has no gnomAD-specific data, so falls back to global AF.
+_ANCESTRY_TO_GNOMAD_COL: dict[str, str] = {
+    "AFR": "gnomad_af_afr",
+    "AMR": "gnomad_af_amr",
+    "EAS": "gnomad_af_eas",
+    "EUR": "gnomad_af_eur",
+    "SAS": "gnomad_af_sas",
+    "OCE": "gnomad_af_global",
+}
+
+
+def get_ancestry_matched_af_column(population: str | None) -> str:
+    """Return the gnomAD AF column name matching the inferred ancestry.
+
+    Maps super-population codes (AFR, AMR, EAS, EUR, SAS, OCE) to the
+    corresponding ``gnomad_af_*`` column in annotated_variants.
+
+    Args:
+        population: Inferred super-population code, or None.
+
+    Returns:
+        Column name string (e.g. ``"gnomad_af_eur"``).
+        Falls back to ``"gnomad_af_global"`` if population is unknown or None.
+    """
+    if population is None:
+        return "gnomad_af_global"
+    return _ANCESTRY_TO_GNOMAD_COL.get(population.upper(), "gnomad_af_global")
+
+
+def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
+    """Retrieve the inferred top ancestry from a sample's findings.
+
+    Queries the findings table for the most recent ancestry PCA projection
+    finding and extracts the ``top_population`` from ``detail_json``.
+
+    This is the canonical way to get ancestry for P3-26 (ancestry-matched AF)
+    and is also used by PRS ancestry mismatch checks (P3-16).
+
+    Args:
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Inferred top ancestry code (e.g. "EUR", "EAS", "AFR") or None.
+    """
+    with sample_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(findings.c.detail_json)
+            .where(findings.c.module == "ancestry")
+            .where(findings.c.category == "pca_projection")
+            .order_by(findings.c.id.desc())
+            .limit(1)
+        ).fetchone()
+
+    if row is None or not row.detail_json:
+        return None
+
+    try:
+        detail = json.loads(row.detail_json)
+        return detail.get("top_population")
+    except (ValueError, TypeError):
+        return None
 
 
 # ── Convenience pipeline ──────────────────────────────────────────────────

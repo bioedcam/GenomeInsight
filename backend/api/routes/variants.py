@@ -1,4 +1,4 @@
-"""Variant table API endpoints (P1-14, P1-15d, P2-23, P2-25, P2-26).
+"""Variant table API endpoints (P1-14, P1-15d, P2-23, P2-25, P2-26, P3-26).
 
 Cursor-based keyset pagination on (chrom, pos) for raw_variants and
 annotated_variants tables in per-sample databases.
@@ -9,6 +9,10 @@ GET  /api/variants/chromosomes        — Per-chromosome counts
 GET  /api/variants/density            — Per 1 Mb bin density by consequence tier (P2-23)
 GET  /api/variants/consequence-summary — Per-consequence-type counts (P2-25)
 GET  /api/variants/clinvar-summary    — ClinVar significance breakdown (P2-26)
+
+P3-26: Variant rows include ``ancestry_matched_af`` — the gnomAD allele
+frequency for the user's inferred ancestry population — and
+``ancestry_matched_population`` indicating which population was matched.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.analysis.ancestry import get_ancestry_matched_af_column, get_inferred_ancestry
 from backend.db.connection import get_registry
 from backend.db.tables import annotated_variants, raw_variants, samples
 
@@ -89,6 +94,9 @@ class VariantRow(BaseModel):
     annotation_coverage: int | None = None
     evidence_conflict: bool | None = None
     ensemble_pathogenic: bool | None = None
+    # P3-26: Ancestry-matched allele frequency
+    ancestry_matched_af: float | None = None
+    ancestry_matched_population: str | None = None
 
 
 class VariantPage(BaseModel):
@@ -243,8 +251,20 @@ def _build_order_by(table: sa.Table) -> list:
     return [_chrom_order_expr(table).asc(), table.c.pos.asc()]
 
 
-def _row_to_variant(row: sa.Row, table: sa.Table) -> VariantRow:
-    """Convert a SQLAlchemy Row to a VariantRow response model."""
+def _row_to_variant(
+    row: sa.Row,
+    table: sa.Table,
+    ancestry_af_col: str | None = None,
+    ancestry_population: str | None = None,
+) -> VariantRow:
+    """Convert a SQLAlchemy Row to a VariantRow response model.
+
+    Args:
+        row: Database result row.
+        table: The source table (raw_variants or annotated_variants).
+        ancestry_af_col: gnomAD AF column name matching inferred ancestry (P3-26).
+        ancestry_population: Inferred ancestry population code (P3-26).
+    """
     data: dict[str, Any] = {
         "rsid": row.rsid,
         "chrom": row.chrom,
@@ -275,6 +295,11 @@ def _row_to_variant(row: sa.Row, table: sa.Table) -> VariantRow:
         ):
             data[field] = getattr(row, field, None)
 
+        # P3-26: Ancestry-matched AF
+        if ancestry_af_col:
+            data["ancestry_matched_af"] = getattr(row, ancestry_af_col, None)
+            data["ancestry_matched_population"] = ancestry_population
+
     return VariantRow(**data)
 
 
@@ -296,6 +321,14 @@ def list_variants(
     """
     sample_engine = _get_sample_engine(sample_id)
     table = _select_table(sample_engine)
+
+    # P3-26: Look up inferred ancestry for ancestry-matched AF display
+    ancestry_af_col: str | None = None
+    ancestry_population: str | None = None
+    if table is annotated_variants:
+        ancestry_population = get_inferred_ancestry(sample_engine)
+        if ancestry_population:
+            ancestry_af_col = get_ancestry_matched_af_column(ancestry_population)
 
     # Build query
     query = sa.select(table)
@@ -319,7 +352,9 @@ def list_variants(
     has_more = len(rows) > limit
     result_rows = rows[:limit]
 
-    items = [_row_to_variant(row, table) for row in result_rows]
+    items = [
+        _row_to_variant(row, table, ancestry_af_col, ancestry_population) for row in result_rows
+    ]
 
     next_chrom: str | None = None
     next_pos: int | None = None
