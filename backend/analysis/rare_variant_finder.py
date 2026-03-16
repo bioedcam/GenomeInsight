@@ -51,45 +51,51 @@ logger = structlog.get_logger(__name__)
 DEFAULT_AF_THRESHOLD = 0.01  # 1%
 
 # High-impact consequence types (loss-of-function + missense)
-HIGH_IMPACT_CONSEQUENCES = frozenset({
-    "transcript_ablation",
-    "splice_acceptor_variant",
-    "splice_donor_variant",
-    "stop_gained",
-    "frameshift_variant",
-    "stop_lost",
-    "start_lost",
-    "inframe_insertion",
-    "inframe_deletion",
-    "missense_variant",
-    "protein_altering_variant",
-})
+HIGH_IMPACT_CONSEQUENCES = frozenset(
+    {
+        "transcript_ablation",
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "stop_gained",
+        "frameshift_variant",
+        "stop_lost",
+        "start_lost",
+        "inframe_insertion",
+        "inframe_deletion",
+        "missense_variant",
+        "protein_altering_variant",
+    }
+)
 
 # ClinVar significance values considered pathogenic
-PATHOGENIC_SIGNIFICANCE = frozenset({
-    "Pathogenic",
-    "Likely pathogenic",
-    "Pathogenic/Likely pathogenic",
-})
+PATHOGENIC_SIGNIFICANCE = frozenset(
+    {
+        "Pathogenic",
+        "Likely pathogenic",
+        "Pathogenic/Likely pathogenic",
+    }
+)
 
 # All recognized ClinVar significance values for filtering
-ALL_CLINVAR_SIGNIFICANCE = frozenset({
-    "Pathogenic",
-    "Likely pathogenic",
-    "Pathogenic/Likely pathogenic",
-    "Uncertain_significance",
-    "Likely benign",
-    "Benign",
-    "Benign/Likely benign",
-    "Conflicting_interpretations_of_pathogenicity",
-    "risk_factor",
-    "drug_response",
-    "association",
-    "protective",
-    "affects",
-    "other",
-    "not_provided",
-})
+ALL_CLINVAR_SIGNIFICANCE = frozenset(
+    {
+        "Pathogenic",
+        "Likely pathogenic",
+        "Pathogenic/Likely pathogenic",
+        "Uncertain_significance",
+        "Likely benign",
+        "Benign",
+        "Benign/Likely benign",
+        "Conflicting_interpretations_of_pathogenicity",
+        "risk_factor",
+        "drug_response",
+        "association",
+        "protective",
+        "affects",
+        "other",
+        "not_provided",
+    }
+)
 
 
 # ── Data classes ──────────────────────────────────────────────────────────
@@ -318,9 +324,7 @@ def find_rare_variants(
 
     # ClinVar significance filter
     if filters.clinvar_significance:
-        conditions.append(
-            av.c.clinvar_significance.in_(filters.clinvar_significance)
-        )
+        conditions.append(av.c.clinvar_significance.in_(filters.clinvar_significance))
 
     # Zygosity filter
     if filters.zygosity:
@@ -456,13 +460,10 @@ def store_rare_variant_findings(
 
         if v.is_clinvar_pathogenic:
             finding_text = (
-                f"{gene_text} {v.rsid} — {v.clinvar_significance} "
-                f"({cons_text}, {af_text})"
+                f"{gene_text} {v.rsid} — {v.clinvar_significance} ({cons_text}, {af_text})"
             )
         else:
-            finding_text = (
-                f"{gene_text} {v.rsid} — {cons_text} ({af_text})"
-            )
+            finding_text = f"{gene_text} {v.rsid} — {cons_text} ({af_text})"
 
         detail = {
             "af_global": v.gnomad_af_global,

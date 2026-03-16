@@ -37,14 +37,33 @@ from backend.db.tables import annotated_variants, findings
 
 
 _DEFAULTS = {
-    "rsid": None, "chrom": None, "pos": None, "genotype": None, "zygosity": None,
-    "gene_symbol": None, "consequence": None, "hgvs_coding": None, "hgvs_protein": None,
-    "gnomad_af_global": None, "gnomad_af_afr": None, "gnomad_af_amr": None,
-    "gnomad_af_eas": None, "gnomad_af_eur": None, "gnomad_af_fin": None,
-    "gnomad_af_sas": None, "clinvar_significance": None, "clinvar_review_stars": None,
-    "clinvar_accession": None, "clinvar_conditions": None, "cadd_phred": None,
-    "revel": None, "ensemble_pathogenic": False, "evidence_conflict": False,
-    "annotation_coverage": 0, "disease_name": None, "inheritance_pattern": None,
+    "rsid": None,
+    "chrom": None,
+    "pos": None,
+    "genotype": None,
+    "zygosity": None,
+    "gene_symbol": None,
+    "consequence": None,
+    "hgvs_coding": None,
+    "hgvs_protein": None,
+    "gnomad_af_global": None,
+    "gnomad_af_afr": None,
+    "gnomad_af_amr": None,
+    "gnomad_af_eas": None,
+    "gnomad_af_eur": None,
+    "gnomad_af_fin": None,
+    "gnomad_af_sas": None,
+    "clinvar_significance": None,
+    "clinvar_review_stars": None,
+    "clinvar_accession": None,
+    "clinvar_conditions": None,
+    "cadd_phred": None,
+    "revel": None,
+    "ensemble_pathogenic": False,
+    "evidence_conflict": False,
+    "annotation_coverage": 0,
+    "disease_name": None,
+    "inheritance_pattern": None,
 }
 
 
@@ -56,68 +75,129 @@ def _v(**overrides: object) -> dict:
 RARE_VARIANT_FIXTURES = [
     # 1) ClinVar Pathogenic, rare (AF=0.0005), missense — should match default
     _v(
-        rsid="rs100001", chrom="17", pos=43091983, genotype="CT", zygosity="het",
-        gene_symbol="BRCA1", consequence="missense_variant",
-        hgvs_coding="c.5123A>G", hgvs_protein="p.Asp1708Gly",
-        gnomad_af_global=0.0005, clinvar_significance="Pathogenic",
-        clinvar_review_stars=3, clinvar_accession="VCV000017661",
+        rsid="rs100001",
+        chrom="17",
+        pos=43091983,
+        genotype="CT",
+        zygosity="het",
+        gene_symbol="BRCA1",
+        consequence="missense_variant",
+        hgvs_coding="c.5123A>G",
+        hgvs_protein="p.Asp1708Gly",
+        gnomad_af_global=0.0005,
+        clinvar_significance="Pathogenic",
+        clinvar_review_stars=3,
+        clinvar_accession="VCV000017661",
         clinvar_conditions="Hereditary breast and ovarian cancer",
-        cadd_phred=35.0, revel=0.95, ensemble_pathogenic=True,
+        cadd_phred=35.0,
+        revel=0.95,
+        ensemble_pathogenic=True,
         annotation_coverage=15,
         disease_name="Hereditary breast and ovarian cancer syndrome",
         inheritance_pattern="AD",
     ),
     # 2) Ultra-rare, stop_gained, no ClinVar — should match default
     _v(
-        rsid="rs100002", chrom="7", pos=55191822, genotype="AG", zygosity="het",
-        gene_symbol="EGFR", consequence="stop_gained",
-        gnomad_af_global=0.00001, ensemble_pathogenic=True,
-        annotation_coverage=12, cadd_phred=40.0, revel=0.98,
+        rsid="rs100002",
+        chrom="7",
+        pos=55191822,
+        genotype="AG",
+        zygosity="het",
+        gene_symbol="EGFR",
+        consequence="stop_gained",
+        gnomad_af_global=0.00001,
+        ensemble_pathogenic=True,
+        annotation_coverage=12,
+        cadd_phred=40.0,
+        revel=0.98,
     ),
     # 3) Novel variant (no gnomAD), frameshift — should match with include_novel
     _v(
-        rsid="rs100003", chrom="3", pos=37053568, genotype="AG", zygosity="het",
-        gene_symbol="MLH1", consequence="frameshift_variant",
-        clinvar_significance="Likely pathogenic", clinvar_review_stars=1,
-        clinvar_accession="VCV000036555", clinvar_conditions="Lynch syndrome",
-        annotation_coverage=10, cadd_phred=33.0,
+        rsid="rs100003",
+        chrom="3",
+        pos=37053568,
+        genotype="AG",
+        zygosity="het",
+        gene_symbol="MLH1",
+        consequence="frameshift_variant",
+        clinvar_significance="Likely pathogenic",
+        clinvar_review_stars=1,
+        clinvar_accession="VCV000036555",
+        clinvar_conditions="Lynch syndrome",
+        annotation_coverage=10,
+        cadd_phred=33.0,
     ),
     # 4) Common variant (AF=0.15) — should NOT match default AF filter
     _v(
-        rsid="rs100004", chrom="1", pos=11856378, genotype="AG", zygosity="het",
-        gene_symbol="MTHFR", consequence="missense_variant",
-        gnomad_af_global=0.15, clinvar_significance="Benign",
-        clinvar_review_stars=2, annotation_coverage=15,
+        rsid="rs100004",
+        chrom="1",
+        pos=11856378,
+        genotype="AG",
+        zygosity="het",
+        gene_symbol="MTHFR",
+        consequence="missense_variant",
+        gnomad_af_global=0.15,
+        clinvar_significance="Benign",
+        clinvar_review_stars=2,
+        annotation_coverage=15,
     ),
     # 5) Low-frequency (AF=0.03) — should NOT match at default 0.01 threshold
     _v(
-        rsid="rs100005", chrom="22", pos=19963748, genotype="AG", zygosity="het",
-        gene_symbol="COMT", consequence="synonymous_variant",
-        gnomad_af_global=0.03, annotation_coverage=12,
+        rsid="rs100005",
+        chrom="22",
+        pos=19963748,
+        genotype="AG",
+        zygosity="het",
+        gene_symbol="COMT",
+        consequence="synonymous_variant",
+        gnomad_af_global=0.03,
+        annotation_coverage=12,
     ),
     # 6) Rare intronic variant — should match AF filter but not if consequence filtered
     _v(
-        rsid="rs100006", chrom="11", pos=108098576, genotype="CT", zygosity="het",
-        gene_symbol="ATM", consequence="intron_variant",
-        gnomad_af_global=0.005, annotation_coverage=4,
+        rsid="rs100006",
+        chrom="11",
+        pos=108098576,
+        genotype="CT",
+        zygosity="het",
+        gene_symbol="ATM",
+        consequence="intron_variant",
+        gnomad_af_global=0.005,
+        annotation_coverage=4,
     ),
     # 7) Rare VUS — should match AF but only with appropriate ClinVar filter
     _v(
-        rsid="rs100007", chrom="13", pos=32913055, genotype="AG", zygosity="hom_alt",
-        gene_symbol="BRCA2", consequence="missense_variant",
-        gnomad_af_global=0.002, clinvar_significance="Uncertain_significance",
-        clinvar_review_stars=1, clinvar_accession="VCV000099999",
-        clinvar_conditions="not specified", evidence_conflict=True,
+        rsid="rs100007",
+        chrom="13",
+        pos=32913055,
+        genotype="AG",
+        zygosity="hom_alt",
+        gene_symbol="BRCA2",
+        consequence="missense_variant",
+        gnomad_af_global=0.002,
+        clinvar_significance="Uncertain_significance",
+        clinvar_review_stars=1,
+        clinvar_accession="VCV000099999",
+        clinvar_conditions="not specified",
+        evidence_conflict=True,
         annotation_coverage=15,
     ),
     # 8) Rare splice variant, ClinVar LP, 0 stars
     _v(
-        rsid="rs100008", chrom="5", pos=112175770, genotype="TG", zygosity="het",
-        gene_symbol="APC", consequence="splice_acceptor_variant",
-        gnomad_af_global=0.0001, clinvar_significance="Likely pathogenic",
-        clinvar_review_stars=0, clinvar_accession="VCV000012999",
+        rsid="rs100008",
+        chrom="5",
+        pos=112175770,
+        genotype="TG",
+        zygosity="het",
+        gene_symbol="APC",
+        consequence="splice_acceptor_variant",
+        gnomad_af_global=0.0001,
+        clinvar_significance="Likely pathogenic",
+        clinvar_review_stars=0,
+        clinvar_accession="VCV000012999",
         clinvar_conditions="Familial adenomatous polyposis",
-        ensemble_pathogenic=True, annotation_coverage=15,
+        ensemble_pathogenic=True,
+        annotation_coverage=15,
     ),
 ]
 
@@ -256,9 +336,7 @@ class TestConsequenceFilter:
         assert result.variants[0].rsid == "rs100002"
 
     def test_multiple_consequences(self, sample_with_rare_variants: sa.Engine) -> None:
-        filters = RareVariantFilter(
-            consequences=["missense_variant", "frameshift_variant"]
-        )
+        filters = RareVariantFilter(consequences=["missense_variant", "frameshift_variant"])
         result = find_rare_variants(filters, sample_with_rare_variants)
         rsids = {v.rsid for v in result.variants}
         assert "rs100001" in rsids  # missense
@@ -281,9 +359,7 @@ class TestClinVarFilter:
     """Test ClinVar significance filtering."""
 
     def test_pathogenic_only(self, sample_with_rare_variants: sa.Engine) -> None:
-        filters = RareVariantFilter(
-            clinvar_significance=["Pathogenic", "Likely pathogenic"]
-        )
+        filters = RareVariantFilter(clinvar_significance=["Pathogenic", "Likely pathogenic"])
         result = find_rare_variants(filters, sample_with_rare_variants)
         rsids = {v.rsid for v in result.variants}
         assert "rs100001" in rsids  # Pathogenic
@@ -292,9 +368,7 @@ class TestClinVarFilter:
         assert "rs100007" not in rsids  # VUS
 
     def test_vus_filter(self, sample_with_rare_variants: sa.Engine) -> None:
-        filters = RareVariantFilter(
-            clinvar_significance=["Uncertain_significance"]
-        )
+        filters = RareVariantFilter(clinvar_significance=["Uncertain_significance"])
         result = find_rare_variants(filters, sample_with_rare_variants)
         assert result.count == 1
         assert result.variants[0].rsid == "rs100007"
@@ -324,9 +398,7 @@ class TestCombinedFilters:
         assert result.count == 1
         assert result.variants[0].rsid == "rs100001"
 
-    def test_af_plus_consequence_plus_clinvar(
-        self, sample_with_rare_variants: sa.Engine
-    ) -> None:
+    def test_af_plus_consequence_plus_clinvar(self, sample_with_rare_variants: sa.Engine) -> None:
         filters = RareVariantFilter(
             af_threshold=0.001,
             consequences=["missense_variant"],
@@ -365,16 +437,35 @@ class TestEvidenceLevelAssignment:
     def _make_variant(self, **kwargs) -> RareVariantResult:
         """Helper to create a RareVariantResult with defaults."""
         defaults = dict(
-            rsid="rs1", chrom="1", pos=100, ref="A", alt="G",
-            genotype="AG", zygosity="het", gene_symbol="GENE1",
-            consequence="missense_variant", hgvs_coding=None, hgvs_protein=None,
-            gnomad_af_global=0.001, gnomad_af_afr=None, gnomad_af_amr=None,
-            gnomad_af_eas=None, gnomad_af_eur=None, gnomad_af_fin=None,
-            gnomad_af_sas=None, clinvar_significance=None,
-            clinvar_review_stars=None, clinvar_accession=None,
-            clinvar_conditions=None, cadd_phred=None, revel=None,
-            ensemble_pathogenic=False, evidence_conflict=False,
-            evidence_level=1, disease_name=None, inheritance_pattern=None,
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            genotype="AG",
+            zygosity="het",
+            gene_symbol="GENE1",
+            consequence="missense_variant",
+            hgvs_coding=None,
+            hgvs_protein=None,
+            gnomad_af_global=0.001,
+            gnomad_af_afr=None,
+            gnomad_af_amr=None,
+            gnomad_af_eas=None,
+            gnomad_af_eur=None,
+            gnomad_af_fin=None,
+            gnomad_af_sas=None,
+            clinvar_significance=None,
+            clinvar_review_stars=None,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            cadd_phred=None,
+            revel=None,
+            ensemble_pathogenic=False,
+            evidence_conflict=False,
+            evidence_level=1,
+            disease_name=None,
+            inheritance_pattern=None,
         )
         defaults.update(kwargs)
         return RareVariantResult(**defaults)
@@ -426,13 +517,9 @@ class TestSorting:
         filters = RareVariantFilter()
         result = find_rare_variants(filters, sample_with_rare_variants)
         # First variants should be ClinVar P/LP
-        clinvar_indices = [
-            i for i, v in enumerate(result.variants)
-            if v.is_clinvar_pathogenic
-        ]
+        clinvar_indices = [i for i, v in enumerate(result.variants) if v.is_clinvar_pathogenic]
         non_clinvar_indices = [
-            i for i, v in enumerate(result.variants)
-            if not v.is_clinvar_pathogenic
+            i for i, v in enumerate(result.variants) if not v.is_clinvar_pathogenic
         ]
         if clinvar_indices and non_clinvar_indices:
             assert max(clinvar_indices) < min(non_clinvar_indices)
@@ -465,9 +552,7 @@ class TestStoreRareVariantFindings:
         for row in rows:
             assert row.module == "rare_variants"
 
-    def test_category_assignment(
-        self, sample_with_rare_variants: sa.Engine
-    ) -> None:
+    def test_category_assignment(self, sample_with_rare_variants: sa.Engine) -> None:
         filters = RareVariantFilter()
         result = find_rare_variants(filters, sample_with_rare_variants)
         store_rare_variant_findings(result, sample_with_rare_variants)
@@ -492,33 +577,25 @@ class TestStoreRareVariantFindings:
         store_rare_variant_findings(result, sample_with_rare_variants)
 
         with sample_with_rare_variants.connect() as conn:
-            row = conn.execute(
-                sa.select(findings).where(findings.c.rsid == "rs100001")
-            ).fetchone()
+            row = conn.execute(sa.select(findings).where(findings.c.rsid == "rs100001")).fetchone()
         assert row is not None
         assert "BRCA1" in row.finding_text
         assert "rs100001" in row.finding_text
         assert "Pathogenic" in row.finding_text
 
-    def test_detail_json_has_af_data(
-        self, sample_with_rare_variants: sa.Engine
-    ) -> None:
+    def test_detail_json_has_af_data(self, sample_with_rare_variants: sa.Engine) -> None:
         filters = RareVariantFilter()
         result = find_rare_variants(filters, sample_with_rare_variants)
         store_rare_variant_findings(result, sample_with_rare_variants)
 
         with sample_with_rare_variants.connect() as conn:
-            row = conn.execute(
-                sa.select(findings).where(findings.c.rsid == "rs100001")
-            ).fetchone()
+            row = conn.execute(sa.select(findings).where(findings.c.rsid == "rs100001")).fetchone()
         detail = json.loads(row.detail_json)
         assert detail["af_global"] == 0.0005
         assert "af_populations" in detail
         assert detail["consequence"] == "missense_variant"
 
-    def test_clears_previous_findings_on_rerun(
-        self, sample_with_rare_variants: sa.Engine
-    ) -> None:
+    def test_clears_previous_findings_on_rerun(self, sample_with_rare_variants: sa.Engine) -> None:
         filters = RareVariantFilter()
         result = find_rare_variants(filters, sample_with_rare_variants)
         store_rare_variant_findings(result, sample_with_rare_variants)
@@ -538,9 +615,7 @@ class TestStoreRareVariantFindings:
         count = store_rare_variant_findings(result, empty_sample)
         assert count == 0
 
-    def test_evidence_levels_stored_correctly(
-        self, sample_with_rare_variants: sa.Engine
-    ) -> None:
+    def test_evidence_levels_stored_correctly(self, sample_with_rare_variants: sa.Engine) -> None:
         filters = RareVariantFilter()
         result = find_rare_variants(filters, sample_with_rare_variants)
         store_rare_variant_findings(result, sample_with_rare_variants)
@@ -566,61 +641,137 @@ class TestRareVariantResultProperties:
 
     def test_is_novel(self) -> None:
         v = RareVariantResult(
-            rsid="rs1", chrom="1", pos=100, ref="A", alt="G",
-            genotype="AG", zygosity="het", gene_symbol="GENE1",
-            consequence="missense_variant", hgvs_coding=None, hgvs_protein=None,
-            gnomad_af_global=None, gnomad_af_afr=None, gnomad_af_amr=None,
-            gnomad_af_eas=None, gnomad_af_eur=None, gnomad_af_fin=None,
-            gnomad_af_sas=None, clinvar_significance=None,
-            clinvar_review_stars=None, clinvar_accession=None,
-            clinvar_conditions=None, cadd_phred=None, revel=None,
-            ensemble_pathogenic=False, evidence_conflict=False,
-            evidence_level=1, disease_name=None, inheritance_pattern=None,
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            genotype="AG",
+            zygosity="het",
+            gene_symbol="GENE1",
+            consequence="missense_variant",
+            hgvs_coding=None,
+            hgvs_protein=None,
+            gnomad_af_global=None,
+            gnomad_af_afr=None,
+            gnomad_af_amr=None,
+            gnomad_af_eas=None,
+            gnomad_af_eur=None,
+            gnomad_af_fin=None,
+            gnomad_af_sas=None,
+            clinvar_significance=None,
+            clinvar_review_stars=None,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            cadd_phred=None,
+            revel=None,
+            ensemble_pathogenic=False,
+            evidence_conflict=False,
+            evidence_level=1,
+            disease_name=None,
+            inheritance_pattern=None,
         )
         assert v.is_novel is True
 
     def test_is_not_novel(self) -> None:
         v = RareVariantResult(
-            rsid="rs1", chrom="1", pos=100, ref="A", alt="G",
-            genotype="AG", zygosity="het", gene_symbol="GENE1",
-            consequence="missense_variant", hgvs_coding=None, hgvs_protein=None,
-            gnomad_af_global=0.001, gnomad_af_afr=None, gnomad_af_amr=None,
-            gnomad_af_eas=None, gnomad_af_eur=None, gnomad_af_fin=None,
-            gnomad_af_sas=None, clinvar_significance=None,
-            clinvar_review_stars=None, clinvar_accession=None,
-            clinvar_conditions=None, cadd_phred=None, revel=None,
-            ensemble_pathogenic=False, evidence_conflict=False,
-            evidence_level=1, disease_name=None, inheritance_pattern=None,
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            genotype="AG",
+            zygosity="het",
+            gene_symbol="GENE1",
+            consequence="missense_variant",
+            hgvs_coding=None,
+            hgvs_protein=None,
+            gnomad_af_global=0.001,
+            gnomad_af_afr=None,
+            gnomad_af_amr=None,
+            gnomad_af_eas=None,
+            gnomad_af_eur=None,
+            gnomad_af_fin=None,
+            gnomad_af_sas=None,
+            clinvar_significance=None,
+            clinvar_review_stars=None,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            cadd_phred=None,
+            revel=None,
+            ensemble_pathogenic=False,
+            evidence_conflict=False,
+            evidence_level=1,
+            disease_name=None,
+            inheritance_pattern=None,
         )
         assert v.is_novel is False
 
     def test_is_clinvar_pathogenic(self) -> None:
         v = RareVariantResult(
-            rsid="rs1", chrom="1", pos=100, ref="A", alt="G",
-            genotype="AG", zygosity="het", gene_symbol="GENE1",
-            consequence="missense_variant", hgvs_coding=None, hgvs_protein=None,
-            gnomad_af_global=0.001, gnomad_af_afr=None, gnomad_af_amr=None,
-            gnomad_af_eas=None, gnomad_af_eur=None, gnomad_af_fin=None,
-            gnomad_af_sas=None, clinvar_significance="Pathogenic",
-            clinvar_review_stars=3, clinvar_accession=None,
-            clinvar_conditions=None, cadd_phred=None, revel=None,
-            ensemble_pathogenic=False, evidence_conflict=False,
-            evidence_level=4, disease_name=None, inheritance_pattern=None,
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            genotype="AG",
+            zygosity="het",
+            gene_symbol="GENE1",
+            consequence="missense_variant",
+            hgvs_coding=None,
+            hgvs_protein=None,
+            gnomad_af_global=0.001,
+            gnomad_af_afr=None,
+            gnomad_af_amr=None,
+            gnomad_af_eas=None,
+            gnomad_af_eur=None,
+            gnomad_af_fin=None,
+            gnomad_af_sas=None,
+            clinvar_significance="Pathogenic",
+            clinvar_review_stars=3,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            cadd_phred=None,
+            revel=None,
+            ensemble_pathogenic=False,
+            evidence_conflict=False,
+            evidence_level=4,
+            disease_name=None,
+            inheritance_pattern=None,
         )
         assert v.is_clinvar_pathogenic is True
 
     def test_consequence_severity_score(self) -> None:
         v = RareVariantResult(
-            rsid="rs1", chrom="1", pos=100, ref="A", alt="G",
-            genotype="AG", zygosity="het", gene_symbol="GENE1",
-            consequence="stop_gained", hgvs_coding=None, hgvs_protein=None,
-            gnomad_af_global=0.001, gnomad_af_afr=None, gnomad_af_amr=None,
-            gnomad_af_eas=None, gnomad_af_eur=None, gnomad_af_fin=None,
-            gnomad_af_sas=None, clinvar_significance=None,
-            clinvar_review_stars=None, clinvar_accession=None,
-            clinvar_conditions=None, cadd_phred=None, revel=None,
-            ensemble_pathogenic=False, evidence_conflict=False,
-            evidence_level=1, disease_name=None, inheritance_pattern=None,
+            rsid="rs1",
+            chrom="1",
+            pos=100,
+            ref="A",
+            alt="G",
+            genotype="AG",
+            zygosity="het",
+            gene_symbol="GENE1",
+            consequence="stop_gained",
+            hgvs_coding=None,
+            hgvs_protein=None,
+            gnomad_af_global=0.001,
+            gnomad_af_afr=None,
+            gnomad_af_amr=None,
+            gnomad_af_eas=None,
+            gnomad_af_eur=None,
+            gnomad_af_fin=None,
+            gnomad_af_sas=None,
+            clinvar_significance=None,
+            clinvar_review_stars=None,
+            clinvar_accession=None,
+            clinvar_conditions=None,
+            cadd_phred=None,
+            revel=None,
+            ensemble_pathogenic=False,
+            evidence_conflict=False,
+            evidence_level=1,
+            disease_name=None,
+            inheritance_pattern=None,
         )
         assert v.consequence_severity_score == CONSEQUENCE_SEVERITY["stop_gained"]
 
