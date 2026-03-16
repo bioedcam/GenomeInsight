@@ -1,6 +1,7 @@
 """Ancestry inference API endpoints.
 
-Implements the API layer for P3-23 (ancestry PCA projection).
+Implements the API layer for P3-23 (ancestry PCA projection) and
+P3-24 (admixture fraction computation).
 Provides endpoints to run ancestry inference and retrieve results.
 """
 
@@ -37,6 +38,7 @@ class AncestryFindingResponse(BaseModel):
     top_population: str
     pc_scores: list[float]
     population_distances: dict[str, float]
+    admixture_fractions: dict[str, float]
     population_ranking: list[PopulationDistance]
     snps_used: int
     snps_total: int
@@ -51,6 +53,7 @@ class AncestryRunResponse(BaseModel):
     """Response from running ancestry inference."""
 
     top_population: str
+    admixture_fractions: dict[str, float]
     snps_used: int
     snps_total: int
     coverage_fraction: float
@@ -107,6 +110,7 @@ def get_ancestry_findings(
         top_population=detail.get("top_population", ""),
         pc_scores=detail.get("pc_scores", []),
         population_distances=detail.get("population_distances", {}),
+        admixture_fractions=detail.get("admixture_fractions", {}),
         population_ranking=[PopulationDistance(**p) for p in detail.get("population_ranking", [])],
         snps_used=detail.get("snps_used", 0),
         snps_total=detail.get("snps_total", 0),
@@ -135,6 +139,7 @@ def run_ancestry(
 
     return AncestryRunResponse(
         top_population=result.top_population,
+        admixture_fractions=result.admixture_fractions,
         snps_used=result.snps_used,
         snps_total=result.snps_total,
         coverage_fraction=result.coverage_fraction,

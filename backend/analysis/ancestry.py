@@ -1,8 +1,12 @@
-"""Ancestry inference via PCA projection.
+"""Ancestry inference via PCA projection and admixture estimation.
 
-Implements P3-23: project user genotypes onto pre-computed PCA space
-via NumPy dot product against loadings from the ancestry PCA bundle.
-Runtime target: < 1 second for ~100k SNPs.
+Implements P3-23 (PCA projection) and P3-24 (admixture fractions).
+
+Projects user genotypes onto pre-computed PCA space via NumPy dot product
+against loadings from the ancestry PCA bundle. Runtime target: < 1 second.
+
+Admixture fractions are estimated via inverse-distance weighting against
+reference population centroids in PCA space. Fractions sum to ~1.0.
 
 The ancestry PCA bundle contains:
   - A curated set of ancestry informative markers (AIMs)
@@ -17,6 +21,7 @@ Algorithm:
   4. Center: dosage_i - 2 * ref_freq_i
   5. Project: pc_scores = centered @ loadings.T
   6. Classify: nearest centroid in PCA space → top population
+  7. Compute admixture fractions via inverse-distance weighting
 
 The ``top_population`` output is consumed by the PRS ancestry mismatch
 check (P3-16) via ``prs.get_inferred_ancestry()``.
@@ -26,6 +31,7 @@ Usage::
     from backend.analysis.ancestry import (
         load_ancestry_bundle,
         infer_ancestry,
+        compute_admixture_fractions,
         store_ancestry_findings,
         AncestryBundle,
         AncestryResult,
@@ -33,6 +39,7 @@ Usage::
 
     bundle = load_ancestry_bundle()
     result = infer_ancestry(bundle, sample_engine)
+    # result.admixture_fractions contains per-population proportions
     store_ancestry_findings(result, sample_engine)
 """
 
@@ -122,6 +129,8 @@ class AncestryResult:
         pc_scores: Projected PC coordinates, shape (n_components,).
         top_population: Nearest super-population by centroid distance.
         population_distances: Squared Euclidean distance to each centroid.
+        admixture_fractions: Estimated ancestry proportions per population,
+            computed via inverse-distance weighting. Values sum to ~1.0.
         snps_used: Number of SNPs with available genotype data.
         snps_total: Total SNPs in the bundle.
         coverage_fraction: snps_used / snps_total.
@@ -132,6 +141,7 @@ class AncestryResult:
     pc_scores: list[float]
     top_population: str
     population_distances: dict[str, float]
+    admixture_fractions: dict[str, float]
     snps_used: int
     snps_total: int
     coverage_fraction: float
@@ -333,6 +343,64 @@ def _classify_nearest_centroid(
     return best_pop, distances
 
 
+def compute_admixture_fractions(
+    population_distances: dict[str, float],
+) -> dict[str, float]:
+    """Estimate admixture fractions via inverse-distance weighting.
+
+    Converts squared Euclidean distances to population centroids into
+    proportional ancestry estimates. Uses inverse-distance weighting
+    with a small epsilon to avoid division by zero when a sample sits
+    exactly on a centroid.
+
+    The resulting fractions sum to ~1.0 (within floating point tolerance).
+
+    Args:
+        population_distances: Squared Euclidean distance to each
+            population centroid (from _classify_nearest_centroid).
+
+    Returns:
+        Dict mapping population code → fraction (0.0–1.0).
+        Empty dict if no distances provided.
+    """
+    if not population_distances:
+        return {}
+
+    epsilon = 1e-10
+
+    # Check if sample is essentially on a centroid (distance ~ 0)
+    min_dist = min(population_distances.values())
+    if min_dist < epsilon:
+        # Distribute evenly among zero-distance populations
+        zero_pops = [p for p, d in population_distances.items() if d < epsilon]
+        share = round(1.0 / len(zero_pops), 4)
+        fractions = {}
+        for pop, dist in population_distances.items():
+            fractions[pop] = share if dist < epsilon else 0.0
+        return fractions
+
+    # Inverse-distance weighting: weight_i = 1 / d_i^2
+    # Using squared distances directly (already squared Euclidean)
+    inv_weights: dict[str, float] = {}
+    total_weight = 0.0
+
+    for pop, dist in population_distances.items():
+        w = 1.0 / (dist + epsilon)
+        inv_weights[pop] = w
+        total_weight += w
+
+    # Normalize to sum to 1.0
+    fractions = {pop: round(w / total_weight, 4) for pop, w in inv_weights.items()}
+
+    # Ensure exact sum to 1.0 by adjusting the largest fraction
+    frac_sum = sum(fractions.values())
+    if fractions and abs(frac_sum - 1.0) > 1e-8:
+        max_pop = max(fractions, key=lambda p: fractions[p])
+        fractions[max_pop] = round(fractions[max_pop] + (1.0 - frac_sum), 4)
+
+    return fractions
+
+
 # ── Main inference function ───────────────────────────────────────────────
 
 
@@ -395,6 +463,9 @@ def infer_ancestry(
     # Classify
     top_pop, distances = _classify_nearest_centroid(pc_scores, bundle.reference_centroids)
 
+    # Compute admixture fractions (P3-24)
+    admixture = compute_admixture_fractions(distances)
+
     coverage = snps_used / bundle.snp_count if bundle.snp_count > 0 else 0.0
     is_sufficient = coverage >= _MIN_COVERAGE
 
@@ -402,6 +473,7 @@ def infer_ancestry(
         pc_scores=[round(float(s), 6) for s in pc_scores],
         top_population=top_pop,
         population_distances=distances,
+        admixture_fractions=admixture,
         snps_used=snps_used,
         snps_total=bundle.snp_count,
         coverage_fraction=round(coverage, 4),
@@ -454,8 +526,13 @@ def store_ancestry_findings(
     # Sort populations by distance (ascending) for display
     sorted_pops = sorted(result.population_distances.items(), key=lambda x: x[1])
 
+    # Build admixture summary for finding text (top 3 contributions)
+    sorted_admixture = sorted(result.admixture_fractions.items(), key=lambda x: x[1], reverse=True)
+    admixture_parts = [f"{pop} {frac:.0%}" for pop, frac in sorted_admixture[:3] if frac >= 0.01]
+    admixture_summary = ", ".join(admixture_parts) if admixture_parts else result.top_population
+
     finding_text = (
-        f"Inferred ancestry: {result.top_population} "
+        f"Inferred ancestry: {admixture_summary} "
         f"({result.snps_used}/{result.snps_total} markers, "
         f"{result.coverage_fraction:.0%} coverage)"
     )
@@ -465,6 +542,7 @@ def store_ancestry_findings(
         "inferred_ancestry": result.top_population,
         "pc_scores": result.pc_scores,
         "population_distances": result.population_distances,
+        "admixture_fractions": result.admixture_fractions,
         "population_ranking": [{"population": pop, "distance": dist} for pop, dist in sorted_pops],
         "snps_used": result.snps_used,
         "snps_total": result.snps_total,
