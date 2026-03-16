@@ -38,7 +38,10 @@ export function useRareVariantSearch(sampleId: number | null) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (filters: RareVariantFilterRequest): Promise<RareVariantSearchResponse> => {
-      const params = new URLSearchParams({ sample_id: String(sampleId!) })
+      if (sampleId == null) {
+        throw new Error("Cannot search without a sample selected")
+      }
+      const params = new URLSearchParams({ sample_id: String(sampleId) })
       const res = await fetch(`/api/analysis/rare-variants/search?${params}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

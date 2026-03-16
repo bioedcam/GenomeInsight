@@ -28,7 +28,7 @@ function formatAF(af: number | null): string {
   if (af == null) return "—"
   if (af === 0) return "0"
   if (af < 0.0001) return af.toExponential(2)
-  return (af * 100).toFixed(4) + "%"
+  return (af * 100).toFixed(2) + "%"
 }
 
 export default function VariantDetailPanel({ variant, onClose }: VariantDetailPanelProps) {

@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "./test-utils"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { render as rtlRender, screen, waitFor } from "@testing-library/react"
+import { render } from "./test-utils"
 import userEvent from "@testing-library/user-event"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { MemoryRouter } from "react-router-dom"
+import type { ReactNode } from "react"
 import RareVariantsView from "@/pages/RareVariantsView"
 import FilterPanel from "@/components/rare-variants/FilterPanel"
 import ResultsTable from "@/components/rare-variants/ResultsTable"
@@ -162,7 +166,7 @@ describe("ResultsTable", () => {
   it("shows evidence conflict indicator", () => {
     const variant = makeMockVariant({ evidence_conflict: true })
     render(<ResultsTable items={[variant]} selectedRsid={null} onSelect={vi.fn()} />)
-    expect(screen.getByTitle("Evidence conflict")).toBeInTheDocument()
+    expect(screen.getByLabelText("Evidence conflict")).toBeInTheDocument()
   })
 })
 
@@ -230,15 +234,108 @@ describe("VariantDetailPanel", () => {
   })
 })
 
+function createWrapper(initialEntries: string[] = ["/"]) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
 describe("RareVariantsView", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", mockFetch)
     mockFetch.mockReset()
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("shows empty state when no sample selected", () => {
     render(<RareVariantsView />)
     expect(screen.getByText("Rare Variant Finder")).toBeInTheDocument()
     expect(screen.getByText("Select a sample to search for rare variants.")).toBeInTheDocument()
+  })
+
+  it("shows loading state when fetching findings", () => {
+    // Never-resolving fetch to keep loading
+    mockFetch.mockImplementation(() => new Promise(() => {}))
+    rtlRender(<RareVariantsView />, {
+      wrapper: createWrapper(["/?sample_id=1"]),
+    })
+    expect(screen.getByText("Rare Variant Finder")).toBeInTheDocument()
+  })
+
+  it("shows no-findings empty state when API returns empty", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ items: [], total: 0 }),
+      text: () => Promise.resolve(""),
+    })
+    rtlRender(<RareVariantsView />, {
+      wrapper: createWrapper(["/?sample_id=1"]),
+    })
+    await waitFor(() => {
+      expect(screen.getByText("No rare variant findings yet.")).toBeInTheDocument()
+    })
+  })
+
+  it("shows error state when API fails", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve("Internal Server Error"),
+    })
+    rtlRender(<RareVariantsView />, {
+      wrapper: createWrapper(["/?sample_id=1"]),
+    })
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load rare variant data")).toBeInTheDocument()
+    })
+  })
+
+  it("shows stored findings table when findings exist", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          items: [
+            {
+              rsid: "rs12345",
+              gene_symbol: "BRCA1",
+              category: "clinvar_pathogenic",
+              evidence_level: 4,
+              finding_text: "Pathogenic variant in BRCA1",
+              zygosity: "het",
+              clinvar_significance: "Pathogenic",
+              conditions: "Breast cancer",
+              detail: {},
+            },
+          ],
+          total: 1,
+        }),
+      text: () => Promise.resolve(""),
+    })
+    rtlRender(<RareVariantsView />, {
+      wrapper: createWrapper(["/?sample_id=1"]),
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId("findings-table")).toBeInTheDocument()
+    })
+    expect(screen.getByText("BRCA1")).toBeInTheDocument()
+    expect(screen.getByText("Previous Findings")).toBeInTheDocument()
+  })
+
+  it("renders filter panel with sample selected", () => {
+    mockFetch.mockImplementation(() => new Promise(() => {}))
+    rtlRender(<RareVariantsView />, {
+      wrapper: createWrapper(["/?sample_id=1"]),
+    })
+    expect(screen.getByTestId("rare-variant-filter-panel")).toBeInTheDocument()
+    expect(screen.getByTestId("search-button")).toBeInTheDocument()
   })
 })

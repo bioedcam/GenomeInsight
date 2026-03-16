@@ -57,6 +57,9 @@ export default function FilterPanel({ onSearch, isSearching }: FilterPanelProps)
         .filter(Boolean)
       setGeneText(genes.join("\n"))
     }
+    reader.onerror = () => {
+      console.error("Failed to read gene panel file:", reader.error?.message)
+    }
     reader.readAsText(file)
     // Reset input so re-uploading same file works
     e.target.value = ""

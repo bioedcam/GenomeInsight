@@ -80,7 +80,7 @@ export default function ResultsTable({ items, selectedRsid, onSelect }: ResultsT
                 <td className={cn("px-3 py-2 text-xs", SIGNIFICANCE_COLORS[v.clinvar_significance ?? ""])}>
                   {v.clinvar_significance ?? "—"}
                   {v.evidence_conflict && (
-                    <span className="ml-1 text-amber-500" title="Evidence conflict">⚠</span>
+                    <span className="ml-1 text-amber-500" role="img" aria-label="Evidence conflict" title="Evidence conflict">⚠</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-xs">
