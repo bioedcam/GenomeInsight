@@ -1,4 +1,4 @@
-"""Tests for ancestry inference module (P3-23, P3-24).
+"""Tests for ancestry inference module (P3-23, P3-24, P3-25).
 
 Covers:
   - Bundle loading and validation
@@ -6,6 +6,7 @@ Covers:
   - PCA projection via NumPy dot product
   - Nearest-centroid classification
   - Admixture fraction computation (P3-24, T3-24)
+  - PCA coordinates for visualization (P3-25)
   - Findings storage (module='ancestry', category='pca_projection')
   - T3-25: PCA projection places known EUR-ancestry sample in EUR cluster
   - Coverage threshold enforcement
@@ -26,10 +27,12 @@ from backend.analysis.ancestry import (
     AncestryAIM,
     AncestryBundle,
     AncestryResult,
+    PCACoordinates,
     _classify_nearest_centroid,
     _encode_dosage,
     _project_onto_pca,
     compute_admixture_fractions,
+    get_pca_coordinates,
     infer_ancestry,
     load_ancestry_bundle,
     store_ancestry_findings,
@@ -78,6 +81,12 @@ def small_bundle() -> AncestryBundle:
         "EAS": np.array([-0.5, -2.0], dtype=np.float64),
     }
 
+    reference_samples = {
+        "AFR": [[2.1, -0.9], [1.8, -1.2], [2.3, -0.8]],
+        "EUR": [[-1.1, 1.4], [-0.8, 1.6], [-1.2, 1.3]],
+        "EAS": [[-0.6, -1.9], [-0.4, -2.1], [-0.7, -2.2]],
+    }
+
     return AncestryBundle(
         version="test",
         build="GRCh37",
@@ -87,6 +96,7 @@ def small_bundle() -> AncestryBundle:
         snps=snps,
         loadings=loadings,
         reference_centroids=centroids,
+        reference_samples=reference_samples,
     )
 
 
@@ -714,6 +724,142 @@ class TestStoreAncestryFindings:
                 sa.select(findings).where(findings.c.module == "ancestry")
             ).fetchone()
         assert result.top_population in row.finding_text
+
+
+# ── PCA coordinates for visualization (P3-25) ────────────────────────────
+
+
+class TestGetPCACoordinates:
+    """Test PCA coordinates for scatter plot visualization (P3-25)."""
+
+    def test_returns_pca_coordinates(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert isinstance(coords, PCACoordinates)
+
+    def test_user_coordinates_match_result(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert coords.user == result.pc_scores
+
+    def test_reference_samples_present(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert len(coords.reference_samples) == 3  # AFR, EUR, EAS
+        for pop in ["AFR", "EUR", "EAS"]:
+            assert pop in coords.reference_samples
+            assert len(coords.reference_samples[pop]) > 0
+
+    def test_reference_samples_have_correct_dimensions(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        for pop, samples in coords.reference_samples.items():
+            for sample in samples:
+                assert len(sample) == coords.n_components, (
+                    f"{pop} sample has {len(sample)} dims, expected {coords.n_components}"
+                )
+
+    def test_centroids_present(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert len(coords.centroids) == 3
+        for pop in ["AFR", "EUR", "EAS"]:
+            assert pop in coords.centroids
+            assert len(coords.centroids[pop]) == coords.n_components
+
+    def test_population_labels(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert coords.population_labels == {
+            "AFR": "African",
+            "EUR": "European",
+            "EAS": "East Asian",
+        }
+
+    def test_pc_labels(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        result = infer_ancestry(small_bundle, eur_sample)
+        coords = get_pca_coordinates(small_bundle, result)
+        assert coords.pc_labels == ["PC1", "PC2"]
+        assert coords.n_components == 2
+
+    def test_with_real_bundle(
+        self,
+        bundle: AncestryBundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """PCA coordinates work with the full bundle (6 PCs, 128 SNPs)."""
+        # Insert some genotypes
+        genotypes = [
+            {"rsid": s.rsid, "chrom": s.chrom, "pos": s.pos, "genotype": s.ref * 2}
+            for s in bundle.snps[:50]
+        ]
+        _insert_raw_genotypes(sample_engine, genotypes)
+        result = infer_ancestry(bundle, sample_engine)
+        coords = get_pca_coordinates(bundle, result)
+        assert coords.n_components == 6
+        assert len(coords.pc_labels) == 6
+        assert len(coords.user) == 6
+        # Reference samples should have all 6 populations
+        assert len(coords.reference_samples) == 6
+        for pop in bundle.populations:
+            assert pop in coords.reference_samples
+            assert len(coords.reference_samples[pop]) > 0
+
+
+class TestBundleReferenceSamples:
+    """Test reference samples in the ancestry PCA bundle."""
+
+    def test_bundle_has_reference_samples(self, bundle: AncestryBundle) -> None:
+        assert len(bundle.reference_samples) > 0
+
+    def test_all_populations_have_samples(self, bundle: AncestryBundle) -> None:
+        for pop in bundle.populations:
+            assert pop in bundle.reference_samples, f"Missing reference samples for {pop}"
+            assert len(bundle.reference_samples[pop]) > 0
+
+    def test_reference_sample_dimensions(self, bundle: AncestryBundle) -> None:
+        for pop, samples in bundle.reference_samples.items():
+            for i, sample in enumerate(samples):
+                assert len(sample) == bundle.n_components, (
+                    f"{pop} sample {i} has {len(sample)} dims, expected {bundle.n_components}"
+                )
+
+    def test_reference_samples_near_centroids(self, bundle: AncestryBundle) -> None:
+        """Reference samples should cluster near their population centroids."""
+        for pop, samples in bundle.reference_samples.items():
+            centroid = bundle.reference_centroids[pop]
+            mean = np.mean(samples, axis=0)
+            dist = float(np.sqrt(np.sum((mean - centroid) ** 2)))
+            # Mean of samples should be reasonably close to centroid
+            assert dist < 10.0, f"{pop} mean distance to centroid: {dist:.2f}"
 
 
 # ── PRS integration test ─────────────────────────────────────────────────

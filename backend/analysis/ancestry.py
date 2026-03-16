@@ -1,6 +1,7 @@
 """Ancestry inference via PCA projection and admixture estimation.
 
-Implements P3-23 (PCA projection) and P3-24 (admixture fractions).
+Implements P3-23 (PCA projection), P3-24 (admixture fractions), and
+P3-25 (PCA coordinates for visualization).
 
 Projects user genotypes onto pre-computed PCA space via NumPy dot product
 against loadings from the ancestry PCA bundle. Runtime target: < 1 second.
@@ -8,11 +9,16 @@ against loadings from the ancestry PCA bundle. Runtime target: < 1 second.
 Admixture fractions are estimated via inverse-distance weighting against
 reference population centroids in PCA space. Fractions sum to ~1.0.
 
+PCA coordinates for visualization (P3-25) combine the user's projected
+coordinates with reference panel sample coordinates for scatter plot
+rendering. Reference samples are pre-computed and stored in the bundle.
+
 The ancestry PCA bundle contains:
   - A curated set of ancestry informative markers (AIMs)
   - Pre-computed PCA loadings (eigenvectors) from a reference panel
   - Reference population centroids in PCA space
   - Global reference allele frequencies for centering
+  - Reference sample PCA coordinates by population (for visualization)
 
 Algorithm:
   1. Load ancestry PCA bundle (SNPs, loadings, centroids, ref freqs)
@@ -33,14 +39,18 @@ Usage::
         infer_ancestry,
         compute_admixture_fractions,
         store_ancestry_findings,
+        get_pca_coordinates,
         AncestryBundle,
         AncestryResult,
+        PCACoordinates,
     )
 
     bundle = load_ancestry_bundle()
     result = infer_ancestry(bundle, sample_engine)
     # result.admixture_fractions contains per-population proportions
     store_ancestry_findings(result, sample_engine)
+    # PCA coordinates for scatter plot visualization (P3-25)
+    pca_coords = get_pca_coordinates(bundle, result)
 """
 
 from __future__ import annotations
@@ -96,6 +106,9 @@ class AncestryBundle:
         loadings: PCA loadings matrix, shape (n_components, n_snps).
         reference_centroids: Population centroids in PCA space,
             mapping population code → array of PC coordinates.
+        reference_samples: Pre-computed PCA coordinates for reference
+            panel samples, mapping population code → list of coordinate
+            arrays. Used for PCA scatter plot visualization (P3-25).
     """
 
     version: str
@@ -106,6 +119,7 @@ class AncestryBundle:
     snps: list[AncestryAIM]
     loadings: np.ndarray  # shape: (n_components, n_snps)
     reference_centroids: dict[str, np.ndarray]  # pop → (n_components,)
+    reference_samples: dict[str, list[list[float]]]  # pop → list of PC coords
 
     @property
     def snp_count(self) -> int:
@@ -152,6 +166,31 @@ class AncestryResult:
     def n_components(self) -> int:
         """Number of principal components."""
         return len(self.pc_scores)
+
+
+@dataclass
+class PCACoordinates:
+    """PCA coordinates for scatter plot visualization (P3-25).
+
+    Combines the user's projected coordinates with reference panel
+    sample coordinates for rendering a PCA scatter plot.
+
+    Attributes:
+        user: User's projected PC coordinates.
+        reference_samples: Reference panel samples by population,
+            mapping population code → list of coordinate arrays.
+        centroids: Population centroids in PCA space.
+        population_labels: Human-readable population names.
+        n_components: Number of principal components.
+        pc_labels: Labels for each PC axis (e.g. ["PC1", "PC2", ...]).
+    """
+
+    user: list[float]
+    reference_samples: dict[str, list[list[float]]]
+    centroids: dict[str, list[float]]
+    population_labels: dict[str, str]
+    n_components: int
+    pc_labels: list[str]
 
 
 # ── Bundle loading ────────────────────────────────────────────────────────
@@ -212,6 +251,12 @@ def load_ancestry_bundle(bundle_path: Path | None = None) -> AncestryBundle:
             )
         centroids[pop] = np.array(coords, dtype=np.float64)
 
+    # Parse reference samples for PCA visualization (P3-25)
+    ref_samples: dict[str, list[list[float]]] = {}
+    if "reference_samples" in data:
+        for pop, coords_list in data["reference_samples"].items():
+            ref_samples[pop] = [[float(v) for v in coords] for coords in coords_list]
+
     bundle = AncestryBundle(
         version=data.get("version", "1.0.0"),
         build=data.get("build", "GRCh37"),
@@ -221,6 +266,7 @@ def load_ancestry_bundle(bundle_path: Path | None = None) -> AncestryBundle:
         snps=snps,
         loadings=loadings,
         reference_centroids=centroids,
+        reference_samples=ref_samples,
     )
 
     logger.info(
@@ -574,6 +620,42 @@ def store_ancestry_findings(
         top_population=result.top_population,
     )
     return 1
+
+
+# ── PCA coordinates for visualization (P3-25) ────────────────────────────
+
+
+def get_pca_coordinates(
+    bundle: AncestryBundle,
+    result: AncestryResult,
+) -> PCACoordinates:
+    """Get PCA coordinates for scatter plot visualization.
+
+    Combines the user's projected PC coordinates with reference panel
+    sample coordinates and centroids for rendering a PCA scatter plot.
+
+    Args:
+        bundle: Loaded ancestry PCA bundle (contains reference samples).
+        result: AncestryResult from infer_ancestry (contains user PC scores).
+
+    Returns:
+        PCACoordinates with user + reference data for visualization.
+    """
+    centroids = {
+        pop: [round(float(v), 4) for v in coords]
+        for pop, coords in bundle.reference_centroids.items()
+    }
+
+    pc_labels = [f"PC{i + 1}" for i in range(bundle.n_components)]
+
+    return PCACoordinates(
+        user=result.pc_scores,
+        reference_samples=bundle.reference_samples,
+        centroids=centroids,
+        population_labels=bundle.population_labels,
+        n_components=bundle.n_components,
+        pc_labels=pc_labels,
+    )
 
 
 # ── Convenience pipeline ──────────────────────────────────────────────────

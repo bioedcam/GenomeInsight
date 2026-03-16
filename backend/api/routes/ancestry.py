@@ -1,7 +1,8 @@
 """Ancestry inference API endpoints.
 
-Implements the API layer for P3-23 (ancestry PCA projection) and
-P3-24 (admixture fraction computation).
+Implements the API layer for P3-23 (ancestry PCA projection),
+P3-24 (admixture fraction computation), and P3-25 (PCA coordinates
+for visualization).
 Provides endpoints to run ancestry inference and retrieve results.
 """
 
@@ -58,6 +59,18 @@ class AncestryRunResponse(BaseModel):
     snps_total: int
     coverage_fraction: float
     is_sufficient: bool
+
+
+class PCACoordinatesResponse(BaseModel):
+    """PCA coordinates for scatter plot visualization (P3-25)."""
+
+    user: list[float]
+    reference_samples: dict[str, list[list[float]]]
+    centroids: dict[str, list[float]]
+    population_labels: dict[str, str]
+    n_components: int
+    pc_labels: list[str]
+    top_population: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -144,4 +157,70 @@ def run_ancestry(
         snps_total=result.snps_total,
         coverage_fraction=result.coverage_fraction,
         is_sufficient=result.is_sufficient,
+    )
+
+
+@router.get("/pca-coordinates")
+def get_pca_coordinates_endpoint(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> PCACoordinatesResponse | None:
+    """Get PCA coordinates for scatter plot visualization (P3-25).
+
+    Returns the user's projected PCA coordinates alongside reference
+    panel sample coordinates for rendering a PCA scatter plot.
+    Requires ancestry inference to have been run first.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    with sample_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(findings)
+            .where(
+                findings.c.module == "ancestry",
+                findings.c.category == "pca_projection",
+            )
+            .order_by(findings.c.id.desc())
+            .limit(1)
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    detail = json.loads(row.detail_json) if row.detail_json else {}
+    user_pc_scores = detail.get("pc_scores", [])
+    top_population = detail.get("top_population", "")
+
+    if not user_pc_scores:
+        return None
+
+    from backend.analysis.ancestry import (
+        AncestryResult,
+        get_pca_coordinates,
+        load_ancestry_bundle,
+    )
+
+    bundle = load_ancestry_bundle()
+
+    result = AncestryResult(
+        pc_scores=user_pc_scores,
+        top_population=top_population,
+        population_distances=detail.get("population_distances", {}),
+        admixture_fractions=detail.get("admixture_fractions", {}),
+        snps_used=detail.get("snps_used", 0),
+        snps_total=detail.get("snps_total", 0),
+        coverage_fraction=detail.get("coverage_fraction", 0.0),
+        projection_time_ms=detail.get("projection_time_ms", 0.0),
+        is_sufficient=detail.get("is_sufficient", False),
+    )
+
+    pca_coords = get_pca_coordinates(bundle, result)
+
+    return PCACoordinatesResponse(
+        user=pca_coords.user,
+        reference_samples=pca_coords.reference_samples,
+        centroids=pca_coords.centroids,
+        population_labels=pca_coords.population_labels,
+        n_components=pca_coords.n_components,
+        pc_labels=pca_coords.pc_labels,
+        top_population=top_population,
     )
