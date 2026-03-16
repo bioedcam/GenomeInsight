@@ -28,7 +28,7 @@ from backend.analysis.rare_variant_finder import (
     store_rare_variant_findings,
 )
 from backend.db.connection import get_registry
-from backend.db.tables import findings, samples
+from backend.db.tables import annotated_variants, findings, samples
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,17 @@ def _request_to_filter(req: RareVariantFilterRequest) -> RareVariantFilter:
     )
 
 
+def _parse_detail_json(row_id: int | None, detail_json: str | None) -> dict[str, Any]:
+    """Parse detail_json from a findings row, returning empty dict on failure."""
+    if not detail_json:
+        return {}
+    try:
+        return json.loads(detail_json)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse detail_json for finding id=%s", row_id)
+        return {}
+
+
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
@@ -263,13 +274,7 @@ def list_rare_variant_findings(
 
     items: list[RareVariantFindingResponse] = []
     for row in rows:
-        detail: dict[str, Any] = {}
-        if row.detail_json:
-            try:
-                detail = json.loads(row.detail_json)
-            except (json.JSONDecodeError, TypeError):
-                logger.warning("Failed to parse detail_json for finding id=%s", row.id)
-
+        detail = _parse_detail_json(row.id, row.detail_json)
         items.append(
             RareVariantFindingResponse(
                 rsid=row.rsid,
@@ -352,13 +357,7 @@ def export_rare_variants_tsv(
     buf.write("\t".join(tsv_columns) + "\n")
 
     for row in rows:
-        detail: dict[str, Any] = {}
-        if row.detail_json:
-            try:
-                detail = json.loads(row.detail_json)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
+        detail = _parse_detail_json(row.id, row.detail_json)
         values = [
             row.rsid or "",
             row.gene_symbol or "",
@@ -375,7 +374,6 @@ def export_rare_variants_tsv(
         ]
         buf.write("\t".join(values) + "\n")
 
-    buf.seek(0)
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/tab-separated-values",
@@ -391,18 +389,34 @@ def export_rare_variants_vcf(
 ) -> StreamingResponse:
     """Export stored rare variant findings as a minimal VCF 4.2 file.
 
-    Returns a downloadable VCF file containing rare variant findings
-    with basic annotation in the INFO field.
+    Queries annotated_variants directly (via rsid join with findings)
+    to obtain proper chrom/pos for valid VCF records.
 
     Example: ``GET /api/analysis/rare-variants/export/vcf?sample_id=1``
     """
     sample_engine = _get_sample_engine(sample_id)
+    av = annotated_variants
 
+    # Join findings with annotated_variants to get chrom/pos/ref/alt
     with sample_engine.connect() as conn:
         rows = conn.execute(
-            sa.select(findings)
+            sa.select(
+                av.c.chrom,
+                av.c.pos,
+                av.c.rsid,
+                av.c.ref,
+                av.c.alt,
+                av.c.gene_symbol,
+                av.c.consequence,
+                av.c.clinvar_significance,
+                av.c.gnomad_af_global,
+                findings.c.evidence_level,
+            )
+            .select_from(
+                findings.join(av, findings.c.rsid == av.c.rsid),
+            )
             .where(findings.c.module == "rare_variants")
-            .order_by(findings.c.gene_symbol, findings.c.rsid)
+            .order_by(av.c.chrom, av.c.pos)
         ).fetchall()
 
     buf = io.StringIO()
@@ -421,25 +435,17 @@ def export_rare_variants_vcf(
     buf.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
 
     for row in rows:
-        detail: dict[str, Any] = {}
-        if row.detail_json:
-            try:
-                detail = json.loads(row.detail_json)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
+        chrom = row.chrom or "."
+        pos = str(row.pos) if row.pos else "0"
         rsid = row.rsid or "."
+        ref = row.ref or "."
+        alt = row.alt or "."
         gene = row.gene_symbol or "."
-        csq = detail.get("consequence", ".")
+        csq = row.consequence or "."
         clnsig = (row.clinvar_significance or ".").replace(" ", "_")
-        af_val = detail.get("af_global")
+        af_val = row.gnomad_af_global
         af_str = f"{af_val:.6f}" if af_val is not None else "."
         evlvl = str(row.evidence_level or 1)
-
-        # Findings don't store chrom/pos directly, so parse from rsid context
-        # We use "." placeholders since findings table doesn't have chrom/pos
-        chrom = "."
-        pos = "0"
 
         info_parts = [
             f"GENE={gene}",
@@ -450,9 +456,8 @@ def export_rare_variants_vcf(
         ]
         info_str = ";".join(info_parts)
 
-        buf.write(f"{chrom}\t{pos}\t{rsid}\t.\t.\t.\tPASS\t{info_str}\n")
+        buf.write(f"{chrom}\t{pos}\t{rsid}\t{ref}\t{alt}\t.\tPASS\t{info_str}\n")
 
-    buf.seek(0)
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/plain",

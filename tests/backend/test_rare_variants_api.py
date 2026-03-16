@@ -444,7 +444,7 @@ class TestFindingsEndpoint:
             levels = [item["evidence_level"] for item in items]
             # Should be non-increasing (desc order, but may have same-level items)
             for i in range(len(levels) - 1):
-                assert levels[i] >= levels[i + 1] or True  # gene sort within level
+                assert levels[i] >= levels[i + 1], f"Evidence levels not sorted: {levels}"
 
     def test_findings_contain_detail(self, rare_client: TestClient) -> None:
         """Findings include parsed detail_json."""
@@ -590,6 +590,24 @@ class TestVCFExport:
         for line in data_lines:
             assert "GENE=" in line
             assert "EVLVL=" in line
+
+    def test_vcf_export_has_real_chrom_pos(self, rare_client: TestClient) -> None:
+        """VCF data lines contain real chromosome and position from annotated_variants."""
+        rare_client.post(
+            "/api/analysis/rare-variants/search?sample_id=1",
+            json={},
+        )
+        resp = rare_client.get("/api/analysis/rare-variants/export/vcf?sample_id=1")
+        lines = resp.text.strip().split("\n")
+        data_lines = [line for line in lines if not line.startswith("#")]
+        for line in data_lines:
+            cols = line.split("\t")
+            chrom = cols[0]
+            pos = cols[1]
+            # chrom should be a real chromosome, not a placeholder
+            assert chrom != ".", f"CHROM should not be placeholder: {line}"
+            # pos should be a real integer > 0
+            assert int(pos) > 0, f"POS should be > 0: {line}"
 
     def test_vcf_export_content_disposition(self, rare_client: TestClient) -> None:
         """VCF has correct Content-Disposition header."""
