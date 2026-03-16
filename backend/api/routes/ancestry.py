@@ -9,6 +9,7 @@ Provides endpoints to run ancestry inference and retrieve results.
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 
 import sqlalchemy as sa
 import structlog
@@ -73,7 +74,15 @@ class PCACoordinatesResponse(BaseModel):
     top_population: str
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────
+
+
+@lru_cache(maxsize=1)
+def _get_ancestry_bundle():
+    """Load and cache the ancestry PCA bundle (static data)."""
+    from backend.analysis.ancestry import load_ancestry_bundle
+
+    return load_ancestry_bundle()
 
 
 def _get_sample_engine(sample_id: int) -> sa.Engine:
@@ -196,10 +205,9 @@ def get_pca_coordinates_endpoint(
     from backend.analysis.ancestry import (
         AncestryResult,
         get_pca_coordinates,
-        load_ancestry_bundle,
     )
 
-    bundle = load_ancestry_bundle()
+    bundle = _get_ancestry_bundle()
 
     result = AncestryResult(
         pc_scores=user_pc_scores,

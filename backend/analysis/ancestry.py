@@ -255,7 +255,15 @@ def load_ancestry_bundle(bundle_path: Path | None = None) -> AncestryBundle:
     ref_samples: dict[str, list[list[float]]] = {}
     if "reference_samples" in data:
         for pop, coords_list in data["reference_samples"].items():
-            ref_samples[pop] = [[float(v) for v in coords] for coords in coords_list]
+            parsed_coords = []
+            for i, coords in enumerate(coords_list):
+                if len(coords) != n_components:
+                    raise ValueError(
+                        f"Reference sample {i} for {pop} has {len(coords)} values, "
+                        f"expected {n_components}"
+                    )
+                parsed_coords.append([float(v) for v in coords])
+            ref_samples[pop] = parsed_coords
 
     bundle = AncestryBundle(
         version=data.get("version", "1.0.0"),
