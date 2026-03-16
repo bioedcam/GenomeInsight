@@ -104,7 +104,7 @@ def build_mt_tree() -> dict[str, Any]:
     l0a1 = _node(
         "L0a1",
         [
-            _mt_snp("i5007543", 7158, "G"),
+            _mt_snp("i5007158", 7158, "G"),
             _mt_snp("i5009818", 9818, "C"),
             _mt_snp("i5014308", 14308, "A"),
         ],
