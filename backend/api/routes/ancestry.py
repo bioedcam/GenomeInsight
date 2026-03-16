@@ -32,13 +32,6 @@ class PopulationDistance(BaseModel):
     distance: float
 
 
-class AdmixtureFraction(BaseModel):
-    """Estimated ancestry proportion for a population."""
-
-    population: str
-    fraction: float
-
-
 class AncestryFindingResponse(BaseModel):
     """Ancestry inference result."""
 

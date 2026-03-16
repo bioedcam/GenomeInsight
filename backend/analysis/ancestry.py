@@ -371,10 +371,12 @@ def compute_admixture_fractions(
     # Check if sample is essentially on a centroid (distance ~ 0)
     min_dist = min(population_distances.values())
     if min_dist < epsilon:
-        # Assign 1.0 to the exact-match population, 0.0 to others
+        # Distribute evenly among zero-distance populations
+        zero_pops = [p for p, d in population_distances.items() if d < epsilon]
+        share = round(1.0 / len(zero_pops), 4)
         fractions = {}
         for pop, dist in population_distances.items():
-            fractions[pop] = 1.0 if dist < epsilon else 0.0
+            fractions[pop] = share if dist < epsilon else 0.0
         return fractions
 
     # Inverse-distance weighting: weight_i = 1 / d_i^2

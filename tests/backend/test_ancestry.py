@@ -365,14 +365,15 @@ class TestComputeAdmixtureFractions:
         assert fractions["EUR"] == 1.0
 
     def test_two_zero_distances(self) -> None:
-        """Multiple populations at distance 0 — first found gets 1.0."""
+        """Multiple populations at distance 0 — share equally."""
         distances = {"AFR": 0.0, "EUR": 0.0, "EAS": 10.0}
         fractions = compute_admixture_fractions(distances)
-        # Both AFR and EUR are at 0, so both get 1.0 and EAS gets 0.0
-        # Actually with our implementation, all < epsilon get 1.0 — need to sum correctly
-        # The function assigns 1.0 to each zero-distance pop, so let's check
+        assert abs(sum(fractions.values()) - 1.0) < 1e-6
         zero_pops = [p for p, d in distances.items() if d < 1e-10]
-        assert all(fractions[p] == 1.0 for p in zero_pops)
+        expected_share = 1.0 / len(zero_pops)
+        for p in zero_pops:
+            assert abs(fractions[p] - expected_share) < 1e-6
+        assert fractions["EAS"] == 0.0
 
 
 class TestAdmixtureFractionsIntegration:
