@@ -109,6 +109,9 @@ class DBRegistry:
     def get_sample_engine(self, sample_db_path: str | Path) -> sa.Engine:
         """Get or create an engine for a per-sample database.
 
+        On first access, ensures the sample schema is current by adding
+        any missing tables (e.g. ``haplogroup_assignments`` from P3-33).
+
         Args:
             sample_db_path: Path to the sample SQLite file.
 
@@ -117,9 +120,13 @@ class DBRegistry:
         """
         key = str(sample_db_path)
         if key not in self._sample_engines:
-            self._sample_engines[key] = self._create_engine(
-                Path(sample_db_path), wal=self._settings.wal_mode
-            )
+            engine = self._create_engine(Path(sample_db_path), wal=self._settings.wal_mode)
+            # Ensure schema is up to date (adds missing tables like
+            # haplogroup_assignments for pre-P3-33 sample databases).
+            from backend.db.sample_schema import ensure_sample_schema_current
+
+            ensure_sample_schema_current(engine)
+            self._sample_engines[key] = engine
         return self._sample_engines[key]
 
     def dispose_sample_engine(self, sample_db_path: str | Path) -> None:
