@@ -86,9 +86,7 @@ class TestPanelLoading:
             load_carrier_panel(bad_panel)
 
     @pytest.mark.parametrize("missing_key", ["module", "version", "description"])
-    def test_panel_missing_top_level_field(
-        self, tmp_path: Path, missing_key: str
-    ) -> None:
+    def test_panel_missing_top_level_field(self, tmp_path: Path, missing_key: str) -> None:
         """Missing top-level panel field raises ValueError."""
         data = {
             "module": "carrier",
@@ -202,9 +200,7 @@ class TestCrossLinks:
 
     def test_all_ar_genes_have_no_cross_links(self, panel: CarrierPanel) -> None:
         for gene in panel.autosomal_recessive_genes():
-            assert gene.cross_links == [], (
-                f"{gene.gene_symbol} (AR) should have no cross-links"
-            )
+            assert gene.cross_links == [], f"{gene.gene_symbol} (AR) should have no cross-links"
 
 
 # ── Autosomal recessive filtering ────────────────────────────────────────
@@ -242,9 +238,7 @@ class TestExpectedClinVarRsids:
     def test_rsids_are_valid_format(self, panel: CarrierPanel) -> None:
         for gene in panel.genes:
             for rsid in gene.expected_clinvar_rsids:
-                assert rsid.startswith("rs"), (
-                    f"Invalid rsid format: {rsid} in {gene.gene_symbol}"
-                )
+                assert rsid.startswith("rs"), f"Invalid rsid format: {rsid} in {gene.gene_symbol}"
                 assert rsid[2:].isdigit(), (
                     f"Invalid rsid numeric part: {rsid} in {gene.gene_symbol}"
                 )
@@ -252,9 +246,7 @@ class TestExpectedClinVarRsids:
     def test_no_duplicate_rsids_within_gene(self, panel: CarrierPanel) -> None:
         for gene in panel.genes:
             rsids = gene.expected_clinvar_rsids
-            assert len(rsids) == len(set(rsids)), (
-                f"Duplicate rsids in {gene.gene_symbol}"
-            )
+            assert len(rsids) == len(set(rsids)), f"Duplicate rsids in {gene.gene_symbol}"
 
     def test_total_expected_rsids(self, panel: CarrierPanel) -> None:
         """Panel should have a substantial number of expected rsids."""
@@ -357,16 +349,12 @@ class TestPMIDs:
 
     def test_all_genes_have_pmids(self, panel: CarrierPanel) -> None:
         for gene in panel.genes:
-            assert len(gene.pmids) > 0, (
-                f"{gene.gene_symbol} has no PubMed citations"
-            )
+            assert len(gene.pmids) > 0, f"{gene.gene_symbol} has no PubMed citations"
 
     def test_pmids_are_numeric(self, panel: CarrierPanel) -> None:
         for gene in panel.genes:
             for pmid in gene.pmids:
-                assert pmid.isdigit(), (
-                    f"Invalid PMID: {pmid} in {gene.gene_symbol}"
-                )
+                assert pmid.isdigit(), f"Invalid PMID: {pmid} in {gene.gene_symbol}"
 
 
 # ── Gene metadata ────────────────────────────────────────────────────────
@@ -377,9 +365,7 @@ class TestGeneMetadata:
 
     def test_all_genes_have_conditions(self, panel: CarrierPanel) -> None:
         for gene in panel.genes:
-            assert len(gene.conditions) > 0, (
-                f"{gene.gene_symbol} has no conditions"
-            )
+            assert len(gene.conditions) > 0, f"{gene.gene_symbol} has no conditions"
 
     def test_all_genes_have_chromosome(self, panel: CarrierPanel) -> None:
         valid_chroms = {str(i) for i in range(1, 23)} | {"X", "Y"}
