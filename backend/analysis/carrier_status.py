@@ -104,10 +104,7 @@ class CarrierPanel:
     def genes_by_condition(self, condition: str) -> list[CarrierGene]:
         """Return all genes associated with a given condition (substring match)."""
         condition_lower = condition.lower()
-        return [
-            g for g in self.genes
-            if any(condition_lower in c.lower() for c in g.conditions)
-        ]
+        return [g for g in self.genes if any(condition_lower in c.lower() for c in g.conditions)]
 
 
 # ── Panel loading ─────────────────────────────────────────────────────────
