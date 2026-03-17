@@ -46,7 +46,7 @@ function TraversalPath({ assignment }: { assignment: HaplogroupAssignment }) {
       <p className="text-xs font-medium text-muted-foreground mb-2">Traversal Path</p>
       <div className="flex flex-wrap items-center gap-1">
         {traversal_path.map((step, i) => (
-          <div key={step.haplogroup} className="flex items-center gap-1">
+          <div key={`${step.haplogroup}-${i}`} className="flex items-center gap-1">
             {i > 0 && (
               <span className="text-muted-foreground text-xs" aria-hidden="true">
                 &rarr;
@@ -59,6 +59,7 @@ function TraversalPath({ assignment }: { assignment: HaplogroupAssignment }) {
                   ? "bg-primary/10 text-primary font-semibold"
                   : "bg-muted text-foreground",
               )}
+              data-highlighted={step.haplogroup === assignment.haplogroup ? "" : undefined}
               title={`${step.snps_present}/${step.snps_total} defining SNPs matched`}
             >
               <span>{step.haplogroup}</span>

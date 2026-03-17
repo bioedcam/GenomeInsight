@@ -345,9 +345,8 @@ describe("HaplogroupCard", () => {
   it("highlights terminal haplogroup in traversal path", () => {
     render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
     const path = screen.getByTestId("haplogroup-traversal-path")
-    // The terminal node (H1a) should have primary styling
-    const nodes = path.querySelectorAll("span.bg-primary\\/10")
-    expect(nodes.length).toBeGreaterThanOrEqual(1)
+    const highlighted = path.querySelectorAll("[data-highlighted]")
+    expect(highlighted.length).toBeGreaterThanOrEqual(1)
   })
 
   it("has accessible card test id", () => {
