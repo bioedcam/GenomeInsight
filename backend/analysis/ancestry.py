@@ -1090,7 +1090,7 @@ def assign_haplogroups(
         except sa.exc.OperationalError:
             count = 0
 
-        if count and count > 0:
+        if count:
             stmt = sa.select(
                 annotated_variants.c.rsid,
                 annotated_variants.c.genotype,
