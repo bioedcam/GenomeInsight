@@ -1,7 +1,8 @@
-"""Ancestry inference via PCA projection and admixture estimation.
+"""Ancestry inference via PCA projection, admixture estimation, and haplogroup assignment.
 
-Implements P3-23 (PCA projection), P3-24 (admixture fractions), and
-P3-25 (PCA coordinates for visualization).
+Implements P3-23 (PCA projection), P3-24 (admixture fractions),
+P3-25 (PCA coordinates for visualization), and P3-32 (haplogroup
+assignment engine).
 
 Projects user genotypes onto pre-computed PCA space via NumPy dot product
 against loadings from the ancestry PCA bundle. Runtime target: < 1 second.
@@ -70,13 +71,23 @@ import numpy as np
 import sqlalchemy as sa
 import structlog
 
-from backend.db.tables import annotated_variants, findings, raw_variants
+from backend.db.tables import (
+    annotated_variants,
+    findings,
+    haplogroup_assignments,
+    raw_variants,
+)
 
 logger = structlog.get_logger(__name__)
 
 # Path to the pre-computed ancestry PCA bundle
 _BUNDLE_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "panels" / "ancestry_pca_bundle.json"
+)
+
+# Path to the haplogroup defining SNP bundle (PhyloTree + ISOGG)
+_HAPLOGROUP_BUNDLE_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "panels" / "haplogroup_bundle.json"
 )
 
 # Super-population codes used throughout the module
@@ -760,3 +771,529 @@ def run_ancestry_inference(
     result = infer_ancestry(bundle, sample_engine)
     store_ancestry_findings(result, sample_engine)
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Haplogroup Assignment Engine (P3-32)
+# ═══════════════════════════════════════════════════════════════════════
+#
+# Pure Python tree-walk algorithm for mitochondrial and Y-chromosome
+# haplogroup assignment using the PhyloTree + ISOGG defining SNP bundle.
+#
+# mtDNA assignment runs on all samples. Y-chromosome assignment runs
+# only when sex is inferred as XY (presence of called Y-chromosome
+# variants in the sample).
+# ═══════════════════════════════════════════════════════════════════════
+
+
+# ── Haplogroup data classes ──────────────────────────────────────────
+
+
+@dataclass
+class HaplogroupSNP:
+    """A single defining SNP from the haplogroup bundle."""
+
+    rsid: str
+    pos: int
+    allele: str  # derived allele
+
+
+@dataclass
+class HaplogroupNode:
+    """A node in the haplogroup tree (recursive structure)."""
+
+    haplogroup: str
+    defining_snps: list[HaplogroupSNP]
+    children: list[HaplogroupNode]
+
+
+@dataclass
+class HaplogroupBundle:
+    """Parsed haplogroup bundle with mtDNA and Y-chromosome trees.
+
+    Attributes:
+        version: Bundle version string.
+        build: Genome build (e.g. "GRCh37").
+        mt_tree: Root node of the mtDNA haplogroup tree.
+        y_tree: Root node of the Y-chromosome haplogroup tree.
+        mt_snp_rsids: Set of all mtDNA defining SNP rsids.
+        y_snp_rsids: Set of all Y-chromosome defining SNP rsids.
+    """
+
+    version: str
+    build: str
+    mt_tree: HaplogroupNode
+    y_tree: HaplogroupNode
+    mt_snp_rsids: set[str]
+    y_snp_rsids: set[str]
+
+
+@dataclass
+class HaplogroupTraversalStep:
+    """One step in the haplogroup traversal path."""
+
+    haplogroup: str
+    snps_present: int
+    snps_total: int
+
+
+@dataclass
+class HaplogroupResult:
+    """Result of haplogroup assignment for one tree (mt or Y).
+
+    Attributes:
+        tree_type: 'mt' or 'Y'.
+        haplogroup: Terminal (deepest matched) haplogroup string.
+        confidence: defining_snps_present / defining_snps_total.
+        defining_snps_present: Count of matching defining SNPs.
+        defining_snps_total: Total defining SNPs for terminal haplogroup.
+        traversal_path: List of nodes from root to terminal, each with
+            its own match counts.
+        assignment_time_ms: Wall-clock time for this assignment.
+    """
+
+    tree_type: str
+    haplogroup: str
+    confidence: float
+    defining_snps_present: int
+    defining_snps_total: int
+    traversal_path: list[HaplogroupTraversalStep]
+    assignment_time_ms: float
+
+
+# ── Bundle loading ───────────────────────────────────────────────────
+
+
+def _parse_tree_node(data: dict) -> HaplogroupNode:
+    """Recursively parse a tree node from the bundle JSON."""
+    snps = [
+        HaplogroupSNP(rsid=s["rsid"], pos=s["pos"], allele=s["allele"])
+        for s in data.get("defining_snps", [])
+    ]
+    children = [_parse_tree_node(c) for c in data.get("children", [])]
+    return HaplogroupNode(
+        haplogroup=data["haplogroup"],
+        defining_snps=snps,
+        children=children,
+    )
+
+
+def _collect_rsids(node: HaplogroupNode) -> set[str]:
+    """Collect all defining SNP rsids from a tree recursively."""
+    rsids = {s.rsid for s in node.defining_snps}
+    for child in node.children:
+        rsids |= _collect_rsids(child)
+    return rsids
+
+
+def load_haplogroup_bundle(
+    bundle_path: Path | None = None,
+) -> HaplogroupBundle:
+    """Load the haplogroup defining SNP bundle from JSON.
+
+    Args:
+        bundle_path: Optional override for the bundle JSON path.
+            Defaults to ``backend/data/panels/haplogroup_bundle.json``.
+
+    Returns:
+        Parsed HaplogroupBundle with mtDNA and Y-chromosome trees.
+
+    Raises:
+        FileNotFoundError: If the bundle file does not exist.
+        KeyError: If required keys are missing from the bundle.
+    """
+    path = bundle_path or _HAPLOGROUP_BUNDLE_PATH
+    logger.info("loading_haplogroup_bundle", path=str(path))
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    mt_tree = _parse_tree_node(data["trees"]["mt"])
+    y_tree = _parse_tree_node(data["trees"]["Y"])
+
+    bundle = HaplogroupBundle(
+        version=data.get("version", "1.0.0"),
+        build=data.get("build", "GRCh37"),
+        mt_tree=mt_tree,
+        y_tree=y_tree,
+        mt_snp_rsids=_collect_rsids(mt_tree),
+        y_snp_rsids=_collect_rsids(y_tree),
+    )
+
+    logger.info(
+        "haplogroup_bundle_loaded",
+        version=bundle.version,
+        mt_snps=len(bundle.mt_snp_rsids),
+        y_snps=len(bundle.y_snp_rsids),
+    )
+
+    return bundle
+
+
+# ── Tree-walk algorithm ──────────────────────────────────────────────
+
+# Minimum fraction of defining SNPs that must match for a node to count
+_HAPLOGROUP_MIN_MATCH_FRACTION = 0.5
+
+
+def _check_node_match(
+    node: HaplogroupNode,
+    genotype_map: dict[str, str | None],
+) -> tuple[int, int]:
+    """Check how many defining SNPs match for a node.
+
+    A defining SNP matches if the sample's genotype at that rsid
+    contains the derived allele (heterozygous or homozygous).
+
+    Args:
+        node: Tree node to check.
+        genotype_map: Mapping rsid → genotype string.
+
+    Returns:
+        Tuple of (snps_present, snps_total).
+    """
+    snps_total = len(node.defining_snps)
+    if snps_total == 0:
+        return 0, 0
+
+    snps_present = 0
+    for snp in node.defining_snps:
+        genotype = genotype_map.get(snp.rsid)
+        if genotype and genotype not in ("--", "00", "II", "DD", "DI", "ID"):
+            # Check if derived allele is present in genotype
+            if snp.allele.upper() in genotype.upper():
+                snps_present += 1
+
+    return snps_present, snps_total
+
+
+def _tree_walk(
+    node: HaplogroupNode,
+    genotype_map: dict[str, str | None],
+    path: list[HaplogroupTraversalStep],
+) -> tuple[HaplogroupNode, list[HaplogroupTraversalStep]]:
+    """Recursive tree-walk to find the deepest matching haplogroup.
+
+    Starting from a node, checks each child. If a child's defining SNPs
+    meet the match threshold, descends into that child. Returns the
+    deepest node that matches.
+
+    The root node (mt-MRCA / Y-Adam) has no defining SNPs and always
+    matches. At each level, we try all children and pick the best match.
+
+    Args:
+        node: Current tree node.
+        genotype_map: Mapping rsid → genotype string.
+        path: Accumulated traversal path (mutated in-place).
+
+    Returns:
+        Tuple of (deepest matching node, full traversal path).
+    """
+    # Try each child node
+    best_child: HaplogroupNode | None = None
+    best_child_fraction = 0.0
+    best_child_present = 0
+    best_child_total = 0
+
+    for child in node.children:
+        present, total = _check_node_match(child, genotype_map)
+        if total == 0:
+            continue
+
+        fraction = present / total
+        if fraction >= _HAPLOGROUP_MIN_MATCH_FRACTION and fraction > best_child_fraction:
+            best_child = child
+            best_child_fraction = fraction
+            best_child_present = present
+            best_child_total = total
+
+    if best_child is not None:
+        # Record this step in the traversal path
+        path.append(
+            HaplogroupTraversalStep(
+                haplogroup=best_child.haplogroup,
+                snps_present=best_child_present,
+                snps_total=best_child_total,
+            )
+        )
+        # Recurse into the best matching child
+        return _tree_walk(best_child, genotype_map, path)
+
+    # No child matched — current node is the deepest match
+    return node, path
+
+
+# ── Sex inference ────────────────────────────────────────────────────
+
+
+def _infer_sex_from_variants(
+    sample_engine: sa.Engine,
+) -> str:
+    """Infer chromosomal sex from Y-chromosome variant calls.
+
+    Checks if the sample has called (non-missing) variants on the
+    Y chromosome. Presence of Y-chromosome genotype calls indicates XY.
+
+    Args:
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        'XY' if Y-chromosome variants are called, 'XX' otherwise.
+    """
+    with sample_engine.connect() as conn:
+        # Check raw_variants for Y chromosome calls
+        stmt = (
+            sa.select(sa.func.count())
+            .select_from(raw_variants)
+            .where(
+                raw_variants.c.chrom == "Y",
+                raw_variants.c.genotype.notin_(["--", "00", ""]),
+                raw_variants.c.genotype.isnot(None),
+            )
+        )
+        y_count = conn.execute(stmt).scalar() or 0
+
+    sex = "XY" if y_count > 0 else "XX"
+    logger.info("sex_inferred_from_variants", sex=sex, y_variant_count=y_count)
+    return sex
+
+
+# ── Main haplogroup assignment ───────────────────────────────────────
+
+
+def assign_haplogroups(
+    bundle: HaplogroupBundle,
+    sample_engine: sa.Engine,
+) -> list[HaplogroupResult]:
+    """Assign mtDNA and Y-chromosome haplogroups for a sample.
+
+    Runs mtDNA tree-walk on all samples. Runs Y-chromosome tree-walk
+    only when sex is inferred as XY.
+
+    Args:
+        bundle: Loaded haplogroup bundle.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        List of HaplogroupResult (1 for XX samples, 2 for XY samples).
+    """
+    # Collect all needed rsids
+    all_rsids = list(bundle.mt_snp_rsids | bundle.y_snp_rsids)
+
+    # Fetch genotypes — try annotated_variants first, fall back to raw_variants
+    genotype_map: dict[str, str | None] = {}
+    with sample_engine.connect() as conn:
+        try:
+            count = conn.execute(
+                sa.select(sa.func.count()).select_from(annotated_variants)
+            ).scalar()
+        except sa.exc.OperationalError:
+            count = 0
+
+        if count:
+            stmt = sa.select(
+                annotated_variants.c.rsid,
+                annotated_variants.c.genotype,
+            ).where(annotated_variants.c.rsid.in_(all_rsids))
+            rows = conn.execute(stmt).fetchall()
+        else:
+            stmt = sa.select(
+                raw_variants.c.rsid,
+                raw_variants.c.genotype,
+            ).where(raw_variants.c.rsid.in_(all_rsids))
+            rows = conn.execute(stmt).fetchall()
+
+    for row in rows:
+        genotype_map[row.rsid] = row.genotype
+
+    results: list[HaplogroupResult] = []
+
+    # mtDNA assignment (always runs)
+    t0 = time.perf_counter()
+    mt_path: list[HaplogroupTraversalStep] = []
+    terminal_mt, mt_path = _tree_walk(bundle.mt_tree, genotype_map, mt_path)
+
+    # Accumulate total defining SNPs along the path for confidence
+    mt_total_present = sum(step.snps_present for step in mt_path)
+    mt_total_snps = sum(step.snps_total for step in mt_path)
+    mt_confidence = mt_total_present / mt_total_snps if mt_total_snps > 0 else 0.0
+    mt_time = (time.perf_counter() - t0) * 1000.0
+
+    mt_result = HaplogroupResult(
+        tree_type="mt",
+        haplogroup=terminal_mt.haplogroup,
+        confidence=round(mt_confidence, 4),
+        defining_snps_present=mt_total_present,
+        defining_snps_total=mt_total_snps,
+        traversal_path=mt_path,
+        assignment_time_ms=round(mt_time, 2),
+    )
+    results.append(mt_result)
+
+    logger.info(
+        "haplogroup_assigned",
+        tree="mt",
+        haplogroup=mt_result.haplogroup,
+        confidence=mt_result.confidence,
+        snps=f"{mt_result.defining_snps_present}/{mt_result.defining_snps_total}",
+        path=" → ".join(s.haplogroup for s in mt_path),
+        time_ms=mt_result.assignment_time_ms,
+    )
+
+    # Y-chromosome assignment (only for XY samples)
+    sex = _infer_sex_from_variants(sample_engine)
+
+    if sex == "XY":
+        t0 = time.perf_counter()
+        y_path: list[HaplogroupTraversalStep] = []
+        terminal_y, y_path = _tree_walk(bundle.y_tree, genotype_map, y_path)
+
+        y_total_present = sum(step.snps_present for step in y_path)
+        y_total_snps = sum(step.snps_total for step in y_path)
+        y_confidence = y_total_present / y_total_snps if y_total_snps > 0 else 0.0
+        y_time = (time.perf_counter() - t0) * 1000.0
+
+        y_result = HaplogroupResult(
+            tree_type="Y",
+            haplogroup=terminal_y.haplogroup,
+            confidence=round(y_confidence, 4),
+            defining_snps_present=y_total_present,
+            defining_snps_total=y_total_snps,
+            traversal_path=y_path,
+            assignment_time_ms=round(y_time, 2),
+        )
+        results.append(y_result)
+
+        logger.info(
+            "haplogroup_assigned",
+            tree="Y",
+            haplogroup=y_result.haplogroup,
+            confidence=y_result.confidence,
+            snps=f"{y_result.defining_snps_present}/{y_result.defining_snps_total}",
+            path=" → ".join(s.haplogroup for s in y_path),
+            time_ms=y_result.assignment_time_ms,
+        )
+    else:
+        logger.info("y_haplogroup_skipped", reason="sex_inferred_XX")
+
+    return results
+
+
+# ── Haplogroup findings storage ──────────────────────────────────────
+
+
+def store_haplogroup_findings(
+    results: list[HaplogroupResult],
+    sample_engine: sa.Engine,
+) -> int:
+    """Store haplogroup results in haplogroup_assignments table and findings.
+
+    Writes to both ``haplogroup_assignments`` (structured storage) and
+    ``findings`` (unified findings table) for each haplogroup result.
+
+    Args:
+        results: List of HaplogroupResult from assign_haplogroups.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of findings inserted.
+    """
+    if not results:
+        return 0
+
+    with sample_engine.begin() as conn:
+        # Clear previous haplogroup data
+        conn.execute(sa.delete(haplogroup_assignments))
+        conn.execute(
+            sa.delete(findings).where(
+                findings.c.module == "ancestry",
+                findings.c.category.in_(["haplogroup_mt", "haplogroup_y"]),
+            )
+        )
+
+        count = 0
+        for result in results:
+            # Skip root-only results (no path = no assignment)
+            if not result.traversal_path:
+                continue
+
+            # Insert into haplogroup_assignments table
+            conn.execute(
+                sa.insert(haplogroup_assignments),
+                {
+                    "type": result.tree_type,
+                    "haplogroup": result.haplogroup,
+                    "confidence": result.confidence,
+                    "defining_snps_present": result.defining_snps_present,
+                    "defining_snps_total": result.defining_snps_total,
+                },
+            )
+
+            # Build traversal path for detail_json
+            path_data = [
+                {
+                    "haplogroup": step.haplogroup,
+                    "snps_present": step.snps_present,
+                    "snps_total": step.snps_total,
+                }
+                for step in result.traversal_path
+            ]
+
+            tree_label = "Mitochondrial" if result.tree_type == "mt" else "Y-chromosome"
+            path_str = " → ".join(s.haplogroup for s in result.traversal_path)
+            category = f"haplogroup_{result.tree_type}"
+
+            finding_text = (
+                f"{tree_label} haplogroup: {result.haplogroup} "
+                f"({result.defining_snps_present}/{result.defining_snps_total} "
+                f"defining SNPs matched, {result.confidence:.0%} confidence)"
+            )
+
+            detail = {
+                "tree_type": result.tree_type,
+                "haplogroup": result.haplogroup,
+                "confidence": result.confidence,
+                "defining_snps_present": result.defining_snps_present,
+                "defining_snps_total": result.defining_snps_total,
+                "traversal_path": path_data,
+                "path_string": path_str,
+                "assignment_time_ms": result.assignment_time_ms,
+            }
+
+            conn.execute(
+                sa.insert(findings),
+                {
+                    "module": "ancestry",
+                    "category": category,
+                    "evidence_level": 2,  # Haplogroup via SNP matching = ★★☆☆
+                    "haplogroup": result.haplogroup,
+                    "finding_text": finding_text,
+                    "detail_json": json.dumps(detail),
+                },
+            )
+            count += 1
+
+    logger.info("haplogroup_findings_stored", count=count)
+    return count
+
+
+# ── Convenience pipeline ─────────────────────────────────────────────
+
+
+def run_haplogroup_assignment(
+    sample_engine: sa.Engine,
+    bundle_path: Path | None = None,
+) -> list[HaplogroupResult]:
+    """Run the full haplogroup assignment pipeline: load → assign → store.
+
+    Args:
+        sample_engine: SQLAlchemy engine for the sample database.
+        bundle_path: Optional override for the haplogroup bundle path.
+
+    Returns:
+        List of HaplogroupResult for each tree assigned.
+    """
+    bundle = load_haplogroup_bundle(bundle_path)
+    results = assign_haplogroups(bundle, sample_engine)
+    store_haplogroup_findings(results, sample_engine)
+    return results
