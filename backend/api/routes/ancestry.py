@@ -281,9 +281,9 @@ def _build_haplogroup_assignment_response(
         detail = json.loads(finding_row.detail_json)
         traversal_path = [
             HaplogroupTraversalStepResponse(
-                haplogroup=step["haplogroup"],
-                snps_present=step["snps_present"],
-                snps_total=step["snps_total"],
+                haplogroup=step.get("haplogroup", ""),
+                snps_present=step.get("snps_present", 0),
+                snps_total=step.get("snps_total", 0),
             )
             for step in detail.get("traversal_path", [])
         ]
@@ -357,6 +357,11 @@ def run_haplogroup(
     assignments = []
     for result in results:
         if not result.traversal_path:
+            logger.debug(
+                "haplogroup_result_skipped",
+                tree_type=result.tree_type,
+                reason="empty_traversal_path",
+            )
             continue
         tree_label = "Mitochondrial" if result.tree_type == "mt" else "Y-chromosome"
         finding_text = (

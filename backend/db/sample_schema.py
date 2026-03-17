@@ -107,6 +107,8 @@ def _get_schema_version(engine: sa.Engine) -> int:
 
 def _stamp_schema_version(engine: sa.Engine, version: int) -> None:
     """Write the schema version into SQLite's user_version PRAGMA."""
+    if not isinstance(version, int):
+        raise TypeError(f"version must be int, got {type(version).__name__}")
     with engine.connect() as conn:
         conn.execute(sa.text(f"PRAGMA user_version = {version}"))
         conn.commit()

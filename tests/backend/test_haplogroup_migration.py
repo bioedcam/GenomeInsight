@@ -162,14 +162,15 @@ def haplogroup_client(tmp_data_dir: Path) -> TestClient:
     ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
     reference_metadata.create_all(ref_engine)
 
-    # Register a sample
-    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    # Register a sample (relative path mirrors production behavior)
+    sample_db_rel = Path("samples") / "sample_1.db"
+    sample_db_path = tmp_data_dir / sample_db_rel
     with ref_engine.begin() as conn:
         conn.execute(
             samples.insert(),
             {
                 "name": "Test Sample",
-                "db_path": str(sample_db_path),
+                "db_path": str(sample_db_rel),
                 "file_format": "23andme_v5",
             },
         )
@@ -266,13 +267,14 @@ class TestHaplogroupAPI:
         ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
         reference_metadata.create_all(ref_engine)
 
-        sample_db_path = tmp_data_dir / "samples" / "sample_empty.db"
+        sample_db_rel = Path("samples") / "sample_empty.db"
+        sample_db_path = tmp_data_dir / sample_db_rel
         with ref_engine.begin() as conn:
             conn.execute(
                 samples.insert(),
                 {
                     "name": "Empty Sample",
-                    "db_path": str(sample_db_path),
+                    "db_path": str(sample_db_rel),
                     "file_format": "23andme_v5",
                 },
             )
