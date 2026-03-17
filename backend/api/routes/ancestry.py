@@ -1,8 +1,8 @@
 """Ancestry inference API endpoints.
 
 Implements the API layer for P3-23 (ancestry PCA projection),
-P3-24 (admixture fraction computation), and P3-25 (PCA coordinates
-for visualization).
+P3-24 (admixture fraction computation), P3-25 (PCA coordinates
+for visualization), and P3-33 (haplogroup assignments).
 Provides endpoints to run ancestry inference and retrieve results.
 """
 
@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.db.connection import get_registry
-from backend.db.tables import findings, samples
+from backend.db.tables import findings, haplogroup_assignments, samples
 
 logger = structlog.get_logger(__name__)
 
@@ -72,6 +72,38 @@ class PCACoordinatesResponse(BaseModel):
     n_components: int
     pc_labels: list[str]
     top_population: str
+
+
+class HaplogroupTraversalStepResponse(BaseModel):
+    """A single step in the haplogroup traversal path."""
+
+    haplogroup: str
+    snps_present: int
+    snps_total: int
+
+
+class HaplogroupAssignmentResponse(BaseModel):
+    """A haplogroup assignment for a single tree (mt or Y)."""
+
+    type: str
+    haplogroup: str
+    confidence: float
+    defining_snps_present: int
+    defining_snps_total: int
+    traversal_path: list[HaplogroupTraversalStepResponse]
+    finding_text: str
+
+
+class HaplogroupResponse(BaseModel):
+    """Haplogroup assignments for a sample (P3-33)."""
+
+    assignments: list[HaplogroupAssignmentResponse]
+
+
+class HaplogroupRunResponse(BaseModel):
+    """Response from running haplogroup assignment."""
+
+    assignments: list[HaplogroupAssignmentResponse]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -232,3 +264,128 @@ def get_pca_coordinates_endpoint(
         pc_labels=pca_coords.pc_labels,
         top_population=top_population,
     )
+
+
+# ── Haplogroup endpoints (P3-33) ─────────────────────────────────────────
+
+
+def _build_haplogroup_assignment_response(
+    ha_row: sa.Row,
+    finding_row: sa.Row | None,
+) -> HaplogroupAssignmentResponse:
+    """Build a HaplogroupAssignmentResponse from DB rows."""
+    traversal_path: list[HaplogroupTraversalStepResponse] = []
+    finding_text = ""
+
+    if finding_row and finding_row.detail_json:
+        detail = json.loads(finding_row.detail_json)
+        traversal_path = [
+            HaplogroupTraversalStepResponse(
+                haplogroup=step.get("haplogroup", ""),
+                snps_present=step.get("snps_present", 0),
+                snps_total=step.get("snps_total", 0),
+            )
+            for step in detail.get("traversal_path", [])
+        ]
+        finding_text = finding_row.finding_text or ""
+
+    return HaplogroupAssignmentResponse(
+        type=ha_row.type,
+        haplogroup=ha_row.haplogroup,
+        confidence=ha_row.confidence or 0.0,
+        defining_snps_present=ha_row.defining_snps_present or 0,
+        defining_snps_total=ha_row.defining_snps_total or 0,
+        traversal_path=traversal_path,
+        finding_text=finding_text,
+    )
+
+
+@router.get("/haplogroups")
+def get_haplogroup_assignments(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> HaplogroupResponse:
+    """Get haplogroup assignments for a sample (P3-33).
+
+    Returns mt and/or Y haplogroup assignments with traversal paths
+    and confidence scores. Empty list if haplogroup assignment has not
+    been run.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    with sample_engine.connect() as conn:
+        ha_rows = conn.execute(
+            sa.select(haplogroup_assignments).order_by(haplogroup_assignments.c.type)
+        ).fetchall()
+
+        if not ha_rows:
+            return HaplogroupResponse(assignments=[])
+
+        assignments = []
+        for ha_row in ha_rows:
+            category = f"haplogroup_{ha_row.type}"
+            finding_row = conn.execute(
+                sa.select(findings)
+                .where(
+                    findings.c.module == "ancestry",
+                    findings.c.category == category,
+                )
+                .order_by(findings.c.id.desc())
+                .limit(1)
+            ).fetchone()
+
+            assignments.append(_build_haplogroup_assignment_response(ha_row, finding_row))
+
+    return HaplogroupResponse(assignments=assignments)
+
+
+@router.post("/haplogroups/run")
+def run_haplogroup(
+    sample_id: int = Query(..., description="Sample ID"),
+) -> HaplogroupRunResponse:
+    """Run haplogroup assignment for a sample.
+
+    Loads the haplogroup bundle, runs tree-walk assignment for mtDNA
+    (and Y-chromosome if XY), and stores results in the
+    haplogroup_assignments table and findings.
+    """
+    sample_engine = _get_sample_engine(sample_id)
+
+    from backend.analysis.ancestry import run_haplogroup_assignment
+
+    results = run_haplogroup_assignment(sample_engine)
+
+    assignments = []
+    for result in results:
+        if not result.traversal_path:
+            logger.debug(
+                "haplogroup_result_skipped",
+                tree_type=result.tree_type,
+                reason="empty_traversal_path",
+            )
+            continue
+        tree_label = "Mitochondrial" if result.tree_type == "mt" else "Y-chromosome"
+        finding_text = (
+            f"{tree_label} haplogroup: {result.haplogroup} "
+            f"({result.defining_snps_present}/{result.defining_snps_total} "
+            f"defining SNPs matched, {result.confidence:.0%} confidence)"
+        )
+        assignments.append(
+            HaplogroupAssignmentResponse(
+                type=result.tree_type,
+                haplogroup=result.haplogroup,
+                confidence=result.confidence,
+                defining_snps_present=result.defining_snps_present,
+                defining_snps_total=result.defining_snps_total,
+                traversal_path=[
+                    HaplogroupTraversalStepResponse(
+                        haplogroup=step.haplogroup,
+                        snps_present=step.snps_present,
+                        snps_total=step.snps_total,
+                    )
+                    for step in result.traversal_path
+                ],
+                finding_text=finding_text,
+            )
+        )
+
+    return HaplogroupRunResponse(assignments=assignments)
