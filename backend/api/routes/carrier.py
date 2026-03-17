@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from backend.db.connection import get_registry
 from backend.db.tables import findings, samples
 from backend.disclaimers import (
+    CARRIER_GENE_NOTES,
     CARRIER_STATUS_DISCLAIMER_TEXT,
     CARRIER_STATUS_DISCLAIMER_TITLE,
 )
@@ -62,10 +63,11 @@ class CarrierVariantsListResponse(BaseModel):
 
 
 class CarrierDisclaimerResponse(BaseModel):
-    """Carrier status disclaimer text."""
+    """Carrier status disclaimer text with per-gene notes."""
 
     title: str
     text: str
+    gene_notes: dict[str, str] = {}
 
 
 class CarrierRunResponse(BaseModel):
@@ -175,6 +177,7 @@ def get_carrier_disclaimer() -> CarrierDisclaimerResponse:
     return CarrierDisclaimerResponse(
         title=CARRIER_STATUS_DISCLAIMER_TITLE,
         text=CARRIER_STATUS_DISCLAIMER_TEXT,
+        gene_notes=CARRIER_GENE_NOTES,
     )
 
 

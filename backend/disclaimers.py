@@ -105,22 +105,97 @@ APOE_GATE_DECLINE_LABEL = "Not Now — Skip APOE Results"
 CARRIER_STATUS_DISCLAIMER_TITLE = "About Carrier Status Results"
 
 CARRIER_STATUS_DISCLAIMER_TEXT = """\
-Carrier status results indicate whether you carry one copy of a variant \
-associated with a genetic condition. Carriers typically do not show \
-symptoms of the condition themselves.
+Carrier status results indicate whether you carry one copy (heterozygous) \
+of a variant associated with a genetic condition. Carriers typically do \
+not show symptoms of the condition themselves.
 
 **This information is most relevant in a reproductive context.** If both \
-partners carry a variant in the same gene, there may be an increased \
-chance of having a child affected by the condition.
+partners carry a variant in the same autosomal recessive gene, there is \
+a 25% chance with each pregnancy that the child will be affected by the \
+condition. This is the basis of carrier screening in family planning.
 
-- These results are based on a consumer genotyping chip and may not \
-detect all known variants in these genes.
-- A negative carrier result does NOT guarantee that you are not a carrier.
-- Clinical-grade carrier screening is recommended for comprehensive \
-reproductive planning.
-- Consult a genetic counselor for personalized interpretation of these \
-results.\
+**Please understand the following before reviewing:**
+
+1. **Carrier ≠ affected.** Being a carrier means you have one working \
+copy and one non-working copy of a gene. For autosomal recessive \
+conditions (such as Cystic Fibrosis, Sickle Cell Disease, Tay-Sachs, \
+Gaucher Disease, and Spinal Muscular Atrophy), carriers are typically \
+healthy and unaffected.
+
+2. **BRCA1/BRCA2 are a special case.** These genes follow autosomal \
+dominant inheritance for cancer predisposition. A single pathogenic \
+variant confers personal cancer risk (see the Cancer module) AND \
+reproductive carrier risk. Both perspectives are shown in GenomeInsight \
+with distinct framing.
+
+3. **Genotyping chip limitations.** Consumer genotyping chips test only \
+a subset of known variants in each gene. A negative carrier result does \
+NOT guarantee that you are not a carrier. Clinical-grade carrier \
+screening (expanded carrier panels with full gene sequencing) is \
+recommended for comprehensive reproductive planning.
+
+4. **Population-specific carrier frequencies.** Some conditions are more \
+common in certain ancestral populations (e.g., Tay-Sachs in Ashkenazi \
+Jewish populations, Sickle Cell in African descent populations). The \
+carrier panel used here is not population-specific — consult a genetic \
+counselor for ancestry-informed screening recommendations.
+
+5. **Professional genetic counseling is recommended.** If you have a \
+carrier finding, a certified genetic counselor can help you understand \
+the implications for family planning, discuss partner testing options, \
+and explain reproductive alternatives.
+
+**Resources:**
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/
+- ACOG Carrier Screening: https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2017/03/carrier-screening-for-genetic-conditions
+- MedlinePlus Genetics — Carrier Testing: https://medlineplus.gov/genetics/understanding/testing/carrier/\
 """
+
+# ── Per-gene carrier display notes ────────────────────────────────────
+
+CARRIER_GENE_NOTES: dict[str, str] = {
+    "CFTR": (
+        "Cystic Fibrosis is the most common life-limiting autosomal "
+        "recessive condition in people of European descent. Carrier "
+        "frequency is approximately 1 in 25 in this population."
+    ),
+    "HBB": (
+        "Variants in HBB can cause Sickle Cell Disease or "
+        "Beta-Thalassemia depending on the specific variant. Carrier "
+        "frequency is highest in populations from Africa, the "
+        "Mediterranean, Middle East, and South Asia."
+    ),
+    "GBA": (
+        "GBA variants are associated with Gaucher Disease. Carrier "
+        "frequency is approximately 1 in 15 in Ashkenazi Jewish "
+        "populations. GBA carrier status has also been associated with "
+        "a modestly increased risk of Parkinson's disease, though this "
+        "is a research finding and not a clinical diagnosis."
+    ),
+    "HEXA": (
+        "HEXA variants are associated with Tay-Sachs Disease. Carrier "
+        "frequency is approximately 1 in 30 in Ashkenazi Jewish "
+        "populations and 1 in 300 in the general population."
+    ),
+    "BRCA1": (
+        "BRCA1 is a dual-role gene: a pathogenic variant confers both "
+        "personal cancer predisposition (autosomal dominant) and "
+        "reproductive carrier risk. See the Cancer module for disease "
+        "risk framing."
+    ),
+    "BRCA2": (
+        "BRCA2 is a dual-role gene: a pathogenic variant confers both "
+        "personal cancer predisposition (autosomal dominant) and "
+        "reproductive carrier risk. See the Cancer module for disease "
+        "risk framing."
+    ),
+    "SMN1": (
+        "SMN1 variants are associated with Spinal Muscular Atrophy. "
+        "Consumer genotyping chips cannot reliably detect SMN1 copy "
+        "number variations, which are the most common cause of SMA. "
+        "Results for this gene should be interpreted with extra caution."
+    ),
+}
 
 # ── Cancer module disclaimer ─────────────────────────────────────────
 
