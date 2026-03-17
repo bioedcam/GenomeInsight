@@ -130,7 +130,7 @@ class TestCarrierDisclaimer:
         text = resp.json()["text"]
         assert "findageneticcounselor.nsgc.org" in text
         assert "acog.org" in text
-        assert "geneticalliance.org" in text
+        assert "medlineplus.gov" in text
 
     def test_disclaimer_mentions_population_specificity(self, carrier_client: TestClient) -> None:
         """Disclaimer should mention population-specific carrier frequencies."""
@@ -227,9 +227,9 @@ class TestCarrierDisclaimerConstants:
         # Should mention reproductive/family planning
         assert "reproductive" in text
         assert "family planning" in text
-        # Should NOT frame carriers as having disease
-        assert "you may have" not in text or "carrier" in text
+        # Should NOT frame carriers as having disease (disease-risk language)
         assert "your risk of developing" not in text
+        assert "you will develop" not in text
 
     def test_gene_notes_all_non_empty(self) -> None:
         """All gene notes should be non-empty strings."""

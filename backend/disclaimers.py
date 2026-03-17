@@ -148,7 +148,7 @@ and explain reproductive alternatives.
 **Resources:**
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/
 - ACOG Carrier Screening: https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2017/03/carrier-screening-for-genetic-conditions
-- Genetic Alliance: https://www.geneticalliance.org/\
+- MedlinePlus Genetics — Carrier Testing: https://medlineplus.gov/genetics/understanding/testing/carrier/\
 """
 
 # ── Per-gene carrier display notes ────────────────────────────────────
