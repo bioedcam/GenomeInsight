@@ -85,6 +85,23 @@ class TestPanelLoading:
         with pytest.raises(ValueError, match="Missing required field.*TEST"):
             load_carrier_panel(bad_panel)
 
+    @pytest.mark.parametrize("missing_key", ["module", "version", "description"])
+    def test_panel_missing_top_level_field(
+        self, tmp_path: Path, missing_key: str
+    ) -> None:
+        """Missing top-level panel field raises ValueError."""
+        data = {
+            "module": "carrier",
+            "version": "1.0.0",
+            "description": "test",
+            "genes": [],
+        }
+        del data[missing_key]
+        bad_panel = tmp_path / "bad_panel.json"
+        bad_panel.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(ValueError, match="Missing required panel field"):
+            load_carrier_panel(bad_panel)
+
 
 # ── Gene count and completeness ──────────────────────────────────────────
 

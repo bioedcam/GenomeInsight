@@ -1,7 +1,7 @@
 {
   "module": "carrier",
   "version": "1.0.0",
-  "description": "Curated carrier status gene panel for GenomeInsight (P3-35). Covers 7 genes associated with autosomal recessive conditions relevant to reproductive carrier screening. BRCA1/2 included for reproductive carrier context distinct from cancer module disease predisposition framing.",
+  "description": "Curated carrier status gene panel for GenomeInsight (P3-35). Covers 5 autosomal recessive genes plus 2 dual-role AD genes (BRCA1/BRCA2) for reproductive carrier screening.",
   "genes": [
     {
       "gene_symbol": "CFTR",

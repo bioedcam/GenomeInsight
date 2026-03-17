@@ -154,10 +154,17 @@ def load_carrier_panel(panel_path: Path | None = None) -> CarrierPanel:
             symbol = gene_data.get("gene_symbol", f"index {idx}")
             raise ValueError(f"Missing required field {e} for gene {symbol}") from e
 
+    try:
+        module = data["module"]
+        version = data["version"]
+        description = data["description"]
+    except KeyError as e:
+        raise ValueError(f"Missing required panel field: {e}") from e
+
     panel = CarrierPanel(
-        module=data["module"],
-        version=data["version"],
-        description=data["description"],
+        module=module,
+        version=version,
+        description=description,
         genes=genes,
     )
 
