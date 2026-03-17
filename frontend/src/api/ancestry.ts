@@ -1,8 +1,9 @@
-/** React Query hooks for ancestry module API (P3-27). */
+/** React Query hooks for ancestry module API (P3-27, P3-34). */
 
 import { useQuery } from "@tanstack/react-query"
 import type {
   AncestryFindingResponse,
+  HaplogroupResponse,
   PCACoordinatesResponse,
 } from "@/types/ancestry"
 
@@ -42,6 +43,28 @@ export function usePCACoordinates(sampleId: number | null) {
       if (!res.ok) {
         const text = await res.text().catch(() => "")
         throw new Error(`PCA coordinates failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Haplogroup assignments for a sample (P3-34).
+ * Returns mt and/or Y haplogroup assignments with traversal paths.
+ * Cached with staleTime: Infinity since haplogroup data doesn't change.
+ */
+export function useHaplogroups(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["ancestry-haplogroups", sampleId],
+    queryFn: async (): Promise<HaplogroupResponse> => {
+      const params = new URLSearchParams({ sample_id: String(sampleId!) })
+      const res = await fetch(`/api/analysis/ancestry/haplogroups?${params}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`Haplogroup fetch failed: ${res.status}${text ? ` - ${text}` : ""}`)
       }
       return res.json()
     },
