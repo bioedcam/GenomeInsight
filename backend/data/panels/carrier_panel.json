@@ -1,0 +1,168 @@
+{
+  "module": "carrier",
+  "version": "1.0.0",
+  "description": "Curated carrier status gene panel for GenomeInsight (P3-35). Covers 7 genes associated with autosomal recessive conditions relevant to reproductive carrier screening. BRCA1/2 included for reproductive carrier context distinct from cancer module disease predisposition framing.",
+  "genes": [
+    {
+      "gene_symbol": "CFTR",
+      "name": "Cystic Fibrosis Transmembrane Conductance Regulator",
+      "chromosome": "7",
+      "conditions": ["Cystic Fibrosis"],
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs113993960",
+        "rs75961395",
+        "rs78655421",
+        "rs74503330",
+        "rs80282562",
+        "rs75039782",
+        "rs121908745",
+        "rs121908757",
+        "rs77010898",
+        "rs121909011"
+      ],
+      "pmids": ["20301428", "31283134"],
+      "notes": "Most common autosomal recessive condition in populations of European descent. F508del (rs113993960) accounts for ~70% of pathogenic alleles. Over 2000 known CFTR variants."
+    },
+    {
+      "gene_symbol": "HBB",
+      "name": "Hemoglobin Subunit Beta",
+      "chromosome": "11",
+      "conditions": ["Sickle Cell Disease", "Beta-Thalassemia"],
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs334",
+        "rs33930165",
+        "rs33950507",
+        "rs35497397",
+        "rs34451549",
+        "rs35724775",
+        "rs33944857",
+        "rs34598529",
+        "rs33960103",
+        "rs33941849"
+      ],
+      "pmids": ["20301551", "20301357"],
+      "notes": "HbS (rs334, Glu6Val) causes sickle cell disease. Beta-thalassemia caused by >200 known mutations. Carrier frequency highest in African, Mediterranean, and Southeast Asian populations."
+    },
+    {
+      "gene_symbol": "GBA",
+      "name": "Glucosylceramidase Beta",
+      "chromosome": "1",
+      "conditions": ["Gaucher Disease"],
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs76763715",
+        "rs421016",
+        "rs1064651",
+        "rs28940868",
+        "rs80356769",
+        "rs80356770",
+        "rs80356771",
+        "rs80356773",
+        "rs104886460",
+        "rs80356775"
+      ],
+      "pmids": ["20301446", "29241104"],
+      "notes": "Most common lysosomal storage disorder. N370S (rs76763715) and L444P (rs421016) are the most prevalent pathogenic variants. Carrier frequency ~1:15 in Ashkenazi Jewish population."
+    },
+    {
+      "gene_symbol": "HEXA",
+      "name": "Hexosaminidase Subunit Alpha",
+      "chromosome": "15",
+      "conditions": ["Tay-Sachs Disease"],
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs28940879",
+        "rs121907968",
+        "rs121907970",
+        "rs121907972",
+        "rs121907973",
+        "rs121907975",
+        "rs121907976",
+        "rs121907977",
+        "rs121907978",
+        "rs121907979"
+      ],
+      "pmids": ["20301397", "30311386"],
+      "notes": "Classic Tay-Sachs disease is a severe infantile-onset neurodegenerative condition. Carrier frequency ~1:30 in Ashkenazi Jewish, French-Canadian, and Cajun populations."
+    },
+    {
+      "gene_symbol": "BRCA1",
+      "name": "BRCA1 DNA Repair Associated",
+      "chromosome": "17",
+      "conditions": ["Hereditary Breast and Ovarian Cancer Syndrome"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": ["cancer"],
+      "expected_clinvar_rsids": [
+        "rs80357906",
+        "rs80357713",
+        "rs28897672",
+        "rs80357914",
+        "rs28897696",
+        "rs28897689",
+        "rs80358065",
+        "rs80357973",
+        "rs80357975",
+        "rs80358152"
+      ],
+      "pmids": ["20301425", "29446198"],
+      "notes": "Dual-role gene: produces both cancer predisposition finding (disease risk, Cancer module) and carrier status finding (reproductive risk, Carrier module). Included in carrier panel for reproductive planning context — heterozygous carriers may pass variant to offspring."
+    },
+    {
+      "gene_symbol": "BRCA2",
+      "name": "BRCA2 DNA Repair Associated",
+      "chromosome": "13",
+      "conditions": ["Hereditary Breast and Ovarian Cancer Syndrome"],
+      "inheritance": "AD",
+      "evidence_level": 4,
+      "cross_links": ["cancer"],
+      "expected_clinvar_rsids": [
+        "rs80359550",
+        "rs80359065",
+        "rs80359585",
+        "rs80359671",
+        "rs11571833",
+        "rs80359375",
+        "rs80359351",
+        "rs80359716",
+        "rs276174802",
+        "rs80359688"
+      ],
+      "pmids": ["20301425", "29446198"],
+      "notes": "Dual-role gene: produces both cancer predisposition finding (disease risk, Cancer module) and carrier status finding (reproductive risk, Carrier module). Included in carrier panel for reproductive planning context — heterozygous carriers may pass variant to offspring."
+    },
+    {
+      "gene_symbol": "SMN1",
+      "name": "Survival Motor Neuron 1",
+      "chromosome": "5",
+      "conditions": ["Spinal Muscular Atrophy"],
+      "inheritance": "AR",
+      "evidence_level": 4,
+      "cross_links": [],
+      "expected_clinvar_rsids": [
+        "rs121909192",
+        "rs104893941",
+        "rs104893942",
+        "rs121909193",
+        "rs121909194",
+        "rs104893940",
+        "rs104893943",
+        "rs104893944",
+        "rs397514562",
+        "rs397514563"
+      ],
+      "pmids": ["20301526", "28676062"],
+      "notes": "Most common genetic cause of infant mortality. ~95% of cases caused by homozygous SMN1 exon 7 deletion (not detectable by SNP array — coverage may be Insufficient). Carrier frequency ~1:50 across populations. Point mutations account for ~5% of pathogenic alleles."
+    }
+  ]
+}
