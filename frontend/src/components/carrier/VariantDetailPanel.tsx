@@ -8,6 +8,7 @@
 import { cn } from "@/lib/utils"
 import type { CarrierVariant } from "@/types/carrier"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import { INHERITANCE_LABELS } from "@/types/carrier"
 import { Link } from "react-router-dom"
 import { X, ExternalLink, Info } from "lucide-react"
 
@@ -16,12 +17,6 @@ interface VariantDetailPanelProps {
   sampleId: number
   geneNote: string | undefined
   onClose: () => void
-}
-
-const INHERITANCE_LABELS: Record<string, string> = {
-  AD: "Autosomal Dominant",
-  AR: "Autosomal Recessive",
-  XL: "X-linked",
 }
 
 export default function VariantDetailPanel({

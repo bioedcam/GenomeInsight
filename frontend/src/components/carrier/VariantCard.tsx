@@ -8,6 +8,7 @@
 import { cn } from "@/lib/utils"
 import type { CarrierVariant } from "@/types/carrier"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import { INHERITANCE_LABELS } from "@/types/carrier"
 import { Link } from "react-router-dom"
 import { Info } from "lucide-react"
 
@@ -41,12 +42,6 @@ const DEFAULT_CONFIG = {
   bg: "bg-card",
   border: "border-border",
   badge: "bg-muted text-muted-foreground",
-}
-
-const INHERITANCE_LABELS: Record<string, string> = {
-  AD: "Autosomal Dominant",
-  AR: "Autosomal Recessive",
-  XL: "X-linked",
 }
 
 export default function VariantCard({ variant, onClick, selected, sampleId }: VariantCardProps) {

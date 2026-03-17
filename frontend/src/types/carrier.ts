@@ -39,3 +39,10 @@ export interface CarrierRunResponse {
   variants_in_panel_genes: number
   homozygous_plp_skipped: number
 }
+
+/** Shared inheritance mode labels used across carrier components. */
+export const INHERITANCE_LABELS: Record<string, string> = {
+  AD: "Autosomal Dominant",
+  AR: "Autosomal Recessive",
+  XL: "X-linked",
+}
