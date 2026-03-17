@@ -1,0 +1,159 @@
+/** Carrier status gene card (P3-38).
+ *
+ * Displays a single het P/LP carrier variant with gene symbol,
+ * ClinVar significance, conditions, inheritance, and evidence level.
+ * Shows BRCA1/2 cross-link banner when cross_links includes "cancer".
+ */
+
+import { cn } from "@/lib/utils"
+import type { CarrierVariant } from "@/types/carrier"
+import EvidenceStars from "@/components/ui/EvidenceStars"
+import { INHERITANCE_LABELS } from "@/types/carrier"
+import { Link } from "react-router-dom"
+import { Info } from "lucide-react"
+
+interface VariantCardProps {
+  variant: CarrierVariant
+  onClick: () => void
+  selected?: boolean
+  sampleId: number
+}
+
+const SIGNIFICANCE_CONFIG: Record<
+  string,
+  { color: string; bg: string; border: string; badge: string }
+> = {
+  Pathogenic: {
+    color: "text-red-700 dark:text-red-400",
+    bg: "bg-red-50 dark:bg-red-950/30",
+    border: "border-red-200 dark:border-red-800",
+    badge: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300",
+  },
+  "Likely pathogenic": {
+    color: "text-orange-700 dark:text-orange-400",
+    bg: "bg-orange-50 dark:bg-orange-950/30",
+    border: "border-orange-200 dark:border-orange-800",
+    badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300",
+  },
+}
+
+const DEFAULT_CONFIG = {
+  color: "text-muted-foreground",
+  bg: "bg-card",
+  border: "border-border",
+  badge: "bg-muted text-muted-foreground",
+}
+
+export default function VariantCard({ variant, onClick, selected, sampleId }: VariantCardProps) {
+  const config = SIGNIFICANCE_CONFIG[variant.clinvar_significance] || DEFAULT_CONFIG
+  const hasCancerCrossLink = variant.cross_links.includes("cancer")
+
+  return (
+    <article
+      className={cn(
+        "rounded-lg border p-4 cursor-pointer transition-all",
+        "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        config.bg,
+        config.border,
+        selected && "ring-2 ring-primary",
+      )}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={`${variant.gene_symbol} ${variant.rsid} — carrier, ${variant.clinvar_significance}`}
+      data-testid="carrier-variant-card"
+    >
+      {/* Header: gene + significance badge */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <h3 className="font-semibold text-foreground">{variant.gene_symbol}</h3>
+          <p className="text-xs font-mono text-muted-foreground">{variant.rsid}</p>
+        </div>
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
+            config.badge,
+          )}
+        >
+          {variant.clinvar_significance}
+        </span>
+      </div>
+
+      {/* Genotype + zygosity */}
+      {variant.genotype && (
+        <p className="text-sm font-mono text-foreground mb-1">
+          {variant.genotype}
+          <span className="text-muted-foreground ml-2">(heterozygous carrier)</span>
+        </p>
+      )}
+
+      {/* ClinVar review stars */}
+      {variant.clinvar_review_stars > 0 && (
+        <p className="text-xs text-muted-foreground mb-1">
+          ClinVar review: {"★".repeat(variant.clinvar_review_stars)}
+          {"☆".repeat(Math.max(0, 4 - variant.clinvar_review_stars))}
+        </p>
+      )}
+
+      {/* Conditions */}
+      {variant.conditions.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {variant.conditions.map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ClinVar conditions */}
+      {variant.clinvar_conditions && (
+        <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+          {variant.clinvar_conditions}
+        </p>
+      )}
+
+      {/* Footer: evidence stars + inheritance */}
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+        <EvidenceStars level={variant.evidence_level} />
+        <span className="text-xs text-muted-foreground">
+          {INHERITANCE_LABELS[variant.inheritance] ?? variant.inheritance}
+        </span>
+      </div>
+
+      {/* BRCA1/2 cross-link to Cancer module (P3-38) */}
+      {hasCancerCrossLink && (
+        <div
+          className="mt-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3"
+          data-testid="brca-cross-link"
+        >
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="text-xs text-blue-800 dark:text-blue-300">
+              <p className="mb-1">
+                This gene also has implications for cancer predisposition.
+                View both perspectives.
+              </p>
+              <Link
+                to={`/cancer?sample_id=${sampleId}`}
+                className="font-medium underline hover:no-underline text-blue-700 dark:text-blue-400"
+                onClick={(e) => e.stopPropagation()}
+              >
+                View Cancer Predisposition
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
+  )
+}
