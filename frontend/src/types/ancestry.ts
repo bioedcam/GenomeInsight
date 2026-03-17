@@ -32,3 +32,26 @@ export interface PCACoordinatesResponse {
   pc_labels: string[]
   top_population: string
 }
+
+/** A single step in the haplogroup traversal path (P3-34). */
+export interface HaplogroupTraversalStep {
+  haplogroup: string
+  snps_present: number
+  snps_total: number
+}
+
+/** A haplogroup assignment for a single tree (mt or Y) (P3-34). */
+export interface HaplogroupAssignment {
+  type: string
+  haplogroup: string
+  confidence: number
+  defining_snps_present: number
+  defining_snps_total: number
+  traversal_path: HaplogroupTraversalStep[]
+  finding_text: string
+}
+
+/** Haplogroup assignments response (P3-34). */
+export interface HaplogroupResponse {
+  assignments: HaplogroupAssignment[]
+}

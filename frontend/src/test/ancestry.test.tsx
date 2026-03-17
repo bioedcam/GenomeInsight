@@ -1,11 +1,16 @@
-/** Tests for the Ancestry UI (P3-27). */
+/** Tests for the Ancestry UI (P3-27, P3-34). */
 
 import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "./test-utils"
 import AncestryResultCard from "@/components/ancestry/AncestryResultCard"
 import AdmixtureBar from "@/components/ancestry/AdmixtureBar"
 import PCAScatter from "@/components/ancestry/PCAScatter"
-import type { AncestryFindingResponse, PCACoordinatesResponse } from "@/types/ancestry"
+import HaplogroupCard from "@/components/ancestry/HaplogroupCard"
+import type {
+  AncestryFindingResponse,
+  HaplogroupAssignment,
+  PCACoordinatesResponse,
+} from "@/types/ancestry"
 
 // Mock react-plotly.js to avoid canvas issues in tests
 vi.mock("react-plotly.js", () => ({
@@ -221,5 +226,131 @@ describe("PCAScatter", () => {
     const traces = JSON.parse(chart.getAttribute("data-traces") ?? "[]")
     const names = traces.map((t: { name: string }) => t.name)
     expect(names).toContain("Centroids")
+  })
+})
+
+// ── HaplogroupCard tests (P3-34) ──────────────────────────────────
+
+const MT_ASSIGNMENT: HaplogroupAssignment = {
+  type: "mt",
+  haplogroup: "H1a",
+  confidence: 0.904,
+  defining_snps_present: 47,
+  defining_snps_total: 52,
+  traversal_path: [
+    { haplogroup: "L3", snps_present: 3, snps_total: 3 },
+    { haplogroup: "N", snps_present: 5, snps_total: 6 },
+    { haplogroup: "R", snps_present: 2, snps_total: 2 },
+    { haplogroup: "R0", snps_present: 1, snps_total: 1 },
+    { haplogroup: "HV", snps_present: 4, snps_total: 5 },
+    { haplogroup: "H", snps_present: 8, snps_total: 9 },
+    { haplogroup: "H1", snps_present: 6, snps_total: 7 },
+    { haplogroup: "H1a", snps_present: 18, snps_total: 19 },
+  ],
+  finding_text: "Mitochondrial haplogroup: H1a (47/52 defining SNPs matched, 90% confidence)",
+}
+
+const Y_ASSIGNMENT: HaplogroupAssignment = {
+  type: "Y",
+  haplogroup: "R1b1a",
+  confidence: 0.846,
+  defining_snps_present: 11,
+  defining_snps_total: 13,
+  traversal_path: [
+    { haplogroup: "CT", snps_present: 2, snps_total: 2 },
+    { haplogroup: "F", snps_present: 1, snps_total: 1 },
+    { haplogroup: "K", snps_present: 1, snps_total: 2 },
+    { haplogroup: "R", snps_present: 2, snps_total: 2 },
+    { haplogroup: "R1b", snps_present: 3, snps_total: 3 },
+    { haplogroup: "R1b1a", snps_present: 2, snps_total: 3 },
+  ],
+  finding_text: "Y-chromosome haplogroup: R1b1a (11/13 defining SNPs matched, 85% confidence)",
+}
+
+describe("HaplogroupCard", () => {
+  it("renders empty state when no assignments", () => {
+    render(<HaplogroupCard assignments={[]} />)
+    expect(screen.getByTestId("haplogroup-card")).toBeInTheDocument()
+    expect(
+      screen.getByText(/No haplogroup assignments available/),
+    ).toBeInTheDocument()
+  })
+
+  it("renders mt assignment with haplogroup name", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByTestId("haplogroup-assignment-mt")).toBeInTheDocument()
+    expect(screen.getByTestId("haplogroup-name")).toHaveTextContent("H1a")
+  })
+
+  it("renders confidence badge", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByTestId("haplogroup-confidence-badge")).toHaveTextContent("90% confidence")
+  })
+
+  it("renders defining SNP match fraction", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByText("47 / 52 defining SNPs matched")).toBeInTheDocument()
+  })
+
+  it("renders traversal path with all nodes", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    const path = screen.getByTestId("haplogroup-traversal-path")
+    expect(path).toBeInTheDocument()
+    expect(screen.getByText("L3")).toBeInTheDocument()
+    expect(screen.getByText("N")).toBeInTheDocument()
+    // R, H, H1, H1a appear multiple times (in path + haplogroup name + finding text)
+    // so verify via traversal path container
+    expect(path.textContent).toContain("R")
+    expect(path.textContent).toContain("HV")
+    expect(path.textContent).toContain("H1")
+    expect(path.textContent).toContain("H1a")
+  })
+
+  it("shows per-node SNP counts in traversal", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByText("3/3")).toBeInTheDocument() // L3
+    expect(screen.getByText("5/6")).toBeInTheDocument() // N
+    expect(screen.getByText("18/19")).toBeInTheDocument() // H1a
+  })
+
+  it("renders finding text", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(
+      screen.getByText(/Mitochondrial haplogroup: H1a/),
+    ).toBeInTheDocument()
+  })
+
+  it("renders both mt and Y assignments", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT, Y_ASSIGNMENT]} />)
+    expect(screen.getByTestId("haplogroup-assignment-mt")).toBeInTheDocument()
+    expect(screen.getByTestId("haplogroup-assignment-Y")).toBeInTheDocument()
+    expect(screen.getByText("Mitochondrial (mtDNA)")).toBeInTheDocument()
+    expect(screen.getByText("Y-Chromosome")).toBeInTheDocument()
+  })
+
+  it("shows correct tree labels", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByText("Mitochondrial (mtDNA)")).toBeInTheDocument()
+  })
+
+  it("renders low confidence with warning color", () => {
+    const lowConf: HaplogroupAssignment = {
+      ...MT_ASSIGNMENT,
+      confidence: 0.35,
+    }
+    render(<HaplogroupCard assignments={[lowConf]} />)
+    expect(screen.getByTestId("haplogroup-confidence-badge")).toHaveTextContent("35% confidence")
+  })
+
+  it("highlights terminal haplogroup in traversal path", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    const path = screen.getByTestId("haplogroup-traversal-path")
+    const highlighted = path.querySelectorAll("[data-highlighted]")
+    expect(highlighted.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("has accessible card test id", () => {
+    render(<HaplogroupCard assignments={[MT_ASSIGNMENT]} />)
+    expect(screen.getByTestId("haplogroup-card")).toBeInTheDocument()
   })
 })

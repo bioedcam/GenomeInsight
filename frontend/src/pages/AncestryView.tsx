@@ -1,21 +1,24 @@
-/** Ancestry module page (P3-27).
+/** Ancestry module page (P3-27, P3-34).
  *
  * Layout:
  * - Ancestry result summary card (top population, coverage, evidence)
  * - Admixture bar chart (population fractions)
  * - PCA scatter plot (user projected onto reference panel)
+ * - Haplogroup assignments with traversal path (P3-34)
  *
  * PRD P3-27: Ancestry UI — admixture bar, PCA scatter.
+ * PRD P3-34: Ancestry UI haplogroup extension.
  */
 
 import { useSearchParams } from "react-router-dom"
 import { Globe, Loader2, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
-import { useAncestryFindings, usePCACoordinates } from "@/api/ancestry"
+import { useAncestryFindings, useHaplogroups, usePCACoordinates } from "@/api/ancestry"
 import AncestryResultCard from "@/components/ancestry/AncestryResultCard"
 import AdmixtureBar from "@/components/ancestry/AdmixtureBar"
 import PCAScatter from "@/components/ancestry/PCAScatter"
+import HaplogroupCard from "@/components/ancestry/HaplogroupCard"
 
 export default function AncestryView() {
   const [searchParams] = useSearchParams()
@@ -23,6 +26,7 @@ export default function AncestryView() {
 
   const findingsQuery = useAncestryFindings(sampleId)
   const pcaQuery = usePCACoordinates(sampleId)
+  const haplogroupQuery = useHaplogroups(sampleId)
 
   // No sample selected
   if (sampleId == null) {
@@ -144,6 +148,23 @@ export default function AncestryView() {
                 </div>
               )}
             </div>
+          </section>
+
+          {/* Haplogroup Assignments (P3-34) */}
+          <section aria-label="Haplogroup assignments" className="mt-8">
+            {haplogroupQuery.isLoading && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {haplogroupQuery.isError && (
+              <div className="text-sm text-destructive">
+                Failed to load haplogroup data.
+              </div>
+            )}
+            {haplogroupQuery.data && (
+              <HaplogroupCard assignments={haplogroupQuery.data.assignments} />
+            )}
           </section>
         </>
       )}
