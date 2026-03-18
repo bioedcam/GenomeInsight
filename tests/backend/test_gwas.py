@@ -456,7 +456,7 @@ class TestEFOWhitelist:
         assert len(EFO_WHITELIST) > 0
 
     def test_all_modules_present(self):
-        expected_modules = {"nutrigenomics", "fitness", "sleep", "skin", "allergy", "traits"}
+        expected_modules = {"nutrigenomics", "fitness", "sleep", "skin", "allergy", "methylation", "traits"}
         assert set(EFO_MODULES.keys()) == expected_modules
 
     def test_whitelist_is_union(self):
