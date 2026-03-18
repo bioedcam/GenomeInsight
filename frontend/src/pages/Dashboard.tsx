@@ -74,10 +74,10 @@ export default function Dashboard() {
       <AnnotationPanel sampleId={activeSample.id} variantCount={variantCount ?? null} />
 
       {/* Module cards grid */}
-      <ModuleCardsGrid />
+      <ModuleCardsGrid sampleId={activeSample.id} />
 
       {/* High-confidence findings */}
-      <FindingsPreview />
+      <FindingsPreview sampleId={activeSample.id} />
 
       {/* Collapsible QC */}
       <QualityControl variantCount={variantCount ?? null} qcStats={qcStats ?? null} />
