@@ -1,0 +1,233 @@
+{
+  "module": "sleep",
+  "version": "1.0.0",
+  "description": "Curated Gene Sleep SNP panel for GenomeInsight (P3-48). Covers 3 sleep pathways (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality) with 5 curated SNPs plus GWAS Catalog sleep/circadian EFO term associations. CYP1A2 rs762551 has cross-module reference to Pharmacogenomics. PER3 rs57875989 is a VNTR proxy with coverage caveat.",
+  "pathways": [
+    {
+      "id": "caffeine_sleep",
+      "name": "Caffeine & Sleep",
+      "description": "Variants influencing caffeine metabolism rate and adenosine receptor sensitivity, both of which affect caffeine-induced sleep disruption.",
+      "snps": [
+        {
+          "rsid": "rs762551",
+          "gene": "CYP1A2",
+          "variant_name": "*1F (-163C>A)",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "CYP1A2 *1A/*1A — rapid caffeine metabolizer. Caffeine is cleared quickly, reducing the likelihood of caffeine-related sleep disruption."
+            },
+            "AC": {
+              "category": "Moderate",
+              "effect_summary": "CYP1A2 *1A/*1F — intermediate caffeine metabolizer. Moderate caffeine clearance rate. Evening caffeine intake may mildly affect sleep onset."
+            },
+            "CA": {
+              "category": "Moderate",
+              "effect_summary": "CYP1A2 *1A/*1F — intermediate caffeine metabolizer. Moderate caffeine clearance rate. Evening caffeine intake may mildly affect sleep onset."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "CYP1A2 *1F/*1F — slow caffeine metabolizer. Caffeine persists longer in the body, increasing the risk of caffeine-induced insomnia and delayed sleep onset."
+            }
+          },
+          "cross_module": {
+            "module": "pharmacogenomics",
+            "note": "CYP1A2 is also a pharmacogene relevant to drug metabolism (e.g., clozapine, theophylline). See Pharmacogenomics module for full drug interaction profile."
+          },
+          "evidence_level": 2,
+          "pmids": ["16522833", "26378246", "18391200"],
+          "recommendation_text": "CYP1A2 determines caffeine half-life. Slow metabolizers may benefit from limiting caffeine intake to morning hours (before noon) to minimize sleep disruption. This variant also has pharmacogenomic relevance — see the Pharmacogenomics module."
+        },
+        {
+          "rsid": "rs5751876",
+          "gene": "ADORA2A",
+          "variant_name": "1083T>C (His361His)",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard adenosine A2A receptor sensitivity. Typical caffeine-related alertness and sleep effects."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T allele. Modestly increased sensitivity to caffeine's effects on sleep architecture and anxiety."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T allele. Modestly increased sensitivity to caffeine's effects on sleep architecture and anxiety."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous T allele. Increased adenosine A2A receptor sensitivity. Associated with greater caffeine-induced anxiety and sleep disruption, even at moderate doses."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["15657627", "22232607", "25979839"],
+          "recommendation_text": "ADORA2A encodes the adenosine A2A receptor — the primary target of caffeine. TT carriers may be more sensitive to caffeine's anxiogenic and sleep-disrupting effects. Consider reducing total caffeine intake, not just timing."
+        }
+      ]
+    },
+    {
+      "id": "chronotype_circadian",
+      "name": "Chronotype & Circadian Rhythm",
+      "description": "Variants influencing intrinsic circadian clock period length and chronotype preference (morningness vs. eveningness).",
+      "snps": [
+        {
+          "rsid": "rs57875989",
+          "gene": "PER3",
+          "variant_name": "VNTR proxy",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Proxy for PER3 5-repeat VNTR allele. Associated with morningness — earlier sleep onset and wake times. Standard circadian alignment."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PER3 VNTR proxy. Intermediate chronotype. No strong bias toward morningness or eveningness."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PER3 VNTR proxy. Intermediate chronotype. No strong bias toward morningness or eveningness."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Proxy for PER3 4-repeat VNTR allele. Associated with eveningness — later preferred sleep and wake times. May experience delayed sleep phase tendency."
+            }
+          },
+          "coverage_note": "rs57875989 is a proxy SNP for the PER3 54-bp variable number tandem repeat (VNTR) polymorphism (4-repeat vs. 5-repeat), which is not directly genotyped on SNP arrays. Proxy accuracy depends on linkage disequilibrium in the individual's ancestry population.",
+          "evidence_level": 1,
+          "pmids": ["17343727", "23430975", "19289833"],
+          "recommendation_text": "PER3 VNTR influences circadian period length. Individuals with the 4-repeat allele (eveningness) may benefit from consistent sleep schedules and morning light exposure to maintain circadian alignment."
+        }
+      ]
+    },
+    {
+      "id": "sleep_quality",
+      "name": "Sleep Quality",
+      "description": "Variants influencing restless legs syndrome (RLS) susceptibility and periodic limb movements during sleep, which can significantly disrupt sleep quality.",
+      "snps": [
+        {
+          "rsid": "rs2300478",
+          "gene": "MEIS1",
+          "variant_name": "MEIS1 intron",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Standard MEIS1 expression. Lower baseline risk for restless legs syndrome."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the RLS-associated G allele. Mildly increased susceptibility to restless legs syndrome and periodic limb movements during sleep."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the RLS-associated G allele. Mildly increased susceptibility to restless legs syndrome and periodic limb movements during sleep."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous RLS risk allele. Significantly increased susceptibility to restless legs syndrome. MEIS1 is the strongest genetic risk factor for RLS identified to date."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17634447", "21779176", "24839885"],
+          "recommendation_text": "MEIS1 is the strongest known genetic risk factor for restless legs syndrome (RLS). GG carriers with RLS symptoms should consult a sleep specialist. Iron status evaluation may be warranted, as iron deficiency can exacerbate RLS."
+        },
+        {
+          "rsid": "rs9357271",
+          "gene": "BTBD9",
+          "variant_name": "BTBD9 intron",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard BTBD9 expression. Lower baseline risk for periodic limb movements during sleep."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the PLMS-associated T allele. Mildly increased susceptibility to periodic limb movements during sleep and restless legs syndrome."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the PLMS-associated T allele. Mildly increased susceptibility to periodic limb movements during sleep and restless legs syndrome."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous PLMS risk allele. Increased susceptibility to periodic limb movements during sleep. BTBD9 variants also associated with altered iron metabolism in the brain."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["17634447", "19081515", "23340844"],
+          "recommendation_text": "BTBD9 is associated with periodic limb movements during sleep (PLMS) and RLS. BTBD9 may influence brain iron metabolism. If sleep is frequently disrupted, a sleep study can evaluate for PLMS."
+        }
+      ]
+    }
+  ],
+  "additional_genes": {
+    "CYP1A2_pgx_context": {
+      "note": "CYP1A2 rs762551 appears under Caffeine & Sleep (slow metabolizer → sleep disruption), but is also a pharmacogene affecting metabolism of clozapine, theophylline, and other drugs. The Pharmacogenomics module provides the full drug interaction profile — Sleep module references but does not re-compute PGx findings.",
+      "rsids": ["rs762551"]
+    }
+  },
+  "special_calling": {
+    "CYP1A2_metabolizer": {
+      "description": "Caffeine metabolizer status based on CYP1A2 *1A/*1F genotype. Maps to functional categories used in sleep context.",
+      "rsid": "rs762551",
+      "states": {
+        "rapid": {
+          "genotype": "AA",
+          "label": "Rapid metabolizer",
+          "description": "*1A/*1A — fast caffeine clearance. Low risk of caffeine-induced sleep disruption."
+        },
+        "intermediate": {
+          "genotypes": ["AC", "CA"],
+          "label": "Intermediate metabolizer",
+          "description": "*1A/*1F — moderate caffeine clearance. Some sensitivity to evening caffeine."
+        },
+        "slow": {
+          "genotype": "CC",
+          "label": "Slow metabolizer",
+          "description": "*1F/*1F — slow caffeine clearance. Higher risk of caffeine-induced insomnia."
+        }
+      }
+    },
+    "PER3_VNTR_proxy": {
+      "description": "PER3 variable number tandem repeat (54-bp VNTR, 4-repeat vs. 5-repeat) is not directly genotyped on SNP arrays. rs57875989 is used as a proxy SNP in linkage disequilibrium with the VNTR.",
+      "rsid": "rs57875989",
+      "proxy_target": "PER3 54-bp VNTR (4-repeat vs. 5-repeat in exon 18)",
+      "proxy_accuracy_note": "Linkage disequilibrium between rs57875989 and PER3 VNTR varies by ancestry. Proxy accuracy is highest in European populations and may be lower in other populations. Results should be interpreted with this caveat."
+    }
+  },
+  "gwas_efo_terms": [
+    "sleep",
+    "insomnia",
+    "chronotype",
+    "circadian",
+    "restless legs",
+    "sleep duration",
+    "sleep apnea",
+    "melatonin",
+    "narcolepsy",
+    "morningness",
+    "eveningness"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps"
+  }
+}
