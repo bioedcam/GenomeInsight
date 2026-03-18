@@ -179,9 +179,7 @@ class TestGenotypeEffects:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 categories = {e["category"] for e in snp["genotype_effects"].values()}
-                assert "Standard" in categories, (
-                    f"{snp['rsid']} has no Standard genotype category"
-                )
+                assert "Standard" in categories, f"{snp['rsid']} has no Standard genotype category"
 
     def test_genotypes_are_two_char(self, panel_data: dict) -> None:
         for pathway in panel_data["pathways"]:
