@@ -280,7 +280,7 @@ describe("VariantDetailPage (P2-21a)", () => {
     })
   })
 
-  it("shows Protein stub tab", async () => {
+  it("shows Protein tab with link to gene detail page", async () => {
     mockFetch.mockImplementation(async () => ({
       ok: true,
       json: async () => mockVariant,
@@ -295,8 +295,8 @@ describe("VariantDetailPage (P2-21a)", () => {
 
     await user.click(screen.getByRole("tab", { name: /protein/i }))
     expect(screen.getByTestId("tab-protein")).toBeInTheDocument()
-    expect(screen.getByText(/Phase 3/)).toBeInTheDocument()
     expect(screen.getByText("p.Tyr1853Ter")).toBeInTheDocument()
+    expect(screen.getByText(/View full gene detail/)).toBeInTheDocument()
   })
 
   it("switches to Clinical tab with full ClinVar record", async () => {

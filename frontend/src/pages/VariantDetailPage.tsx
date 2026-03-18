@@ -350,28 +350,37 @@ function PopulationTab({ variant }: { variant: VariantDetail }) {
 /*  Tab: Protein (stub)                                                */
 /* ------------------------------------------------------------------ */
 
-function ProteinTab({ variant }: { variant: VariantDetail }) {
+function ProteinTab({ variant, sampleId }: { variant: VariantDetail; sampleId: number | null }) {
   return (
-    <div className="text-center py-12" data-testid="tab-protein">
-      <FlaskConical className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-      <h3 className="text-lg font-medium text-foreground mb-2">Protein Domain View</h3>
-      <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
-        Interactive protein domain visualization with Nightingale Web Components
-        will be available in Phase 3.
-      </p>
+    <div data-testid="tab-protein">
       {variant.hgvs_protein && (
-        <p className="text-sm text-muted-foreground">
-          Protein change: <span className="font-mono font-medium text-foreground">{variant.hgvs_protein}</span>
-        </p>
+        <div className="mb-4">
+          <p className="text-sm text-muted-foreground">
+            Protein change: <span className="font-mono font-medium text-foreground">{variant.hgvs_protein}</span>
+          </p>
+        </div>
       )}
-      {variant.gene_symbol && (
-        <p className="text-sm text-muted-foreground mt-1">
-          Gene: <span className="font-medium text-foreground">{variant.gene_symbol}</span>
-          {" · "}
-          <span className="text-primary hover:underline cursor-default">
-            View full gene →
-          </span>
-        </p>
+      {variant.gene_symbol ? (
+        <div className="rounded-lg border bg-card p-6 text-center">
+          <FlaskConical className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
+          <h3 className="text-base font-medium text-foreground mb-2">
+            Protein Domain Visualization
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            View the full protein domain diagram with Nightingale,
+            variant positions, and domain annotations.
+          </p>
+          <Link
+            to={`/genes/${variant.gene_symbol}${sampleId != null ? `?sample_id=${sampleId}` : ""}`}
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
+          >
+            View full gene detail for {variant.gene_symbol} →
+          </Link>
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+          No gene symbol available for this variant.
+        </div>
       )}
     </div>
   )
@@ -801,7 +810,7 @@ export default function VariantDetailPage() {
       >
         {activeTab === "overview" && <OverviewTab variant={variant} />}
         {activeTab === "population" && <PopulationTab variant={variant} />}
-        {activeTab === "protein" && <ProteinTab variant={variant} />}
+        {activeTab === "protein" && <ProteinTab variant={variant} sampleId={sampleId} />}
         {activeTab === "clinical" && <ClinicalTab variant={variant} />}
         {activeTab === "literature" && <LiteratureTab variant={variant} />}
         {activeTab === "genome" && <GenomeTab variant={variant} sampleId={sampleId} />}
