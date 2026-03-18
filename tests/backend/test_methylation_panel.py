@@ -202,9 +202,7 @@ class TestSNPCoverage:
         assert len(pw["snps"]) == 7
 
     def test_bh4_neurotransmitter_snp_count(self, panel_data: dict) -> None:
-        pw = next(
-            p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter"
-        )
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter")
         assert len(pw["snps"]) == 7
 
     def test_choline_betaine_snp_count(self, panel_data: dict) -> None:
@@ -251,9 +249,7 @@ class TestSNPFields:
                 assert isinstance(snp["pmids"], list)
                 assert len(snp["pmids"]) > 0, f"{snp['rsid']} has no PMIDs"
                 for pmid in snp["pmids"]:
-                    assert pmid.isdigit(), (
-                        f"{snp['rsid']} has non-numeric PMID: {pmid}"
-                    )
+                    assert pmid.isdigit(), f"{snp['rsid']} has non-numeric PMID: {pmid}"
 
 
 # ── Genotype effects validation ─────────────────────────────────────────
@@ -273,32 +269,22 @@ class TestGenotypeEffects:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 for gt, effect in snp["genotype_effects"].items():
-                    assert "effect_summary" in effect, (
-                        f"{snp['rsid']}:{gt} missing effect_summary"
-                    )
+                    assert "effect_summary" in effect, f"{snp['rsid']}:{gt} missing effect_summary"
                     assert len(effect["effect_summary"]) > 0
 
     def test_each_snp_has_standard_category(self, panel_data: dict) -> None:
         """Every SNP must have at least one Standard genotype."""
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
-                categories = {
-                    e["category"] for e in snp["genotype_effects"].values()
-                }
-                assert "Standard" in categories, (
-                    f"{snp['rsid']} has no Standard genotype category"
-                )
+                categories = {e["category"] for e in snp["genotype_effects"].values()}
+                assert "Standard" in categories, f"{snp['rsid']} has no Standard genotype category"
 
     def test_genotypes_are_two_char(self, panel_data: dict) -> None:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 for gt in snp["genotype_effects"]:
-                    assert len(gt) == 2, (
-                        f"{snp['rsid']} has invalid genotype length: {gt}"
-                    )
-                    assert gt.isalpha(), (
-                        f"{snp['rsid']} has non-alpha genotype: {gt}"
-                    )
+                    assert len(gt) == 2, f"{snp['rsid']} has invalid genotype length: {gt}"
+                    assert gt.isalpha(), f"{snp['rsid']} has non-alpha genotype: {gt}"
 
     def test_evidence_gating_star_1_no_elevated(self, panel_data: dict) -> None:
         """SNPs with evidence_level=1 must NOT have Elevated category (star_1_cap)."""
@@ -431,9 +417,7 @@ class TestCOMTFraming:
         pytest.fail("COMT rs4680 not found in panel")
 
     def test_comt_in_bh4_pathway(self, panel_data: dict) -> None:
-        pw = next(
-            p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter"
-        )
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter")
         rsids = {s["rsid"] for s in pw["snps"]}
         assert "rs4680" in rsids
 
@@ -457,15 +441,9 @@ class TestCOMTFraming:
         comt = self._get_comt(panel_data)
         for gt, effect in comt["genotype_effects"].items():
             summary_lower = effect["effect_summary"].lower()
-            assert "warrior" not in summary_lower, (
-                f"COMT {gt} uses warrior framing"
-            )
-            assert "worrier" not in summary_lower, (
-                f"COMT {gt} uses worrier framing"
-            )
-            assert "psychiatric" not in summary_lower, (
-                f"COMT {gt} uses psychiatric framing"
-            )
+            assert "warrior" not in summary_lower, f"COMT {gt} uses warrior framing"
+            assert "worrier" not in summary_lower, f"COMT {gt} uses worrier framing"
+            assert "psychiatric" not in summary_lower, f"COMT {gt} uses psychiatric framing"
 
     def test_comt_evidence_level(self, panel_data: dict) -> None:
         comt = self._get_comt(panel_data)
@@ -501,9 +479,9 @@ class TestMTHFRCompoundHet:
         assert "double_homozygous" in sc["states"]
 
     def test_compound_het_genotypes(self, panel_data: dict) -> None:
-        state = panel_data["special_calling"]["MTHFR_compound_heterozygosity"][
-            "states"
-        ]["compound_het"]
+        state = panel_data["special_calling"]["MTHFR_compound_heterozygosity"]["states"][
+            "compound_het"
+        ]
         assert set(state["c677t_genotypes"]) == {"GA", "AG"}
         assert set(state["a1298c_genotypes"]) == {"AC", "CA"}
 
@@ -667,4 +645,5 @@ class TestDHFRCoverage:
     def test_dhfr_has_coverage_note(self, panel_data: dict) -> None:
         dhfr = self._get_dhfr(panel_data)
         assert "coverage_note" in dhfr
-        assert "19bp" in dhfr["coverage_note"].lower() or "deletion" in dhfr["coverage_note"].lower()
+        note = dhfr["coverage_note"].lower()
+        assert "19bp" in note or "deletion" in note
