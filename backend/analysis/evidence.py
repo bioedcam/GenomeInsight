@@ -57,8 +57,8 @@ Usage::
     assert level == 4  # ★★★★
 
     # GWAS-based (nutrigenomics, fitness, sleep, etc.)
-    level = assign_gwas_evidence_level(replicated=True)
-    assert level == 2  # single cohort GWAS
+    level = assign_gwas_evidence_level(p_value=1e-10)
+    assert level == 2  # single cohort GWAS = ★★☆☆
 """
 
 from __future__ import annotations
