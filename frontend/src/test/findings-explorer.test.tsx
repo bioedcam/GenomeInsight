@@ -239,4 +239,22 @@ describe("FindingsExplorer", () => {
 
     expect(await screen.findByText("ClinVar: Pathogenic")).toBeInTheDocument()
   })
+
+  it("shows error state when fetch fails", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => "Server error",
+    })
+    renderWithRoute(<FindingsExplorer />, ["/?sample_id=1"])
+
+    expect(await screen.findByText(/Findings failed: 500/)).toBeInTheDocument()
+  })
+
+  it("renders metabolizer status for pharmacogenomics findings", async () => {
+    setupFetchMock()
+    renderWithRoute(<FindingsExplorer />, ["/?sample_id=1"])
+
+    expect(await screen.findByText("Poor Metabolizer")).toBeInTheDocument()
+  })
 })
