@@ -1,0 +1,1047 @@
+"""Tests for the Gene Sleep module (P3-49).
+
+Covers:
+  - Panel loading and dataclass construction
+  - CYP1A2 caffeine metabolizer calling (rapid/intermediate/slow)
+  - HLA-DQB1*06:02 proxy with accuracy caveat
+  - PER3 VNTR proxy with coverage note
+  - Genotype normalization
+  - SNP scoring with evidence-level gating
+  - Pathway level determination (highest category)
+  - CYP1A2 cross-module reference to Pharmacogenomics (read, not re-compute)
+  - Full scoring integration with sample DB
+  - Findings storage and retrieval
+  - GWAS annotation_coverage bitmask (bit 5)
+  - 14 trait finding count verification
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import sqlalchemy as sa
+
+from backend.analysis.sleep import (
+    ELEVATED,
+    MODERATE,
+    MODULE_NAME,
+    STANDARD,
+    PanelSNP,
+    PathwayResult,
+    SNPResult,
+    SleepPanel,
+    SleepResult,
+    _determine_pathway_level,
+    _generate_cross_module_findings,
+    _normalize_genotype,
+    _resolve_metabolizer_state,
+    _score_snp,
+    load_sleep_panel,
+    score_sleep_pathways,
+    store_sleep_findings,
+    update_annotation_coverage_gwas,
+)
+from backend.annotation.engine import GWAS_BIT
+from backend.db.tables import (
+    annotated_variants,
+    findings,
+    gwas_associations,
+    raw_variants,
+    reference_metadata,
+    sample_metadata_obj,
+)
+
+# ── Fixtures ──────────────────────────────────────────────────────────────
+
+PANEL_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "backend"
+    / "data"
+    / "panels"
+    / "sleep_panel.json"
+)
+
+
+@pytest.fixture()
+def panel() -> SleepPanel:
+    """Load the actual curated panel."""
+    return load_sleep_panel(PANEL_PATH)
+
+
+@pytest.fixture()
+def sample_engine(tmp_path: Path) -> sa.Engine:
+    """Create a sample DB with raw_variants and findings tables."""
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'sample.db'}")
+    sample_metadata_obj.create_all(engine)
+    return engine
+
+
+@pytest.fixture()
+def reference_engine(tmp_path: Path) -> sa.Engine:
+    """Create a reference DB with gwas_associations table."""
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'reference.db'}")
+    reference_metadata.create_all(engine)
+    return engine
+
+
+def _seed_variants(
+    engine: sa.Engine,
+    variants: list[tuple[str, str, int, str]],
+) -> None:
+    """Insert raw_variants rows: (rsid, chrom, pos, genotype)."""
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(raw_variants),
+            [
+                {"rsid": rsid, "chrom": chrom, "pos": pos, "genotype": gt}
+                for rsid, chrom, pos, gt in variants
+            ],
+        )
+
+
+def _seed_gwas(
+    engine: sa.Engine,
+    associations: list[tuple[str, str]],
+) -> None:
+    """Insert gwas_associations rows: (rsid, trait)."""
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(gwas_associations),
+            [
+                {
+                    "rsid": rsid,
+                    "trait": trait,
+                    "p_value": 1e-10,
+                    "chrom": "1",
+                    "pos": 0,
+                }
+                for rsid, trait in associations
+            ],
+        )
+
+
+# ── Panel loading tests ──────────────────────────────────────────────────
+
+
+class TestPanelLoading:
+    def test_load_panel_succeeds(self, panel: SleepPanel) -> None:
+        assert panel.module == "sleep"
+        assert panel.version == "1.0.0"
+
+    def test_panel_has_four_pathways(self, panel: SleepPanel) -> None:
+        assert len(panel.pathways) == 4
+        pathway_ids = {p.id for p in panel.pathways}
+        assert pathway_ids == {
+            "caffeine_sleep",
+            "chronotype_circadian",
+            "sleep_quality",
+            "sleep_disorders",
+        }
+
+    def test_panel_all_rsids(self, panel: SleepPanel) -> None:
+        rsids = panel.all_rsids()
+        assert len(rsids) == 6
+        expected = {
+            "rs762551",
+            "rs5751876",
+            "rs57875989",
+            "rs2300478",
+            "rs9357271",
+            "rs2858884",
+        }
+        assert set(rsids) == expected
+
+    def test_panel_snps_have_genotype_effects(self, panel: SleepPanel) -> None:
+        for pathway in panel.pathways:
+            for snp in pathway.snps:
+                assert len(snp.genotype_effects) > 0, f"{snp.rsid} has no genotype effects"
+                for gt, effect in snp.genotype_effects.items():
+                    assert "category" in effect
+                    assert "effect_summary" in effect
+                    assert effect["category"] in (ELEVATED, MODERATE, STANDARD)
+
+    def test_panel_has_additional_genes(self, panel: SleepPanel) -> None:
+        assert panel.additional_genes is not None
+        assert "CYP1A2_pgx_context" in panel.additional_genes
+
+    def test_panel_has_special_calling(self, panel: SleepPanel) -> None:
+        assert panel.special_calling is not None
+        assert "CYP1A2_metabolizer" in panel.special_calling
+        assert "PER3_VNTR_proxy" in panel.special_calling
+        assert "HLA_DQB1_narcolepsy_proxy" in panel.special_calling
+
+    def test_load_nonexistent_panel_raises(self) -> None:
+        with pytest.raises(FileNotFoundError):
+            load_sleep_panel(Path("/nonexistent/panel.json"))
+
+
+# ── Genotype normalization tests ─────────────────────────────────────────
+
+
+class TestGenotypeNormalization:
+    def test_normal_genotype(self) -> None:
+        assert _normalize_genotype("CT") == "CT"
+        assert _normalize_genotype("AA") == "AA"
+
+    def test_nocall(self) -> None:
+        assert _normalize_genotype("--") is None
+        assert _normalize_genotype("") is None
+        assert _normalize_genotype(None) is None
+
+    def test_whitespace(self) -> None:
+        assert _normalize_genotype("  CT  ") == "CT"
+
+    def test_indel_markers(self) -> None:
+        assert _normalize_genotype("II") is None
+        assert _normalize_genotype("DD") is None
+        assert _normalize_genotype("DI") is None
+        assert _normalize_genotype("ID") is None
+
+    def test_lowercase(self) -> None:
+        assert _normalize_genotype("ct") == "CT"
+
+
+# ── CYP1A2 metabolizer calling tests ──────────────────────────────────────
+
+
+class TestCYP1A2Metabolizer:
+    def _get_cyp1a2(self, panel: SleepPanel) -> PanelSNP:
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs762551":
+                    return snp
+        pytest.fail("CYP1A2 not found")
+
+    def test_resolve_metabolizer_rapid(self, panel: SleepPanel) -> None:
+        assert _resolve_metabolizer_state(panel, "AA") == "Rapid metabolizer"
+
+    def test_resolve_metabolizer_intermediate(self, panel: SleepPanel) -> None:
+        assert _resolve_metabolizer_state(panel, "AC") == "Intermediate metabolizer"
+        assert _resolve_metabolizer_state(panel, "CA") == "Intermediate metabolizer"
+
+    def test_resolve_metabolizer_slow(self, panel: SleepPanel) -> None:
+        assert _resolve_metabolizer_state(panel, "CC") == "Slow metabolizer"
+
+    def test_resolve_metabolizer_none_genotype(self, panel: SleepPanel) -> None:
+        assert _resolve_metabolizer_state(panel, None) is None
+
+    def test_cyp1a2_aa_standard(self, panel: SleepPanel) -> None:
+        """Rapid metabolizer (AA) → Standard category."""
+        cyp = self._get_cyp1a2(panel)
+        result = _score_snp(cyp, "AA", panel)
+        assert result.category == STANDARD
+        assert result.metabolizer_state == "Rapid metabolizer"
+        assert result.present_in_sample is True
+
+    def test_cyp1a2_ac_moderate(self, panel: SleepPanel) -> None:
+        """Intermediate metabolizer (AC) → Moderate category."""
+        cyp = self._get_cyp1a2(panel)
+        result = _score_snp(cyp, "AC", panel)
+        assert result.category == MODERATE
+        assert result.metabolizer_state == "Intermediate metabolizer"
+
+    def test_cyp1a2_cc_elevated(self, panel: SleepPanel) -> None:
+        """Slow metabolizer (CC) → Elevated category (evidence_level=2 allows it)."""
+        cyp = self._get_cyp1a2(panel)
+        result = _score_snp(cyp, "CC", panel)
+        assert result.category == ELEVATED
+        assert result.metabolizer_state == "Slow metabolizer"
+
+    def test_cyp1a2_has_cross_module(self, panel: SleepPanel) -> None:
+        """CYP1A2 must have cross-module reference to pharmacogenomics."""
+        cyp = self._get_cyp1a2(panel)
+        assert cyp.cross_module is not None
+        assert cyp.cross_module["module"] == "pharmacogenomics"
+
+
+# ── HLA-DQB1*06:02 proxy tests ──────────────────────────────────────────
+
+
+class TestHLAProxy:
+    def _get_hla(self, panel: SleepPanel) -> PanelSNP:
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs2858884":
+                    return snp
+        pytest.fail("HLA-DQB1 not found")
+
+    def test_hla_has_coverage_note(self, panel: SleepPanel) -> None:
+        hla = self._get_hla(panel)
+        assert hla.coverage_note is not None
+        assert "proxy" in hla.coverage_note.lower()
+
+    def test_hla_coverage_note_accuracy_caveat(self, panel: SleepPanel) -> None:
+        """T3-51: HLA proxy produces finding with accuracy caveat text."""
+        hla = self._get_hla(panel)
+        assert hla.coverage_note is not None
+        note = hla.coverage_note.lower()
+        assert "ancestry" in note
+        assert "not" in note  # "not a direct HLA typing result"
+
+    def test_hla_tt_elevated(self, panel: SleepPanel) -> None:
+        """TT → Elevated (homozygous proxy for narcolepsy-associated HLA)."""
+        hla = self._get_hla(panel)
+        result = _score_snp(hla, "TT", panel)
+        assert result.category == ELEVATED
+        assert result.coverage_note is not None
+
+    def test_hla_ct_moderate(self, panel: SleepPanel) -> None:
+        """CT → Moderate."""
+        hla = self._get_hla(panel)
+        result = _score_snp(hla, "CT", panel)
+        assert result.category == MODERATE
+
+    def test_hla_cc_standard(self, panel: SleepPanel) -> None:
+        """CC → Standard."""
+        hla = self._get_hla(panel)
+        result = _score_snp(hla, "CC", panel)
+        assert result.category == STANDARD
+
+    def test_hla_no_metabolizer_state(self, panel: SleepPanel) -> None:
+        """HLA proxy should not have a metabolizer state."""
+        hla = self._get_hla(panel)
+        result = _score_snp(hla, "TT", panel)
+        assert result.metabolizer_state is None
+
+
+# ── PER3 VNTR proxy tests ────────────────────────────────────────────────
+
+
+class TestPER3Proxy:
+    def _get_per3(self, panel: SleepPanel) -> PanelSNP:
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs57875989":
+                    return snp
+        pytest.fail("PER3 not found")
+
+    def test_per3_has_coverage_note(self, panel: SleepPanel) -> None:
+        per3 = self._get_per3(panel)
+        assert per3.coverage_note is not None
+        assert "proxy" in per3.coverage_note.lower()
+        assert "vntr" in per3.coverage_note.lower()
+
+    def test_per3_aa_capped_moderate(self, panel: SleepPanel) -> None:
+        """AA (4-repeat proxy, eveningness) → Moderate (capped from Elevated, evidence=1)."""
+        per3 = self._get_per3(panel)
+        assert per3.evidence_level == 1
+        result = _score_snp(per3, "AA", panel)
+        assert result.category == MODERATE  # Capped from Elevated
+
+    def test_per3_gg_standard(self, panel: SleepPanel) -> None:
+        per3 = self._get_per3(panel)
+        result = _score_snp(per3, "GG", panel)
+        assert result.category == STANDARD
+
+
+# ── SNP scoring tests ────────────────────────────────────────────────────
+
+
+class TestSNPScoring:
+    def test_not_genotyped_returns_standard(self, panel: SleepPanel) -> None:
+        snp = panel.pathways[0].snps[0]
+        result = _score_snp(snp, None, panel)
+        assert result.category == STANDARD
+        assert result.present_in_sample is False
+
+    def test_evidence_gating_caps_at_moderate(self, panel: SleepPanel) -> None:
+        """★☆ evidence hard-caps at Moderate (key rule)."""
+        snp = _make_test_snp(evidence_level=1, genotype_category=ELEVATED)
+        result = _score_snp(snp, "AA", panel)
+        assert result.category == MODERATE
+
+    def test_evidence_level_2_allows_elevated(self, panel: SleepPanel) -> None:
+        """★★ evidence allows Elevated when genotype warrants it."""
+        snp = _make_test_snp(evidence_level=2, genotype_category=ELEVATED)
+        result = _score_snp(snp, "AA", panel)
+        assert result.category == ELEVATED
+
+    def test_reversed_genotype_lookup(self, panel: SleepPanel) -> None:
+        """Panel handles reversed genotype strings (e.g. CT vs TC)."""
+        adora2a = None
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs5751876":
+                    adora2a = snp
+                    break
+        assert adora2a is not None
+
+        result_ct = _score_snp(adora2a, "CT", panel)
+        result_tc = _score_snp(adora2a, "TC", panel)
+        assert result_ct.category == result_tc.category == MODERATE
+
+    def test_unknown_genotype_defaults_standard(self, panel: SleepPanel) -> None:
+        snp = panel.pathways[0].snps[0]
+        result = _score_snp(snp, "ZZ", panel)
+        assert result.category == STANDARD
+        assert result.present_in_sample is True
+
+    def test_adora2a_tt_capped_at_moderate(self, panel: SleepPanel) -> None:
+        """ADORA2A has evidence_level=1, so TT (Elevated) → capped at Moderate."""
+        adora2a = None
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs5751876":
+                    adora2a = snp
+                    break
+        assert adora2a is not None
+        assert adora2a.evidence_level == 1
+        result = _score_snp(adora2a, "TT", panel)
+        assert result.category == MODERATE  # Capped from Elevated
+
+    def test_meis1_gg_elevated(self, panel: SleepPanel) -> None:
+        """MEIS1 has evidence_level=2, so GG (Elevated) → Elevated."""
+        meis1 = None
+        for pw in panel.pathways:
+            for snp in pw.snps:
+                if snp.rsid == "rs2300478":
+                    meis1 = snp
+                    break
+        assert meis1 is not None
+        assert meis1.evidence_level == 2
+        result = _score_snp(meis1, "GG", panel)
+        assert result.category == ELEVATED
+
+
+# ── Pathway level determination tests ────────────────────────────────────
+
+
+class TestPathwayLevel:
+    def test_elevated_wins(self) -> None:
+        results = [
+            _make_snp_result(STANDARD, present=True),
+            _make_snp_result(ELEVATED, present=True),
+            _make_snp_result(MODERATE, present=True),
+        ]
+        assert _determine_pathway_level(results) == ELEVATED
+
+    def test_moderate_when_no_elevated(self) -> None:
+        results = [
+            _make_snp_result(STANDARD, present=True),
+            _make_snp_result(MODERATE, present=True),
+        ]
+        assert _determine_pathway_level(results) == MODERATE
+
+    def test_standard_when_all_standard(self) -> None:
+        results = [
+            _make_snp_result(STANDARD, present=True),
+            _make_snp_result(STANDARD, present=True),
+        ]
+        assert _determine_pathway_level(results) == STANDARD
+
+    def test_empty_results(self) -> None:
+        assert _determine_pathway_level([]) == STANDARD
+
+    def test_only_missing_snps_gives_standard(self) -> None:
+        results = [
+            _make_snp_result(ELEVATED, present=False),
+            _make_snp_result(MODERATE, present=False),
+        ]
+        assert _determine_pathway_level(results) == STANDARD
+
+
+# ── Cross-module reference tests ─────────────────────────────────────────
+
+
+class TestCrossModuleFindings:
+    def test_cyp1a2_pgx_cross_reference_generated(self, panel: SleepPanel) -> None:
+        """T3-50: CYP1A2 cross-reference reads PGx finding without re-computing."""
+        caffeine_pr = PathwayResult(
+            pathway_id="caffeine_sleep",
+            pathway_name="Caffeine & Sleep",
+            pathway_description="",
+            level=ELEVATED,
+            snp_results=[
+                SNPResult(
+                    rsid="rs762551",
+                    gene="CYP1A2",
+                    variant_name="*1F (-163C>A)",
+                    genotype="CC",
+                    category=ELEVATED,
+                    effect_summary="Slow metabolizer",
+                    evidence_level=2,
+                    pmids=["16522833"],
+                    recommendation_text="",
+                    present_in_sample=True,
+                    metabolizer_state="Slow metabolizer",
+                ),
+            ],
+        )
+        results = [caffeine_pr]
+        cross = _generate_cross_module_findings(results, panel)
+        assert len(cross) == 1
+        assert cross[0].rsid == "rs762551"
+        assert cross[0].target_module == "pharmacogenomics"
+        assert cross[0].source_module == "sleep"
+        assert "pharmacogenomics" in cross[0].finding_text.lower()
+        assert "Slow metabolizer" in cross[0].finding_text
+
+    def test_no_cross_reference_when_cyp1a2_not_genotyped(self, panel: SleepPanel) -> None:
+        """No cross-module reference when CYP1A2 is not in sample."""
+        caffeine_pr = PathwayResult(
+            pathway_id="caffeine_sleep",
+            pathway_name="Caffeine & Sleep",
+            pathway_description="",
+            level=STANDARD,
+        )
+        results = [caffeine_pr]
+        cross = _generate_cross_module_findings(results, panel)
+        assert len(cross) == 0
+
+    def test_cross_reference_includes_metabolizer_state(self, panel: SleepPanel) -> None:
+        """Cross-module finding detail includes metabolizer state."""
+        caffeine_pr = PathwayResult(
+            pathway_id="caffeine_sleep",
+            pathway_name="Caffeine & Sleep",
+            pathway_description="",
+            level=MODERATE,
+            snp_results=[
+                SNPResult(
+                    rsid="rs762551",
+                    gene="CYP1A2",
+                    variant_name="*1F",
+                    genotype="AC",
+                    category=MODERATE,
+                    effect_summary="Intermediate",
+                    evidence_level=2,
+                    pmids=["16522833"],
+                    recommendation_text="",
+                    present_in_sample=True,
+                    metabolizer_state="Intermediate metabolizer",
+                ),
+            ],
+        )
+        cross = _generate_cross_module_findings([caffeine_pr], panel)
+        assert len(cross) == 1
+        assert cross[0].detail["metabolizer_state"] == "Intermediate metabolizer"
+
+
+# ── Integration tests ────────────────────────────────────────────────────
+
+
+class TestScorePathways:
+    def test_full_scoring_all_snps(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Score pathways with all 6 panel SNPs genotyped."""
+        _seed_variants(
+            sample_engine,
+            [
+                ("rs762551", "15", 75041917, "CC"),  # CYP1A2 slow metabolizer
+                ("rs5751876", "22", 24825044, "TT"),  # ADORA2A increased sensitivity
+                ("rs57875989", "1", 7845023, "AA"),  # PER3 eveningness proxy
+                ("rs2300478", "2", 66662600, "GG"),  # MEIS1 RLS risk
+                ("rs9357271", "6", 38165204, "TT"),  # BTBD9 PLMS risk
+                ("rs2858884", "6", 32632760, "TT"),  # HLA narcolepsy proxy
+            ],
+        )
+        _seed_gwas(
+            reference_engine,
+            [
+                ("rs762551", "Caffeine metabolism"),
+                ("rs2300478", "Restless legs syndrome"),
+            ],
+        )
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+
+        # Caffeine & Sleep: CYP1A2 CC=Elevated, ADORA2A TT=Moderate (capped)
+        #   → pathway = Elevated
+        caffeine = next(pr for pr in result.pathway_results if pr.pathway_id == "caffeine_sleep")
+        assert caffeine.level == ELEVATED
+
+        # Chronotype: PER3 AA=Moderate (capped from Elevated, star1)
+        #   → pathway = Moderate
+        chrono = next(
+            pr for pr in result.pathway_results if pr.pathway_id == "chronotype_circadian"
+        )
+        assert chrono.level == MODERATE
+
+        # Sleep Quality: MEIS1 GG=Elevated (star2), BTBD9 TT=Moderate (capped, star1)
+        #   → pathway = Elevated
+        quality = next(pr for pr in result.pathway_results if pr.pathway_id == "sleep_quality")
+        assert quality.level == ELEVATED
+
+        # Sleep Disorders: HLA TT=Elevated (star2)
+        #   → pathway = Elevated
+        disorders = next(pr for pr in result.pathway_results if pr.pathway_id == "sleep_disorders")
+        assert disorders.level == ELEVATED
+
+        # GWAS matches
+        assert "rs762551" in result.gwas_matched_rsids
+        assert "rs2300478" in result.gwas_matched_rsids
+
+        # Metabolizer state
+        assert result.metabolizer_state == "Slow metabolizer"
+
+        # Cross-module findings should exist
+        assert len(result.cross_module_findings) == 1
+        assert result.cross_module_findings[0].target_module == "pharmacogenomics"
+
+    def test_cyp1a2_metabolizer_state(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """CYP1A2 CC → Slow metabolizer state tracked in result."""
+        _seed_variants(sample_engine, [("rs762551", "15", 75041917, "CC")])
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+
+        caffeine = next(pr for pr in result.pathway_results if pr.pathway_id == "caffeine_sleep")
+        cyp = next(s for s in caffeine.called_snps if s.rsid == "rs762551")
+        assert cyp.metabolizer_state == "Slow metabolizer"
+        assert cyp.category == ELEVATED
+        assert result.metabolizer_state == "Slow metabolizer"
+
+    def test_hla_proxy_finding_with_caveat(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """HLA-DQB1*06:02 proxy produces finding with accuracy caveat."""
+        _seed_variants(sample_engine, [("rs2858884", "6", 32632760, "TT")])
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+
+        disorders = next(pr for pr in result.pathway_results if pr.pathway_id == "sleep_disorders")
+        hla = next(s for s in disorders.called_snps if s.rsid == "rs2858884")
+        assert hla.category == ELEVATED
+        assert hla.coverage_note is not None
+        assert "proxy" in hla.coverage_note.lower()
+
+    def test_missing_snps_default_standard(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Pathways with no genotyped SNPs default to Standard."""
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        for pr in result.pathway_results:
+            assert pr.level == STANDARD
+            assert len(pr.called_snps) == 0
+            assert len(pr.missing_snps) > 0
+
+    def test_per3_proxy_coverage_note_preserved(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """PER3 coverage note survives through scoring pipeline."""
+        _seed_variants(sample_engine, [("rs57875989", "1", 7845023, "GA")])
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+
+        chrono = next(
+            pr for pr in result.pathway_results if pr.pathway_id == "chronotype_circadian"
+        )
+        per3 = next(s for s in chrono.called_snps if s.rsid == "rs57875989")
+        assert per3.coverage_note is not None
+        assert "vntr" in per3.coverage_note.lower()
+
+
+# ── Findings storage tests ─────────────────────────────────────────────
+
+
+class TestStoreFindingsIntegration:
+    def test_store_and_retrieve_findings(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Store findings and verify they're in the DB."""
+        _seed_variants(
+            sample_engine,
+            [
+                ("rs762551", "15", 75041917, "CC"),
+                ("rs2300478", "2", 66662600, "GG"),
+                ("rs2858884", "6", 32632760, "TT"),
+            ],
+        )
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        count = store_sleep_findings(result, sample_engine)
+        assert count > 0
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(findings.c.module == MODULE_NAME)
+            ).fetchall()
+
+        assert len(rows) == count
+
+        # Check pathway summary findings exist (always 4)
+        pathway_summaries = [r for r in rows if r.category == "pathway_summary"]
+        assert len(pathway_summaries) == 4
+
+    def test_metabolizer_state_finding_stored(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """CYP1A2 metabolizer state generates its own finding."""
+        _seed_variants(sample_engine, [("rs762551", "15", 75041917, "CC")])
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            met_rows = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.category == "metabolizer_state",
+                    )
+                )
+            ).fetchall()
+
+        assert len(met_rows) == 1
+        assert "Slow metabolizer" in met_rows[0].finding_text
+
+    def test_cross_module_finding_stored(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """CYP1A2 PGx cross-module reference is stored."""
+        _seed_variants(sample_engine, [("rs762551", "15", 75041917, "CC")])
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            cross_rows = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.category == "cross_module",
+                    )
+                )
+            ).fetchall()
+
+        assert len(cross_rows) == 1
+        assert "pharmacogenomics" in cross_rows[0].finding_text.lower()
+        detail = json.loads(cross_rows[0].detail_json)
+        assert detail["target_module"] == "pharmacogenomics"
+
+    def test_hla_finding_includes_coverage_note(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """HLA SNP finding includes coverage_note in detail_json."""
+        _seed_variants(sample_engine, [("rs2858884", "6", 32632760, "TT")])
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.rsid == "rs2858884",
+                    )
+                )
+            ).first()
+
+        assert row is not None
+        detail = json.loads(row.detail_json)
+        assert "coverage_note" in detail
+        assert "proxy" in detail["coverage_note"].lower()
+
+    def test_store_clears_previous_findings(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Re-running store clears previous sleep findings."""
+        _seed_variants(sample_engine, [("rs762551", "15", 75041917, "CC")])
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        store_sleep_findings(result, sample_engine)
+        count2 = store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(findings).where(findings.c.module == MODULE_NAME)
+            ).fetchall()
+
+        assert len(rows) == count2  # No duplicates
+
+    def test_no_snp_findings_for_empty_sample(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Empty sample produces pathway summaries but no SNP findings."""
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        count = store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            snp_findings = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.category == "snp_finding",
+                    )
+                )
+            ).fetchall()
+
+        assert len(snp_findings) == 0
+        assert count == 4  # 4 pathway summaries, all Standard
+
+    def test_14_trait_findings_max(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """With all SNPs genotyped at non-Standard, verify finding count ≤ 14."""
+        _seed_variants(
+            sample_engine,
+            [
+                ("rs762551", "15", 75041917, "CC"),  # CYP1A2 slow → Elevated
+                ("rs5751876", "22", 24825044, "TT"),  # ADORA2A → Moderate (capped)
+                ("rs57875989", "1", 7845023, "AA"),  # PER3 → Moderate (capped)
+                ("rs2300478", "2", 66662600, "GG"),  # MEIS1 → Elevated
+                ("rs9357271", "6", 38165204, "TT"),  # BTBD9 → Moderate (capped)
+                ("rs2858884", "6", 32632760, "TT"),  # HLA → Elevated
+            ],
+        )
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        count = store_sleep_findings(result, sample_engine)
+
+        # 4 pathway summaries + up to 6 SNP findings + 1 metabolizer
+        # + 1 cross-module ≤ 14
+        assert count <= 14
+        assert count >= 4  # At minimum, 4 pathway summaries
+
+    def test_findings_include_pmids(
+        self,
+        panel: SleepPanel,
+        sample_engine: sa.Engine,
+        reference_engine: sa.Engine,
+    ) -> None:
+        """Findings include PubMed citations."""
+        _seed_variants(sample_engine, [("rs762551", "15", 75041917, "CC")])
+
+        result = score_sleep_pathways(panel, sample_engine, reference_engine)
+        store_sleep_findings(result, sample_engine)
+
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.rsid == "rs762551",
+                    )
+                )
+            ).first()
+
+        assert row is not None
+        pmids = json.loads(row.pmid_citations)
+        assert "16522833" in pmids
+
+
+# ── PathwayResult properties ────────────────────────────────────────────
+
+
+class TestPathwayResultProperties:
+    def test_called_and_missing_snps(self) -> None:
+        pr = PathwayResult(
+            pathway_id="test",
+            pathway_name="Test",
+            pathway_description="Test pathway",
+            level=MODERATE,
+            snp_results=[
+                _make_snp_result(MODERATE, present=True),
+                _make_snp_result(STANDARD, present=False),
+            ],
+        )
+        assert len(pr.called_snps) == 1
+        assert len(pr.missing_snps) == 1
+
+
+# ── Annotation coverage bitmask tests ────────────────────────────────────
+
+
+class TestUpdateAnnotationCoverageGwas:
+    """Test that GWAS bitmask bit 5 (value 32) is ORed into annotation_coverage."""
+
+    def _make_sample_with_annotated(
+        self,
+        raw: list[dict],
+        annotated: list[dict],
+    ) -> sa.Engine:
+        engine = sa.create_engine("sqlite://")
+        sample_metadata_obj.create_all(engine)
+        if raw:
+            with engine.begin() as conn:
+                conn.execute(raw_variants.insert(), raw)
+        if annotated:
+            with engine.begin() as conn:
+                conn.execute(annotated_variants.insert(), annotated)
+        return engine
+
+    def test_sets_bit5_on_gwas_matched_variants(self) -> None:
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs762551", "chrom": "15", "pos": 75041917, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs762551",
+                    "chrom": "15",
+                    "pos": 75041917,
+                    "genotype": "CC",
+                    "annotation_coverage": 0b001111,
+                },
+            ],
+        )
+
+        result = SleepResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs762551"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs762551"
+                )
+            ).scalar()
+
+        assert val == 0b101111  # 47
+
+    def test_null_annotation_coverage_gets_gwas_bit(self) -> None:
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs762551", "chrom": "15", "pos": 75041917, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs762551",
+                    "chrom": "15",
+                    "pos": 75041917,
+                    "genotype": "CC",
+                    "annotation_coverage": None,
+                },
+            ],
+        )
+
+        result = SleepResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs762551"],
+        )
+
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 1
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs762551"
+                )
+            ).scalar()
+
+        assert val == GWAS_BIT
+
+    def test_empty_gwas_matched_returns_zero(self) -> None:
+        sample = self._make_sample_with_annotated(raw=[], annotated=[])
+        result = SleepResult(pathway_results=[], gwas_matched_rsids=[])
+        updated = update_annotation_coverage_gwas(result, sample)
+        assert updated == 0
+
+    def test_idempotent_double_application(self) -> None:
+        sample = self._make_sample_with_annotated(
+            raw=[
+                {"rsid": "rs762551", "chrom": "15", "pos": 75041917, "genotype": "CC"},
+            ],
+            annotated=[
+                {
+                    "rsid": "rs762551",
+                    "chrom": "15",
+                    "pos": 75041917,
+                    "genotype": "CC",
+                    "annotation_coverage": GWAS_BIT,
+                },
+            ],
+        )
+
+        result = SleepResult(
+            pathway_results=[],
+            gwas_matched_rsids=["rs762551"],
+        )
+
+        update_annotation_coverage_gwas(result, sample)
+
+        with sample.connect() as conn:
+            val = conn.execute(
+                sa.select(annotated_variants.c.annotation_coverage).where(
+                    annotated_variants.c.rsid == "rs762551"
+                )
+            ).scalar()
+
+        assert val == GWAS_BIT
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _make_test_snp(
+    evidence_level: int = 2,
+    genotype_category: str = ELEVATED,
+) -> PanelSNP:
+    """Create a test PanelSNP with configurable evidence and category."""
+    return PanelSNP(
+        rsid="rs9999999",
+        gene="TEST",
+        variant_name="Test variant",
+        hgvs_protein=None,
+        risk_allele="A",
+        ref_allele="G",
+        genotype_effects={
+            "GG": {"category": STANDARD, "effect_summary": "Normal."},
+            "GA": {"category": MODERATE, "effect_summary": "Moderate effect."},
+            "AG": {"category": MODERATE, "effect_summary": "Moderate effect."},
+            "AA": {"category": genotype_category, "effect_summary": "Risk genotype."},
+        },
+        evidence_level=evidence_level,
+        pmids=["12345678"],
+        recommendation_text="Test recommendation.",
+    )
+
+
+def _make_snp_result(
+    category: str,
+    present: bool = True,
+) -> SNPResult:
+    return SNPResult(
+        rsid="rs0000001",
+        gene="TEST",
+        variant_name="Test",
+        genotype="AA" if present else None,
+        category=category,
+        effect_summary="Test effect.",
+        evidence_level=2,
+        pmids=[],
+        recommendation_text="Test.",
+        present_in_sample=present,
+    )

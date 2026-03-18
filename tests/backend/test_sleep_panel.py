@@ -1,11 +1,13 @@
-"""Tests for the curated Gene Sleep SNP panel (P3-48).
+"""Tests for the curated Gene Sleep SNP panel (P3-48/P3-49).
 
 Covers:
   - Panel JSON loading and structural validation
-  - All 5 curated SNPs present with correct genes
-  - 3 pathway cards (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality)
+  - All 6 curated SNPs present with correct genes
+  - 4 pathway cards (Caffeine & Sleep, Chronotype & Circadian Rhythm,
+    Sleep Quality, Sleep Disorders)
   - CYP1A2 metabolizer status special calling (rapid/intermediate/slow)
   - PER3 VNTR proxy with coverage note
+  - HLA-DQB1*06:02 proxy (rs2858884) with accuracy caveat
   - Genotype effects categories are valid (Elevated/Moderate/Standard)
   - Evidence levels within expected range
   - CYP1A2 cross-module reference to Pharmacogenomics
@@ -36,11 +38,17 @@ EXPECTED_RSIDS = {
     "rs57875989",  # PER3 VNTR proxy
     "rs2300478",  # MEIS1
     "rs9357271",  # BTBD9
+    "rs2858884",  # HLA-DQB1*06:02 proxy
 }
 
-EXPECTED_PATHWAYS = {"caffeine_sleep", "chronotype_circadian", "sleep_quality"}
+EXPECTED_PATHWAYS = {
+    "caffeine_sleep",
+    "chronotype_circadian",
+    "sleep_quality",
+    "sleep_disorders",
+}
 
-EXPECTED_GENES = {"CYP1A2", "ADORA2A", "PER3", "MEIS1", "BTBD9"}
+EXPECTED_GENES = {"CYP1A2", "ADORA2A", "PER3", "MEIS1", "BTBD9", "HLA-DQB1"}
 
 
 @pytest.fixture()
@@ -70,8 +78,8 @@ class TestPanelStructure:
         assert "description" in panel_data
         assert len(panel_data["description"]) > 0
 
-    def test_panel_has_three_pathways(self, panel_data: dict) -> None:
-        assert len(panel_data["pathways"]) == 3
+    def test_panel_has_four_pathways(self, panel_data: dict) -> None:
+        assert len(panel_data["pathways"]) == 4
 
     def test_pathway_ids(self, panel_data: dict) -> None:
         pathway_ids = {p["id"] for p in panel_data["pathways"]}
@@ -82,6 +90,7 @@ class TestPanelStructure:
         assert "Caffeine & Sleep" in pathway_names
         assert "Chronotype & Circadian Rhythm" in pathway_names
         assert "Sleep Quality" in pathway_names
+        assert "Sleep Disorders" in pathway_names
 
 
 # ── SNP coverage tests ──────────────────────────────────────────────────
@@ -89,7 +98,7 @@ class TestPanelStructure:
 
 class TestSNPCoverage:
     def test_all_expected_rsids_present(self, panel_data: dict) -> None:
-        """All 5 curated SNPs from the PRD must be present."""
+        """All 6 curated SNPs from the PRD must be present."""
         all_rsids = set()
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
@@ -104,9 +113,9 @@ class TestSNPCoverage:
         assert all_genes == EXPECTED_GENES
 
     def test_total_snp_count(self, panel_data: dict) -> None:
-        """5 curated SNPs total across all pathways."""
+        """6 curated SNPs total across all pathways."""
         count = sum(len(p["snps"]) for p in panel_data["pathways"])
-        assert count == 5
+        assert count == 6
 
 
 # ── SNP field validation tests ──────────────────────────────────────────
@@ -444,3 +453,61 @@ class TestPathwayAllocation:
         rsids = {s["rsid"] for s in pw["snps"]}
         assert "rs2300478" in rsids  # MEIS1
         assert "rs9357271" in rsids  # BTBD9
+
+    def test_sleep_disorders_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "sleep_disorders")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs2858884" in rsids  # HLA-DQB1*06:02 proxy
+
+
+# ── HLA-DQB1*06:02 proxy tests ───────────────────────────────────────────
+
+
+class TestHLAProxy:
+    """Validate HLA-DQB1*06:02 narcolepsy proxy SNP."""
+
+    def _get_hla(self, panel_data: dict) -> dict:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["rsid"] == "rs2858884":
+                    return snp
+        pytest.fail("HLA-DQB1 rs2858884 not found in panel")
+
+    def test_hla_has_coverage_note(self, panel_data: dict) -> None:
+        hla = self._get_hla(panel_data)
+        assert "coverage_note" in hla
+        assert "proxy" in hla["coverage_note"].lower()
+        assert "hla-dqb1" in hla["coverage_note"].lower()
+
+    def test_hla_coverage_note_includes_accuracy_caveat(self, panel_data: dict) -> None:
+        """Coverage note must warn about proxy accuracy variation by ancestry."""
+        hla = self._get_hla(panel_data)
+        note = hla["coverage_note"].lower()
+        assert "ancestry" in note
+        assert "not" in note  # "not a direct HLA typing result" or similar
+
+    def test_hla_cc_standard(self, panel_data: dict) -> None:
+        """CC → Standard (no proxy signal for HLA-DQB1*06:02)."""
+        hla = self._get_hla(panel_data)
+        assert hla["genotype_effects"]["CC"]["category"] == "Standard"
+
+    def test_hla_ct_moderate(self, panel_data: dict) -> None:
+        """CT → Moderate (one copy of narcolepsy-associated proxy)."""
+        hla = self._get_hla(panel_data)
+        assert hla["genotype_effects"]["CT"]["category"] == "Moderate"
+
+    def test_hla_tt_elevated(self, panel_data: dict) -> None:
+        """TT → Elevated (homozygous proxy for HLA-DQB1*06:02)."""
+        hla = self._get_hla(panel_data)
+        assert hla["genotype_effects"]["TT"]["category"] == "Elevated"
+        assert "narcolepsy" in hla["genotype_effects"]["TT"]["effect_summary"].lower()
+
+    def test_hla_evidence_level(self, panel_data: dict) -> None:
+        hla = self._get_hla(panel_data)
+        assert hla["evidence_level"] == 2
+
+    def test_hla_in_special_calling(self, panel_data: dict) -> None:
+        assert "HLA_DQB1_narcolepsy_proxy" in panel_data["special_calling"]
+        sc = panel_data["special_calling"]["HLA_DQB1_narcolepsy_proxy"]
+        assert sc["rsid"] == "rs2858884"
+        assert "proxy_accuracy_note" in sc
