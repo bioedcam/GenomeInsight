@@ -56,6 +56,7 @@ import numpy as np
 import sqlalchemy as sa
 import structlog
 
+from backend.analysis.evidence import PRS_EVIDENCE_LEVEL
 from backend.db.tables import annotated_variants, findings
 
 logger = structlog.get_logger(__name__)
@@ -173,7 +174,7 @@ class PRSResult:
     bootstrap_iterations: int = 0
     ancestry_mismatch: bool = False
     ancestry_warning_text: str | None = None
-    evidence_level: int = 1  # PRS components = ★☆☆☆
+    evidence_level: int = PRS_EVIDENCE_LEVEL  # PRS components = ★☆☆☆
 
     @property
     def is_sufficient(self) -> bool:

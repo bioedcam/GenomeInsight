@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 import sqlalchemy as sa
 import structlog
 
+from backend.analysis.evidence import assign_clinvar_evidence_level
 from backend.annotation.vep_bundle import CONSEQUENCE_SEVERITY
 from backend.db.tables import annotated_variants, findings
 
@@ -205,37 +206,13 @@ class RareVariantFinderResult:
 def _assign_evidence_level(variant: RareVariantResult) -> int:
     """Assign evidence level (1-4 stars) for a rare variant.
 
-    Evidence star criteria from PRD §3.4:
-      ★★★★ — ClinVar P/LP with ≥2-star review
-      ★★★☆ — ClinVar LP with 1-star review
-      ★★☆☆ — ClinVar VUS with functional evidence or ensemble pathogenic
-      ★☆☆☆ — Rare variant with no ClinVar or single prediction
-
-    For rare variants specifically:
-      - ClinVar P/LP ≥2 stars → 4
-      - ClinVar Pathogenic 1 star → 4
-      - ClinVar LP 1 star → 3
-      - ClinVar P/LP 0 stars → 2
-      - Ensemble pathogenic (no ClinVar) → 2
-      - Novel/ultra-rare with high-impact consequence → 1
-      - Everything else → 1
+    Delegates to the centralized evidence framework (P3-40).
     """
-    sig = variant.clinvar_significance or ""
-    stars = variant.clinvar_review_stars or 0
-
-    if sig in PATHOGENIC_SIGNIFICANCE:
-        if stars >= 2:
-            return 4
-        if stars == 1:
-            if sig == "Pathogenic":
-                return 4
-            return 3  # LP with 1 star
-        return 2  # P/LP with 0 stars
-
-    if variant.ensemble_pathogenic:
-        return 2
-
-    return 1
+    return assign_clinvar_evidence_level(
+        variant.clinvar_significance,
+        variant.clinvar_review_stars,
+        ensemble_pathogenic=variant.ensemble_pathogenic,
+    )
 
 
 # ── Core query logic ─────────────────────────────────────────────────────

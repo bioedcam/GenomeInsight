@@ -71,6 +71,7 @@ import numpy as np
 import sqlalchemy as sa
 import structlog
 
+from backend.analysis.evidence import ANCESTRY_EVIDENCE_LEVEL
 from backend.db.tables import (
     annotated_variants,
     findings,
@@ -625,7 +626,7 @@ def store_ancestry_findings(
     row = {
         "module": "ancestry",
         "category": "pca_projection",
-        "evidence_level": 2,  # PCA-based inference = ★★☆☆
+        "evidence_level": ANCESTRY_EVIDENCE_LEVEL,  # PCA-based inference = ★★☆☆
         "finding_text": finding_text,
         "detail_json": json.dumps(detail),
     }
@@ -1265,7 +1266,8 @@ def store_haplogroup_findings(
                 {
                     "module": "ancestry",
                     "category": category,
-                    "evidence_level": 2,  # Haplogroup via SNP matching = ★★☆☆
+                    # Haplogroup via SNP matching = ★★☆☆
+                    "evidence_level": ANCESTRY_EVIDENCE_LEVEL,
                     "haplogroup": result.haplogroup,
                     "finding_text": finding_text,
                     "detail_json": json.dumps(detail),

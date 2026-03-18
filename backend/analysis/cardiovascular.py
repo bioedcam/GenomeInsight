@@ -48,6 +48,7 @@ from pathlib import Path
 import sqlalchemy as sa
 import structlog
 
+from backend.analysis.evidence import assign_clinvar_evidence_level
 from backend.db.tables import annotated_variants, findings
 
 logger = structlog.get_logger(__name__)
@@ -254,28 +255,13 @@ def _assign_evidence_level(
 ) -> int:
     """Assign evidence level (1-4 stars) based on ClinVar data.
 
-    Evidence star criteria from PRD §3.4:
-      ★★★★ — ClinVar P/LP with ≥2-star review
-      ★★★☆ — ClinVar LP with 1-star review
-      ★★☆☆ — ClinVar VUS with functional evidence
-      ★☆☆☆ — Single study, candidate gene
-
-    For P/LP variants in the cardiovascular panel:
-      - ≥2 review stars → 4 (Definitive/Pathogenic)
-      - 1 review star + Pathogenic → 4
-      - 1 review star + Likely pathogenic → 3 (Strong)
-      - 0 review stars → min(gene baseline, 2)
+    Delegates to the centralized evidence framework (P3-40).
     """
-    if clinvar_review_stars >= 2:
-        return 4
-
-    if clinvar_review_stars == 1:
-        if clinvar_significance == "Pathogenic":
-            return 4
-        return 3  # Likely pathogenic with 1 star
-
-    # 0 review stars — cap at gene baseline or 2
-    return min(gene_evidence_level, 2)
+    return assign_clinvar_evidence_level(
+        clinvar_significance,
+        clinvar_review_stars,
+        gene_baseline=gene_evidence_level,
+    )
 
 
 def extract_cardiovascular_variants(
