@@ -14,11 +14,22 @@ import {
   Baby,
   Globe,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import ModuleCard from './ModuleCard'
 import { useFindingsSummary } from '@/api/findings'
 import type { FindingSummaryItem } from '@/types/findings'
 
-const MODULE_CARDS = [
+interface ModuleCardConfig {
+  to: string
+  moduleKey: string
+  label: string
+  icon: LucideIcon
+  description: string
+  gated?: boolean
+  gateText?: string
+}
+
+const MODULE_CARDS: ModuleCardConfig[] = [
   {
     to: '/pharmacogenomics',
     moduleKey: 'pharmacogenomics',
@@ -70,7 +81,7 @@ const MODULE_CARDS = [
     icon: Globe,
     description: 'Ancestry composition, haplogroups, and population-matched frequencies.',
   },
-] as const
+]
 
 function findSummary(
   modules: FindingSummaryItem[] | undefined,
@@ -94,8 +105,8 @@ export default function ModuleCardsGrid({ sampleId }: { sampleId: number | null 
               label={card.label}
               icon={card.icon}
               description={card.description}
-              gated={'gated' in card ? card.gated : undefined}
-              gateText={'gateText' in card ? card.gateText : undefined}
+              gated={card.gated}
+              gateText={card.gateText}
               findingCount={moduleSummary?.count}
               maxEvidenceLevel={moduleSummary?.max_evidence_level}
               topFindingText={moduleSummary?.top_finding_text}

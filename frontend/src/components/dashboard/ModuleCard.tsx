@@ -64,7 +64,10 @@ export default function ModuleCard({
         </div>
         <h3 className="font-medium text-foreground text-sm">{label}</h3>
         {hasFindings && (
-          <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          <span
+            aria-hidden="true"
+            className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+          >
             {findingCount}
           </span>
         )}

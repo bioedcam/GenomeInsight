@@ -48,9 +48,7 @@ function moduleLabel(key: string): string {
   return labels[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function FindingItem({ finding }: { finding: Finding }) {
-  const [searchParams] = useSearchParams()
-  const sampleParam = searchParams.get('sample_id')
+function FindingItem({ finding, sampleParam }: { finding: Finding; sampleParam: string | null }) {
   const Icon = MODULE_ICONS[finding.module] ?? ClipboardList
 
   return (
@@ -129,7 +127,7 @@ export default function FindingsPreview({ sampleId }: { sampleId: number | null 
       <div className="rounded-lg border bg-card divide-y">
         {highConfidence.map((finding) => (
           <div key={finding.id} className="px-4">
-            <FindingItem finding={finding} />
+            <FindingItem finding={finding} sampleParam={sampleParam} />
           </div>
         ))}
       </div>
