@@ -1,0 +1,223 @@
+"""Tests for unified findings API (P3-39).
+
+Covers:
+- GET /api/analysis/findings — list all findings with filters
+- GET /api/analysis/findings/summary — per-module counts + high confidence
+- GET /api/analysis/findings/{id}/svg — SVG image retrieval
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Generator
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import sqlalchemy as sa
+from fastapi.testclient import TestClient
+
+from backend.config import Settings
+from backend.db.connection import reset_registry
+from backend.db.sample_schema import create_sample_tables
+from backend.db.tables import findings, reference_metadata, samples
+
+# ── Fixtures ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def tmp_data_dir(tmp_path: Path) -> Path:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "samples").mkdir()
+    return data_dir
+
+
+@pytest.fixture
+def findings_client(
+    tmp_data_dir: Path,
+) -> Generator[TestClient, None, None]:
+    """FastAPI test client with a sample pre-seeded with findings."""
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+
+    # Create reference.db with samples table
+    ref_path = settings.reference_db_path
+    ref_engine = sa.create_engine(f"sqlite:///{ref_path}")
+    reference_metadata.create_all(ref_engine)
+
+    # Create sample DB file on disk
+    sample_db_path = tmp_data_dir / "samples" / "sample_1.db"
+    sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+    create_sample_tables(sample_engine)
+
+    # Register sample in reference DB
+    with ref_engine.begin() as conn:
+        conn.execute(
+            samples.insert().values(
+                id=1,
+                name="Test Sample",
+                db_path="samples/sample_1.db",
+                file_format="v5",
+                file_hash="abc123",
+            )
+        )
+
+    # Seed findings individually (different columns per row)
+    seed_findings = [
+        {
+            "module": "cancer",
+            "category": "monogenic_variant",
+            "evidence_level": 4,
+            "gene_symbol": "BRCA1",
+            "rsid": "rs80357906",
+            "finding_text": "BRCA1 Pathogenic",
+            "clinvar_significance": "Pathogenic",
+            "pmid_citations": json.dumps(["12345678"]),
+            "detail_json": json.dumps({"syndromes": ["HBOC"]}),
+        },
+        {
+            "module": "pharmacogenomics",
+            "category": "prescribing_alert",
+            "evidence_level": 4,
+            "gene_symbol": "CYP2C19",
+            "diplotype": "*1/*2",
+            "metabolizer_status": "Intermediate Metabolizer",
+            "drug": "clopidogrel",
+            "finding_text": "CYP2C19 *1/*2 IM",
+        },
+        {
+            "module": "nutrigenomics",
+            "category": "pathway_summary",
+            "evidence_level": 2,
+            "finding_text": "Folate Metabolism - Elevated",
+            "pathway": "Folate Metabolism",
+            "pathway_level": "Elevated",
+        },
+        {
+            "module": "ancestry",
+            "category": "biogeographic",
+            "evidence_level": 2,
+            "finding_text": "82% European ancestry",
+        },
+        {
+            "module": "carrier_status",
+            "category": "monogenic_variant",
+            "evidence_level": 3,
+            "gene_symbol": "CFTR",
+            "finding_text": "CFTR carrier",
+        },
+    ]
+    with sample_engine.begin() as conn:
+        for f in seed_findings:
+            conn.execute(findings.insert().values(**f))
+
+    ref_engine.dispose()
+    sample_engine.dispose()
+
+    with (
+        patch("backend.main.get_settings", return_value=settings),
+        patch("backend.db.connection.get_settings", return_value=settings),
+    ):
+        reset_registry()
+
+        from backend.main import create_app
+
+        app = create_app()
+        with TestClient(app) as tc:
+            yield tc
+
+        reset_registry()
+
+
+# ── List findings tests ─────────────────────────────────────────────
+
+
+class TestListFindings:
+    def test_list_all_findings(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 5
+
+    def test_sorted_by_evidence_level_desc(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1")
+        data = resp.json()
+        levels = [f["evidence_level"] for f in data]
+        assert levels == sorted(levels, reverse=True)
+
+    def test_filter_by_module(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&module=cancer")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["module"] == "cancer"
+
+    def test_filter_by_min_stars(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&min_stars=3")
+        data = resp.json()
+        assert len(data) == 3
+        for f in data:
+            assert f["evidence_level"] >= 3
+
+    def test_filter_by_category(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&category=prescribing_alert")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["category"] == "prescribing_alert"
+
+    def test_invalid_sample_returns_404(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=999")
+        assert resp.status_code == 404
+
+    def test_finding_has_parsed_pmids(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&module=cancer")
+        data = resp.json()
+        assert data[0]["pmid_citations"] == ["12345678"]
+
+    def test_finding_has_parsed_detail(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&module=cancer")
+        data = resp.json()
+        assert data[0]["detail"]["syndromes"] == ["HBOC"]
+
+
+# ── Summary tests ───────────────────────────────────────────────────
+
+
+class TestFindingsSummary:
+    def test_summary_returns_all_modules(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings/summary?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_findings"] == 5
+        modules = {m["module"] for m in data["modules"]}
+        assert "cancer" in modules
+        assert "pharmacogenomics" in modules
+        assert "nutrigenomics" in modules
+
+    def test_summary_high_confidence(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings/summary?sample_id=1")
+        data = resp.json()
+        high_conf = data["high_confidence_findings"]
+        assert len(high_conf) <= 5
+        for f in high_conf:
+            assert f["evidence_level"] >= 3
+
+    def test_summary_module_counts(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings/summary?sample_id=1")
+        data = resp.json()
+        cancer_mod = next(m for m in data["modules"] if m["module"] == "cancer")
+        assert cancer_mod["count"] == 1
+        assert cancer_mod["max_evidence_level"] == 4
+
+
+# ── SVG endpoint tests ─────────────────────────────────────────────
+
+
+class TestFindingSvg:
+    def test_no_svg_returns_404(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings/1/svg?sample_id=1")
+        # svg_path is None for seeded findings
+        assert resp.status_code == 404
+
+    def test_nonexistent_finding_returns_404(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings/999/svg?sample_id=1")
+        assert resp.status_code == 404

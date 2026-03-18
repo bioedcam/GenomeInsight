@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 from huey import SqliteHuey
 
@@ -194,6 +195,33 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
             )
         else:
             error_summary = None
+
+        # Generate SVGs for all findings (post-analysis step)
+        _update_job(
+            job_id,
+            status="running",
+            progress_pct=99.0,
+            message="Generating finding SVGs",
+        )
+        try:
+            from backend.analysis.svg_renderer import generate_svgs_for_sample
+
+            sample_dir = Path(sample_db_full).parent
+            svg_count = generate_svgs_for_sample(sample_engine, sample_dir)
+            logger.info(
+                "svg_generation_complete",
+                extra={
+                    "job_id": job_id,
+                    "sample_id": sample_id,
+                    "svgs_generated": svg_count,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "svg_generation_failed",
+                extra={"job_id": job_id, "sample_id": sample_id},
+            )
+            # Non-fatal: annotation succeeded, SVG generation is best-effort
 
         _update_job(
             job_id,
