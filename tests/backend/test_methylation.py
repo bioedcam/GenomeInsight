@@ -850,23 +850,27 @@ class TestStoreFindingsIntegration:
         result = score_methylation_pathways(panel, sample_engine, reference_engine)
         folate = next(pr for pr in result.pathway_results if pr.pathway_id == "folate_mthfr")
 
-        # With 4 Moderate SNPs including ★★, additive should promote
-        if folate.additive_promoted:
-            store_methylation_findings(result, sample_engine)
-            with sample_engine.connect() as conn:
-                row = conn.execute(
-                    sa.select(findings).where(
-                        sa.and_(
-                            findings.c.module == MODULE_NAME,
-                            findings.c.category == "pathway_summary",
-                            findings.c.pathway == "Folate & MTHFR",
-                        )
+        # With 4 Moderate SNPs including ★★, additive must promote
+        assert folate.additive_promoted, (
+            "Expected additive promotion with 4 Moderate SNPs including ★★; "
+            "verify panel genotype_effects still classify these as Moderate"
+        )
+
+        store_methylation_findings(result, sample_engine)
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(
+                    sa.and_(
+                        findings.c.module == MODULE_NAME,
+                        findings.c.category == "pathway_summary",
+                        findings.c.pathway == "Folate & MTHFR",
                     )
-                ).first()
-            assert row is not None
-            assert "(additive)" in row.finding_text
-            detail = json.loads(row.detail_json)
-            assert detail["additive_promoted"] is True
+                )
+            ).first()
+        assert row is not None
+        assert "(additive)" in row.finding_text
+        detail = json.loads(row.detail_json)
+        assert detail["additive_promoted"] is True
 
 
 # ── PathwayResult properties ────────────────────────────────────────────
