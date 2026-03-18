@@ -57,6 +57,10 @@ const TRAINING_PATHWAY: PathwaySummary = {
 describe("PathwayCard", () => {
   const onClick = vi.fn()
 
+  beforeEach(() => {
+    onClick.mockClear()
+  })
+
   it("renders pathway name", () => {
     render(<PathwayCard pathway={ENDURANCE_PATHWAY} onClick={onClick} />)
     expect(screen.getByText("Endurance")).toBeInTheDocument()
@@ -88,7 +92,6 @@ describe("PathwayCard", () => {
   })
 
   it("calls onClick when clicked", async () => {
-    onClick.mockClear()
     const user = userEvent.setup()
     render(<PathwayCard pathway={ENDURANCE_PATHWAY} onClick={onClick} />)
     await user.click(
@@ -100,7 +103,6 @@ describe("PathwayCard", () => {
   })
 
   it("calls onClick on Enter key", async () => {
-    onClick.mockClear()
     const user = userEvent.setup()
     render(<PathwayCard pathway={ENDURANCE_PATHWAY} onClick={onClick} />)
     const card = screen.getByRole("button", {

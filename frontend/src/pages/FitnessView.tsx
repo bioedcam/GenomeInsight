@@ -125,7 +125,7 @@ export default function FitnessView() {
                   <div className="space-y-3">
                     {pathwaysQuery.data.cross_context.map((item: CrossContextItem) => (
                       <div
-                        key={`${item.rsid}-${item.context_pathway}`}
+                        key={`${item.rsid}-${item.source_pathway}-${item.context_pathway}`}
                         className="rounded-lg border bg-card p-4"
                       >
                         <div className="flex items-start justify-between gap-2 mb-2">
