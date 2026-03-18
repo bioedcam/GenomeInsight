@@ -13,6 +13,7 @@ import AncestryView from '@/pages/AncestryView'
 import RareVariantsView from '@/pages/RareVariantsView'
 import GenomeBrowser from '@/pages/GenomeBrowser'
 import ReportBuilder from '@/pages/ReportBuilder'
+import FindingsExplorer from '@/pages/FindingsExplorer'
 import GeneDetailPage from '@/pages/GeneDetailPage'
 import Settings from '@/pages/Settings'
 import SetupWizard from '@/pages/SetupWizard'
@@ -28,6 +29,7 @@ export default function App() {
       {/* Main app layout with sidebar */}
       <Route element={<AppLayout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/findings" element={<FindingsExplorer />} />
         <Route path="/variants" element={<VariantExplorer />} />
         <Route path="/variants/:rsid" element={<VariantDetailPage />} />
         <Route path="/genes/:symbol" element={<GeneDetailPage />} />
