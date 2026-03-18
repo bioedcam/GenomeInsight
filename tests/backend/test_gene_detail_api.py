@@ -283,7 +283,7 @@ class TestGeneVariantsEndpoint:
 class TestUniProtCache:
     """Tests for UniProt cache-first architecture with 30-day TTL."""
 
-    def test_uniprot_cache_hit(self, gene_detail_client: TestClient, tmp_data_dir: Path) -> None:
+    def test_uniprot_cache_hit(self, gene_detail_client: TestClient) -> None:
         """Fresh cache entry is returned without API call."""
         from backend.api.routes.genes import UniProtData
 

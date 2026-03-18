@@ -172,6 +172,44 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
     return registry.get_sample_engine(sample_db_path)
 
 
+def _parse_uniprot_cache_row(row: sa.Row, gene_symbol: str) -> UniProtData:
+    """Parse a uniprot_cache DB row into a UniProtData model."""
+    domains: list[ProteinDomain] = []
+    if row.domains:
+        try:
+            for d in json.loads(row.domains):
+                domains.append(ProteinDomain(**d))
+        except (json.JSONDecodeError, TypeError, KeyError) as exc:
+            logger.warning(
+                "uniprot_cache_domains_parse_error",
+                gene=gene_symbol,
+                error=str(exc),
+            )
+
+    features: list[ProteinFeature] = []
+    if row.features:
+        try:
+            for f in json.loads(row.features):
+                features.append(ProteinFeature(**f))
+        except (json.JSONDecodeError, TypeError, KeyError) as exc:
+            logger.warning(
+                "uniprot_cache_features_parse_error",
+                gene=gene_symbol,
+                error=str(exc),
+            )
+
+    fetched_at = row.fetched_at
+    return UniProtData(
+        accession=row.accession,
+        gene_symbol=gene_symbol,
+        sequence_length=row.sequence_length or 0,
+        domains=domains,
+        features=features,
+        fetched_at=str(fetched_at) if fetched_at else None,
+        is_cached=True,
+    )
+
+
 def _fetch_uniprot_from_cache(gene_symbol: str) -> UniProtData | None:
     """Check the UniProt cache for a fresh entry."""
     registry = get_registry()
@@ -193,32 +231,7 @@ def _fetch_uniprot_from_cache(gene_symbol: str) -> UniProtData | None:
         if fetched_at < cutoff:
             return None  # Stale — will be refreshed
 
-    # Parse JSON fields
-    domains: list[ProteinDomain] = []
-    if row.domains:
-        try:
-            for d in json.loads(row.domains):
-                domains.append(ProteinDomain(**d))
-        except (json.JSONDecodeError, TypeError, KeyError):
-            pass
-
-    features: list[ProteinFeature] = []
-    if row.features:
-        try:
-            for f in json.loads(row.features):
-                features.append(ProteinFeature(**f))
-        except (json.JSONDecodeError, TypeError, KeyError):
-            pass
-
-    return UniProtData(
-        accession=row.accession,
-        gene_symbol=gene_symbol,
-        sequence_length=row.sequence_length or 0,
-        domains=domains,
-        features=features,
-        fetched_at=str(fetched_at) if fetched_at else None,
-        is_cached=True,
-    )
+    return _parse_uniprot_cache_row(row, gene_symbol)
 
 
 def _fetch_uniprot_from_api(gene_symbol: str) -> UniProtData | None:
@@ -340,6 +353,7 @@ def _store_uniprot_cache(
                 uniprot_cache.update()
                 .where(uniprot_cache.c.accession == existing.accession)
                 .values(
+                    accession=accession,
                     gene_symbol=gene_symbol,
                     domains=domains_json,
                     features=features_json,
@@ -373,32 +387,7 @@ def _get_stale_uniprot(gene_symbol: str) -> UniProtData | None:
     if row is None:
         return None
 
-    domains: list[ProteinDomain] = []
-    if row.domains:
-        try:
-            for d in json.loads(row.domains):
-                domains.append(ProteinDomain(**d))
-        except (json.JSONDecodeError, TypeError, KeyError):
-            pass
-
-    features: list[ProteinFeature] = []
-    if row.features:
-        try:
-            for f in json.loads(row.features):
-                features.append(ProteinFeature(**f))
-        except (json.JSONDecodeError, TypeError, KeyError):
-            pass
-
-    fetched_at = row.fetched_at
-    return UniProtData(
-        accession=row.accession,
-        gene_symbol=gene_symbol,
-        sequence_length=row.sequence_length or 0,
-        domains=domains,
-        features=features,
-        fetched_at=str(fetched_at) if fetched_at else None,
-        is_cached=True,
-    )
+    return _parse_uniprot_cache_row(row, gene_symbol)
 
 
 def _fetch_gene_phenotypes(gene_symbol: str) -> list[GenePhenotypeRecord]:
@@ -444,20 +433,12 @@ def _fetch_gene_literature(gene_symbol: str) -> tuple[list[PubMedArticleResponse
     settings = get_settings()
     registry = get_registry()
 
-    if not settings.pubmed_email:
-        # Try cache only
-        fetcher = PubMedFetcher(
-            registry.reference_engine,
-            email="",
-        )
-        result = fetcher.search_by_gene(gene_symbol, max_results=10)
-    else:
-        fetcher = PubMedFetcher(
-            registry.reference_engine,
-            email=settings.pubmed_email,
-            api_key=settings.pubmed_api_key,
-        )
-        result = fetcher.search_by_gene(gene_symbol, max_results=10)
+    fetcher = PubMedFetcher(
+        registry.reference_engine,
+        email=settings.pubmed_email or "",
+        api_key=settings.pubmed_api_key if settings.pubmed_email else "",
+    )
+    result = fetcher.search_by_gene(gene_symbol, max_results=10)
 
     articles = [
         PubMedArticleResponse(
