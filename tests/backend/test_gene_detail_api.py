@@ -86,57 +86,60 @@ def gene_detail_client(
     # Seed annotated variants for BRCA1
     with sample_engine.begin() as conn:
         conn.execute(
-            annotated_variants.insert().values([
-                {
-                    "rsid": "rs80357906",
-                    "chrom": "17",
-                    "pos": 43091983,
-                    "genotype": "A/G",
-                    "gene_symbol": "BRCA1",
-                    "consequence": "frameshift_variant",
-                    "hgvs_protein": "p.Gln1756Profs*74",
-                    "hgvs_coding": "c.5266dupC",
-                    "clinvar_significance": "Pathogenic",
-                    "clinvar_review_stars": 3,
-                    "gnomad_af_global": 0.000003,
-                    "gnomad_af_afr": 0.000001,
-                    "gnomad_af_amr": 0.000002,
-                    "gnomad_af_eas": 0.0,
-                    "gnomad_af_eur": 0.000005,
-                    "gnomad_af_fin": 0.0,
-                    "gnomad_af_sas": 0.0,
-                    "cadd_phred": 38.4,
-                    "evidence_conflict": False,
-                    "annotation_coverage": 15,
-                },
-                {
-                    "rsid": "rs1799950",
-                    "chrom": "17",
-                    "pos": 43094464,
-                    "genotype": "G/A",
-                    "gene_symbol": "BRCA1",
-                    "consequence": "missense_variant",
-                    "hgvs_protein": "p.Arg1699Gln",
-                    "hgvs_coding": "c.5096G>A",
-                    "clinvar_significance": "Likely_benign",
-                    "clinvar_review_stars": 2,
-                    "gnomad_af_global": 0.02,
-                    "gnomad_af_afr": 0.01,
-                    "gnomad_af_amr": 0.015,
-                    "gnomad_af_eas": 0.005,
-                    "gnomad_af_eur": 0.025,
-                    "gnomad_af_fin": 0.03,
-                    "gnomad_af_sas": 0.008,
-                    "cadd_phred": 12.1,
-                    "evidence_conflict": False,
-                    "annotation_coverage": 15,
-                },
-            ])
+            annotated_variants.insert().values(
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "chrom": "17",
+                        "pos": 43091983,
+                        "genotype": "A/G",
+                        "gene_symbol": "BRCA1",
+                        "consequence": "frameshift_variant",
+                        "hgvs_protein": "p.Gln1756Profs*74",
+                        "hgvs_coding": "c.5266dupC",
+                        "clinvar_significance": "Pathogenic",
+                        "clinvar_review_stars": 3,
+                        "gnomad_af_global": 0.000003,
+                        "gnomad_af_afr": 0.000001,
+                        "gnomad_af_amr": 0.000002,
+                        "gnomad_af_eas": 0.0,
+                        "gnomad_af_eur": 0.000005,
+                        "gnomad_af_fin": 0.0,
+                        "gnomad_af_sas": 0.0,
+                        "cadd_phred": 38.4,
+                        "evidence_conflict": False,
+                        "annotation_coverage": 15,
+                    },
+                    {
+                        "rsid": "rs1799950",
+                        "chrom": "17",
+                        "pos": 43094464,
+                        "genotype": "G/A",
+                        "gene_symbol": "BRCA1",
+                        "consequence": "missense_variant",
+                        "hgvs_protein": "p.Arg1699Gln",
+                        "hgvs_coding": "c.5096G>A",
+                        "clinvar_significance": "Likely_benign",
+                        "clinvar_review_stars": 2,
+                        "gnomad_af_global": 0.02,
+                        "gnomad_af_afr": 0.01,
+                        "gnomad_af_amr": 0.015,
+                        "gnomad_af_eas": 0.005,
+                        "gnomad_af_eur": 0.025,
+                        "gnomad_af_fin": 0.03,
+                        "gnomad_af_sas": 0.008,
+                        "cadd_phred": 12.1,
+                        "evidence_conflict": False,
+                        "annotation_coverage": 15,
+                    },
+                ]
+            )
         )
 
     with patch("backend.db.connection.get_settings", return_value=settings):
         reset_registry()
         from backend.main import create_app
+
         app = create_app()
         yield TestClient(app)
         reset_registry()
@@ -196,9 +199,7 @@ class TestGeneDetailEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["population_af"]) == 2
-        pathogenic_af = next(
-            af for af in data["population_af"] if af["rsid"] == "rs80357906"
-        )
+        pathogenic_af = next(af for af in data["population_af"] if af["rsid"] == "rs80357906")
         assert pathogenic_af["gnomad_af_global"] == pytest.approx(0.000003)
         assert pathogenic_af["gnomad_af_eur"] == pytest.approx(0.000005)
 
@@ -481,9 +482,9 @@ class TestUniProtCacheStorage:
                 uniprot_cache.insert().values(
                     accession="P38398",
                     gene_symbol="BRCA1",
-                    domains=json.dumps([
-                        {"type": "Domain", "description": "BRCT 1", "start": 1646, "end": 1736}
-                    ]),
+                    domains=json.dumps(
+                        [{"type": "Domain", "description": "BRCT 1", "start": 1646, "end": 1736}]
+                    ),
                     features="[]",
                     sequence_length=1863,
                     fetched_at=stale_time,
