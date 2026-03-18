@@ -1,7 +1,7 @@
 {
   "module": "sleep",
   "version": "1.0.0",
-  "description": "Curated Gene Sleep SNP panel for GenomeInsight (P3-48). Covers 3 sleep pathways (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality) with 5 curated SNPs plus GWAS Catalog sleep/circadian EFO term associations. CYP1A2 rs762551 has cross-module reference to Pharmacogenomics. PER3 rs57875989 is a VNTR proxy with coverage caveat.",
+  "description": "Curated Gene Sleep SNP panel for GenomeInsight (P3-48/P3-49). Covers 4 sleep pathways (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality, Sleep Disorders) with 6 curated SNPs plus GWAS Catalog sleep/circadian EFO term associations. CYP1A2 rs762551 has cross-module reference to Pharmacogenomics. PER3 rs57875989 is a VNTR proxy with coverage caveat. HLA-DQB1*06:02 proxy (rs2858884) for narcolepsy susceptibility with accuracy caveat.",
   "pathways": [
     {
       "id": "caffeine_sleep",
@@ -173,6 +173,43 @@
           "recommendation_text": "BTBD9 is associated with periodic limb movements during sleep (PLMS) and RLS. BTBD9 may influence brain iron metabolism. If sleep is frequently disrupted, a sleep study can evaluate for PLMS."
         }
       ]
+    },
+    {
+      "id": "sleep_disorders",
+      "name": "Sleep Disorders",
+      "description": "Variants associated with narcolepsy and other sleep disorders via HLA allele proxies.",
+      "snps": [
+        {
+          "rsid": "rs2858884",
+          "gene": "HLA-DQB1",
+          "variant_name": "HLA-DQB1*06:02 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No proxy signal for HLA-DQB1*06:02. Lower baseline genetic susceptibility to narcolepsy type 1."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous proxy for HLA-DQB1*06:02. One copy of the narcolepsy-associated HLA allele proxy. Mildly increased genetic susceptibility to narcolepsy type 1."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous proxy for HLA-DQB1*06:02. One copy of the narcolepsy-associated HLA allele proxy. Mildly increased genetic susceptibility to narcolepsy type 1."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous proxy for HLA-DQB1*06:02. Strongest proxy signal for the narcolepsy-associated HLA allele. HLA-DQB1*06:02 is present in >98% of narcolepsy type 1 patients, but also in ~25% of the general population."
+            }
+          },
+          "coverage_note": "rs2858884 is a tag SNP in linkage disequilibrium with HLA-DQB1*06:02, the primary HLA allele associated with narcolepsy type 1. This is a proxy — not a direct HLA typing result. Proxy accuracy varies by ancestry (r² ~0.7–0.9 in European populations, lower in others). HLA-DQB1*06:02 is necessary but not sufficient for narcolepsy; most carriers never develop the condition. A positive result does NOT diagnose narcolepsy.",
+          "evidence_level": 2,
+          "pmids": ["10694420", "19412173", "25680519"],
+          "recommendation_text": "HLA-DQB1*06:02 is the strongest known genetic risk factor for narcolepsy type 1, but most carriers are unaffected. This proxy result is not diagnostic. If excessive daytime sleepiness, cataplexy, or other narcolepsy symptoms are present, consult a sleep specialist for clinical evaluation including polysomnography and MSLT."
+        }
+      ]
     }
   ],
   "additional_genes": {
@@ -202,6 +239,12 @@
           "description": "*1F/*1F — slow caffeine clearance. Higher risk of caffeine-induced insomnia."
         }
       }
+    },
+    "HLA_DQB1_narcolepsy_proxy": {
+      "description": "HLA-DQB1*06:02 is the primary HLA allele associated with narcolepsy type 1. rs2858884 is a tag SNP proxy, not a direct HLA typing result.",
+      "rsid": "rs2858884",
+      "proxy_target": "HLA-DQB1*06:02",
+      "proxy_accuracy_note": "Linkage disequilibrium between rs2858884 and HLA-DQB1*06:02 varies by ancestry (r² ~0.7–0.9 in Europeans, lower in other populations). This proxy does not replace clinical HLA typing. A positive proxy signal indicates possible HLA-DQB1*06:02 carriage, not narcolepsy diagnosis."
     },
     "PER3_VNTR_proxy": {
       "description": "PER3 variable number tandem repeat (54-bp VNTR, 4-repeat vs. 5-repeat) is not directly genotyped on SNP arrays. rs57875989 is used as a proxy SNP in linkage disequilibrium with the VNTR.",

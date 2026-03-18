@@ -391,6 +391,7 @@ class TestCrossModuleIntegration:
             ("/api/analysis/ancestry/run", "ancestry"),
             ("/api/analysis/carrier/run", "carrier"),
             ("/api/analysis/rare-variants/run", "rare-variants"),
+            ("/api/analysis/sleep/run", "sleep"),
         ]
 
         run_results = {}
@@ -709,6 +710,7 @@ class TestCrossModuleIntegration:
             "/api/analysis/ancestry/run",
             "/api/analysis/carrier/run",
             "/api/analysis/rare-variants/run",
+            "/api/analysis/sleep/run",
         ]
         for endpoint in endpoints:
             resp = client.post(endpoint, params={"sample_id": sample_id})
