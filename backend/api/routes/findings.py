@@ -81,8 +81,8 @@ class FindingsSummaryResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _get_sample_engine(sample_id: int) -> sa.Engine:
-    """Look up sample and return its engine."""
+def _get_sample_engine_and_dir(sample_id: int) -> tuple[sa.Engine, Path]:
+    """Look up sample and return its engine + sample directory."""
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
         row = conn.execute(
@@ -93,7 +93,13 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
     sample_db_full = registry.settings.data_dir / row.db_path
     if not sample_db_full.exists():
         raise HTTPException(status_code=404, detail="Sample database file not found")
-    return registry.get_sample_engine(sample_db_full)
+    return registry.get_sample_engine(sample_db_full), sample_db_full.parent
+
+
+def _get_sample_engine(sample_id: int) -> sa.Engine:
+    """Look up sample and return its engine."""
+    engine, _ = _get_sample_engine_and_dir(sample_id)
+    return engine
 
 
 def _row_to_response(row: sa.Row) -> FindingResponse:
@@ -247,7 +253,7 @@ async def get_finding_svg(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> Response:
     """Return the pre-rendered SVG for a finding."""
-    engine = _get_sample_engine(sample_id)
+    engine, sample_dir = _get_sample_engine_and_dir(sample_id)
 
     with engine.connect() as conn:
         row = conn.execute(
@@ -261,7 +267,8 @@ async def get_finding_svg(
     if not svg_path_str:
         raise HTTPException(status_code=404, detail="No SVG available for this finding")
 
-    svg_file = Path(svg_path_str)
+    # svg_path is stored relative to the sample directory for portability
+    svg_file = sample_dir / svg_path_str
     if not svg_file.exists():
         raise HTTPException(status_code=404, detail="SVG file not found on disk")
 
