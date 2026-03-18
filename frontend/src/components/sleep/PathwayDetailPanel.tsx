@@ -5,7 +5,7 @@
  * HLA/PER3 coverage notes, and PubMed literature links.
  */
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { useSleepPathwayDetail } from "@/api/sleep"
 import EvidenceStars from "@/components/ui/EvidenceStars"
@@ -118,6 +118,12 @@ export default function PathwayDetailPanel({
   onClose,
 }: PathwayDetailPanelProps) {
   const detailQuery = useSleepPathwayDetail(pathwayId, sampleId)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Focus close button on mount for keyboard accessibility
+  useEffect(() => {
+    closeButtonRef.current?.focus()
+  }, [])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -155,6 +161,7 @@ export default function PathwayDetailPanel({
           )}
         </div>
         <button
+          ref={closeButtonRef}
           onClick={onClose}
           className="rounded-md p-1.5 hover:bg-muted transition-colors"
           aria-label="Close pathway details"

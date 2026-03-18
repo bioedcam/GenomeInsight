@@ -1,6 +1,6 @@
 /** Tests for the Gene Sleep UI (P3-50). */
 
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "./test-utils"
 import userEvent from "@testing-library/user-event"
 import PathwayCard from "@/components/sleep/PathwayCard"
