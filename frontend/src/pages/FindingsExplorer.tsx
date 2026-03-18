@@ -1,0 +1,456 @@
+/** Analysis Module Dashboard — all findings sorted by evidence (P3-43).
+ *
+ * Shows all findings from every analysis module in a unified view,
+ * sorted by evidence level (highest first). Supports filtering by
+ * module and minimum evidence level. Each finding links to its
+ * module page for detailed exploration.
+ */
+
+import { useState, useMemo } from "react"
+import { useSearchParams, Link } from "react-router-dom"
+import {
+  ClipboardList,
+  Loader2,
+  AlertCircle,
+  Star,
+  Filter,
+  Pill,
+  Apple,
+  ShieldAlert,
+  HeartPulse,
+  Brain,
+  Baby,
+  Globe,
+  SearchCheck,
+  type LucideIcon,
+} from "lucide-react"
+import { parseSampleId } from "@/lib/format"
+import { useFindings, useFindingsSummary } from "@/api/findings"
+import EvidenceStars from "@/components/ui/EvidenceStars"
+import type { Finding, FindingSummaryItem } from "@/types/findings"
+
+// ── Module metadata ──────────────────────────────────────────────────
+
+interface ModuleMeta {
+  label: string
+  icon: LucideIcon
+  route: string
+  color: string
+}
+
+const MODULE_META: Record<string, ModuleMeta> = {
+  pharmacogenomics: {
+    label: "Pharmacogenomics",
+    icon: Pill,
+    route: "/pharmacogenomics",
+    color: "text-violet-600 dark:text-violet-400",
+  },
+  nutrigenomics: {
+    label: "Nutrigenomics",
+    icon: Apple,
+    route: "/nutrigenomics",
+    color: "text-green-600 dark:text-green-400",
+  },
+  cancer: {
+    label: "Cancer",
+    icon: ShieldAlert,
+    route: "/cancer",
+    color: "text-red-600 dark:text-red-400",
+  },
+  cardiovascular: {
+    label: "Cardiovascular",
+    icon: HeartPulse,
+    route: "/cardiovascular",
+    color: "text-rose-600 dark:text-rose-400",
+  },
+  apoe: {
+    label: "APOE",
+    icon: Brain,
+    route: "/apoe",
+    color: "text-amber-600 dark:text-amber-400",
+  },
+  carrier: {
+    label: "Carrier Status",
+    icon: Baby,
+    route: "/carrier-status",
+    color: "text-pink-600 dark:text-pink-400",
+  },
+  ancestry: {
+    label: "Ancestry",
+    icon: Globe,
+    route: "/ancestry",
+    color: "text-blue-600 dark:text-blue-400",
+  },
+  rare_variants: {
+    label: "Rare Variants",
+    icon: SearchCheck,
+    route: "/rare-variants",
+    color: "text-orange-600 dark:text-orange-400",
+  },
+}
+
+function getModuleMeta(module: string): ModuleMeta {
+  return (
+    MODULE_META[module] ?? {
+      label: module.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      icon: ClipboardList,
+      route: "/",
+      color: "text-muted-foreground",
+    }
+  )
+}
+
+// ── Evidence level labels ────────────────────────────────────────────
+
+function evidenceLabel(level: number | null): string {
+  switch (level) {
+    case 4:
+      return "Definitive"
+    case 3:
+      return "Strong"
+    case 2:
+      return "Moderate"
+    case 1:
+      return "Preliminary"
+    default:
+      return "Unknown"
+  }
+}
+
+// ── Components ───────────────────────────────────────────────────────
+
+function ModuleSummaryChip({
+  item,
+  selected,
+  onClick,
+}: {
+  item: FindingSummaryItem
+  selected: boolean
+  onClick: () => void
+}) {
+  const meta = getModuleMeta(item.module)
+  const Icon = meta.icon
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+        selected
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-card text-foreground hover:bg-accent"
+      }`}
+    >
+      <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
+      <span>{meta.label}</span>
+      <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+        {item.count}
+      </span>
+      {item.max_evidence_level != null && (
+        <EvidenceStars level={item.max_evidence_level} />
+      )}
+    </button>
+  )
+}
+
+function FindingRow({ finding }: { finding: Finding }) {
+  const meta = getModuleMeta(finding.module)
+  const Icon = meta.icon
+  const [searchParams] = useSearchParams()
+  const sampleParam = searchParams.get("sample_id")
+  const moduleLink = sampleParam
+    ? `${meta.route}?sample_id=${sampleParam}`
+    : meta.route
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent/50">
+      {/* Evidence level indicator */}
+      <div className="flex flex-col items-center gap-1 pt-0.5">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+            (finding.evidence_level ?? 0) >= 4
+              ? "bg-primary/15 text-primary"
+              : (finding.evidence_level ?? 0) >= 3
+                ? "bg-teal-500/15 text-teal-700 dark:text-teal-400"
+                : (finding.evidence_level ?? 0) >= 2
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                  : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {finding.evidence_level ?? "–"}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <EvidenceStars level={finding.evidence_level ?? 0} />
+          <span className="text-xs text-muted-foreground">
+            {evidenceLabel(finding.evidence_level)}
+          </span>
+          <Link
+            to={moduleLink}
+            className={`flex items-center gap-1 text-xs font-medium ${meta.color} hover:underline`}
+          >
+            <Icon className="h-3 w-3" />
+            {meta.label}
+          </Link>
+        </div>
+
+        <p className="mt-1 text-sm font-medium text-foreground leading-snug">
+          {finding.finding_text}
+        </p>
+
+        <div className="mt-1.5 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+          {finding.gene_symbol && (
+            <Link
+              to={`/genes/${finding.gene_symbol}${sampleParam ? `?sample_id=${sampleParam}` : ""}`}
+              className="font-mono hover:text-primary hover:underline"
+            >
+              {finding.gene_symbol}
+            </Link>
+          )}
+          {finding.rsid && (
+            <Link
+              to={`/variants/${finding.rsid}${sampleParam ? `?sample_id=${sampleParam}` : ""}`}
+              className="font-mono hover:text-primary hover:underline"
+            >
+              {finding.rsid}
+            </Link>
+          )}
+          {finding.clinvar_significance && (
+            <span>ClinVar: {finding.clinvar_significance}</span>
+          )}
+          {finding.zygosity && <span>{finding.zygosity}</span>}
+          {finding.metabolizer_status && (
+            <span>{finding.metabolizer_status}</span>
+          )}
+          {finding.pathway_level && (
+            <span
+              className={`rounded px-1.5 py-0.5 font-medium ${
+                finding.pathway_level === "Elevated"
+                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                  : finding.pathway_level === "Moderate"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                    : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+              }`}
+            >
+              {finding.pathway_level}
+            </span>
+          )}
+          {finding.category && (
+            <span className="text-muted-foreground/70">
+              {finding.category.replace(/_/g, " ")}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ────────────────────────────────────────────────────────
+
+export default function FindingsExplorer() {
+  const [searchParams] = useSearchParams()
+  const sampleId = parseSampleId(searchParams.get("sample_id"))
+
+  const [selectedModule, setSelectedModule] = useState<string | null>(null)
+  const [minStars, setMinStars] = useState<number | null>(null)
+
+  const findingsQuery = useFindings(sampleId, {
+    module: selectedModule ?? undefined,
+    minStars: minStars ?? undefined,
+  })
+  const summaryQuery = useFindingsSummary(sampleId)
+
+  // Group findings by evidence level for section headers
+  const groupedFindings = useMemo(() => {
+    if (!findingsQuery.data) return []
+    const groups: { level: number; label: string; findings: Finding[] }[] = []
+    let currentLevel: number | null = null
+
+    for (const f of findingsQuery.data) {
+      const level = f.evidence_level ?? 0
+      if (level !== currentLevel) {
+        currentLevel = level
+        groups.push({
+          level,
+          label: `${evidenceLabel(level)} Evidence`,
+          findings: [],
+        })
+      }
+      groups[groups.length - 1].findings.push(f)
+    }
+    return groups
+  }, [findingsQuery.data])
+
+  // No sample selected
+  if (sampleId == null) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">All Findings</h1>
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            Select a sample to view analysis findings.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading
+  if (findingsQuery.isLoading || summaryQuery.isLoading) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">All Findings</h1>
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">
+            Loading findings...
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Error
+  if (findingsQuery.isError) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">All Findings</h1>
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+          <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
+          <p className="text-sm text-destructive">
+            {findingsQuery.error?.message ?? "Failed to load findings."}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const findings = findingsQuery.data ?? []
+  const summary = summaryQuery.data
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">All Findings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {summary
+              ? `${summary.total_findings} findings across ${summary.modules.length} modules`
+              : `${findings.length} findings`}
+          </p>
+        </div>
+      </div>
+
+      {/* Module filter chips */}
+      {summary && summary.modules.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Filter className="h-3.5 w-3.5" />
+            <span>Filter by module</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedModule(null)}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                selectedModule === null
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-foreground hover:bg-accent"
+              }`}
+            >
+              All
+            </button>
+            {summary.modules.map((item) => (
+              <ModuleSummaryChip
+                key={item.module}
+                item={item}
+                selected={selectedModule === item.module}
+                onClick={() =>
+                  setSelectedModule(
+                    selectedModule === item.module ? null : item.module,
+                  )
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Evidence level filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Min evidence:</span>
+        {[null, 4, 3, 2, 1].map((level) => (
+          <button
+            key={level ?? "all"}
+            type="button"
+            onClick={() => setMinStars(level)}
+            className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+              minStars === level
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            {level == null ? (
+              "All"
+            ) : (
+              <span className="flex items-center gap-1">
+                <Star className="h-3 w-3" />
+                {level}+
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Empty state */}
+      {findings.length === 0 && (
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <Star className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">
+            {selectedModule || minStars
+              ? "No findings match the current filters."
+              : "No findings yet. Run annotation to generate analysis findings."}
+          </p>
+          {(selectedModule || minStars) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedModule(null)
+                setMinStars(null)
+              }}
+              className="mt-3 text-sm text-primary hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Findings grouped by evidence level */}
+      {groupedFindings.map((group) => (
+        <section key={group.level} aria-label={group.label}>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-sm font-semibold text-foreground">
+              {group.label}
+            </h2>
+            <EvidenceStars level={group.level} />
+            <span className="text-xs text-muted-foreground">
+              ({group.findings.length})
+            </span>
+          </div>
+          <div className="space-y-2">
+            {group.findings.map((finding) => (
+              <FindingRow key={finding.id} finding={finding} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}

@@ -14,6 +14,7 @@ import {
   FileText,
   Settings,
   SearchCheck,
+  ClipboardList,
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react'
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/findings', icon: ClipboardList, label: 'All Findings' },
   { to: '/variants', icon: Table2, label: 'Variant Explorer' },
   { to: '/pharmacogenomics', icon: Pill, label: 'Pharmacogenomics' },
   { to: '/nutrigenomics', icon: Apple, label: 'Nutrigenomics' },
