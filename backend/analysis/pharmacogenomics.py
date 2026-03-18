@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 import sqlalchemy as sa
 import structlog
 
+from backend.analysis.evidence import assign_cpic_evidence_level
 from backend.annotation.cpic import CPIC_GENES
 from backend.annotation.engine import CPIC_BIT
 from backend.db.tables import (
@@ -671,7 +672,7 @@ def generate_prescribing_alerts(
             continue
 
         for guideline in guidelines:
-            evidence_level = _CPIC_CLASSIFICATION_STARS.get(guideline["classification"], 2)
+            evidence_level = assign_cpic_evidence_level(guideline["classification"])
 
             alert = PrescribingAlert(
                 gene=result.gene,
