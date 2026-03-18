@@ -1,0 +1,340 @@
+{
+  "module": "fitness",
+  "version": "1.0.0",
+  "description": "Curated Gene Fitness SNP panel for GenomeInsight (P3-45). Covers 4 fitness pathways (Endurance, Power, Recovery & Injury, Training Response) with 8 curated SNPs plus GWAS Catalog fitness EFO term associations. ACTN3 R577X uses three-state calling (RR/RX/XX). ACE rs4341 is an I/D proxy with coverage caveat.",
+  "pathways": [
+    {
+      "id": "endurance",
+      "name": "Endurance",
+      "description": "Variants influencing aerobic capacity, mitochondrial biogenesis, and sustained endurance performance.",
+      "snps": [
+        {
+          "rsid": "rs1815739",
+          "gene": "ACTN3",
+          "variant_name": "R577X",
+          "hgvs_protein": "p.Arg577Ter",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "RR genotype — functional alpha-actinin-3 in fast-twitch muscle fibers. Associated with power and sprint performance."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "RX genotype — one functional copy of alpha-actinin-3. Mixed muscle fiber profile suited to both endurance and power activities."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "RX genotype — one functional copy of alpha-actinin-3. Mixed muscle fiber profile suited to both endurance and power activities."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "XX genotype — complete absence of alpha-actinin-3 in fast-twitch fibers. Shift toward slow-twitch muscle physiology. Associated with enhanced endurance capacity."
+            }
+          },
+          "three_state_calling": {
+            "CC": "RR",
+            "CT": "RX",
+            "TC": "RX",
+            "TT": "XX"
+          },
+          "evidence_level": 2,
+          "pmids": ["12879365", "18043716", "20378076"],
+          "recommendation_text": "ACTN3 R577X is one of the most replicated gene-sport performance associations. XX individuals may benefit from endurance-focused training; RR individuals may respond better to power/sprint training."
+        },
+        {
+          "rsid": "rs8192678",
+          "gene": "PPARGC1A",
+          "variant_name": "Gly482Ser",
+          "hgvs_protein": "p.Gly482Ser",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal PPARGC1A (PGC-1α) activity. Standard mitochondrial biogenesis and aerobic capacity."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of Ser482 variant. Mildly reduced PGC-1α activity. May have modestly lower baseline VO2max."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of Ser482 variant. Mildly reduced PGC-1α activity. May have modestly lower baseline VO2max."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous Ser482. Reduced PGC-1α activity. Associated with lower baseline aerobic capacity and VO2max, though endurance training can still improve fitness."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12563186", "23667795"],
+          "recommendation_text": "PPARGC1A Gly482Ser has been associated with VO2max variation. Regular aerobic exercise can improve endurance capacity regardless of genotype."
+        },
+        {
+          "rsid": "rs17602729",
+          "gene": "AMPD1",
+          "variant_name": "Gln12Ter",
+          "hgvs_protein": "p.Gln12Ter",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal AMP deaminase 1 activity. Standard purine nucleotide cycle in exercising muscle."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Carrier of AMPD1 deficiency allele. Mildly reduced AMP deaminase activity. Some individuals report earlier muscle fatigue during intense exercise."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Carrier of AMPD1 deficiency allele. Mildly reduced AMP deaminase activity. Some individuals report earlier muscle fatigue during intense exercise."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous AMPD1 deficiency. Absent AMP deaminase in skeletal muscle. May experience exercise-induced myalgia and premature fatigue."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["1346618", "16205547"],
+          "recommendation_text": "AMPD1 deficiency is common (~2% homozygous in Europeans). Symptoms vary widely — many homozygous individuals are asymptomatic. Adjust exercise intensity if exercise-induced cramping occurs."
+        }
+      ]
+    },
+    {
+      "id": "power",
+      "name": "Power",
+      "description": "Variants influencing explosive strength, fast-twitch muscle fiber composition, and sprint performance.",
+      "snps": [
+        {
+          "rsid": "rs4341",
+          "gene": "ACE",
+          "variant_name": "I/D proxy",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Proxy for ACE II genotype (insertion/insertion). Associated with lower ACE activity and enhanced endurance performance."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Proxy for ACE ID genotype (insertion/deletion). Intermediate ACE activity. Mixed endurance/power profile."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Proxy for ACE ID genotype (insertion/deletion). Intermediate ACE activity. Mixed endurance/power profile."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Proxy for ACE DD genotype (deletion/deletion). Associated with higher ACE activity and enhanced power/sprint performance."
+            }
+          },
+          "coverage_note": "rs4341 is a proxy SNP for the ACE insertion/deletion (I/D) polymorphism, which is a 287 bp Alu repeat not directly genotyped on SNP arrays. Proxy accuracy depends on linkage disequilibrium in the individual's ancestry population.",
+          "evidence_level": 2,
+          "pmids": ["10694420", "15563880", "18043716"],
+          "recommendation_text": "The ACE I/D polymorphism is one of the most studied gene-exercise associations. D allele carriers may respond better to strength/power training, while I allele carriers may have an endurance advantage."
+        },
+        {
+          "rsid": "rs1049434",
+          "gene": "MCT1",
+          "variant_name": "Asp490Glu",
+          "hgvs_protein": "p.Asp490Glu",
+          "risk_allele": "A",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Normal MCT1 lactate transporter activity. Standard lactate clearance during high-intensity exercise."
+            },
+            "TA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of Glu490 variant. Mildly reduced MCT1 lactate transport. May experience slightly slower lactate clearance."
+            },
+            "AT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of Glu490 variant. Mildly reduced MCT1 lactate transport. May experience slightly slower lactate clearance."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous Glu490. Reduced MCT1 lactate transporter activity. May experience slower lactate clearance during repeated high-intensity bouts."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["24898615", "25298029"],
+          "recommendation_text": "MCT1 facilitates lactate transport across cell membranes. Individuals with reduced activity may benefit from longer recovery intervals between high-intensity sets."
+        }
+      ]
+    },
+    {
+      "id": "recovery_injury",
+      "name": "Recovery & Injury",
+      "description": "Variants influencing connective tissue integrity, injury susceptibility, and recovery from exercise.",
+      "snps": [
+        {
+          "rsid": "rs12722",
+          "gene": "COL5A1",
+          "variant_name": "COL5A1 3' UTR",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal type V collagen expression. Standard connective tissue composition."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T allele. Modestly altered type V collagen expression. Mildly increased range of motion and potentially increased soft tissue injury susceptibility."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T allele. Modestly altered type V collagen expression. Mildly increased range of motion and potentially increased soft tissue injury susceptibility."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous T allele. Altered type V collagen expression associated with increased range of motion and higher susceptibility to Achilles tendon and other soft tissue injuries."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["19455179", "21747786"],
+          "recommendation_text": "COL5A1 variants have been associated with tendon and ligament injury risk. Individuals with the TT genotype may benefit from gradual training volume increases and targeted tendon-strengthening exercises."
+        },
+        {
+          "rsid": "rs1800012",
+          "gene": "COL1A1",
+          "variant_name": "COL1A1 Sp1 binding site",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal type I collagen Sp1 binding. Standard bone mineral density and connective tissue."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous Sp1 binding site variant. Mildly increased type I collagen alpha-1 expression ratio. Subtle effect on bone density."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous Sp1 binding site variant. Mildly increased type I collagen alpha-1 expression ratio. Subtle effect on bone density."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous Sp1 binding site variant. Altered type I collagen alpha-1/alpha-2 ratio. Associated with reduced bone mineral density and increased stress fracture risk in athletes."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["8554066", "18662359"],
+          "recommendation_text": "COL1A1 Sp1 variant has been associated with osteoporosis and stress fracture risk. Weight-bearing exercise and adequate calcium/vitamin D intake support bone health regardless of genotype."
+        }
+      ]
+    },
+    {
+      "id": "training_response",
+      "name": "Training Response",
+      "description": "Variants influencing body composition response to exercise, metabolic adaptation, and training-induced fitness gains.",
+      "snps": [
+        {
+          "rsid": "rs9939609",
+          "gene": "FTO",
+          "variant_name": "FTO intron 1",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Standard FTO variant. Lower genetic predisposition toward higher BMI."
+            },
+            "TA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly higher average BMI (~0.4 kg/m²). Regular physical activity attenuates the effect."
+            },
+            "AT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly higher average BMI (~0.4 kg/m²). Regular physical activity attenuates the effect."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous risk allele. Higher average BMI (~0.7 kg/m²). Physical activity significantly attenuates the genetic effect on body weight."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17434869", "22449884", "27126078"],
+          "recommendation_text": "FTO is the most replicated obesity-associated gene. Importantly, physical activity significantly reduces the effect of FTO risk alleles on BMI. Regular exercise is beneficial regardless of genotype."
+        }
+      ]
+    }
+  ],
+  "additional_genes": {
+    "ACTN3_power_context": {
+      "note": "ACTN3 rs1815739 appears under Endurance (XX genotype → endurance shift), but is equally relevant to Power (RR genotype → power advantage). The three-state calling model (RR/RX/XX) provides context for both pathways.",
+      "rsids": ["rs1815739"]
+    },
+    "ACE_endurance_context": {
+      "note": "ACE rs4341 (I/D proxy) appears under Power (DD → power), but II genotype is associated with endurance advantage. Findings display both perspectives.",
+      "rsids": ["rs4341"]
+    }
+  },
+  "special_calling": {
+    "ACTN3_R577X": {
+      "description": "Three-state calling model for ACTN3 R577X. Maps genotype to functional status of alpha-actinin-3 protein.",
+      "rsid": "rs1815739",
+      "states": {
+        "RR": {
+          "genotype": "CC",
+          "label": "RR — Power",
+          "description": "Full alpha-actinin-3 expression. Fast-twitch muscle fiber composition favors power/sprint activities."
+        },
+        "RX": {
+          "genotypes": ["CT", "TC"],
+          "label": "RX — Mixed",
+          "description": "One functional copy. Mixed muscle fiber profile. No strong bias toward endurance or power."
+        },
+        "XX": {
+          "genotype": "TT",
+          "label": "XX — Endurance",
+          "description": "No alpha-actinin-3 protein. Slow-twitch muscle fiber shift. Associated with elite endurance athlete prevalence."
+        }
+      }
+    },
+    "ACE_ID_proxy": {
+      "description": "ACE insertion/deletion polymorphism is a 287 bp Alu repeat not directly captured by SNP arrays. rs4341 is used as a proxy SNP in linkage disequilibrium with the I/D variant.",
+      "rsid": "rs4341",
+      "proxy_target": "ACE I/D (287 bp Alu insertion/deletion in intron 16)",
+      "proxy_accuracy_note": "Linkage disequilibrium between rs4341 and ACE I/D varies by ancestry. Proxy accuracy is highest in European populations (r² ~0.8) and may be lower in other populations. Results should be interpreted with this caveat."
+    }
+  },
+  "gwas_efo_terms": [
+    "muscle",
+    "exercise",
+    "physical activity",
+    "endurance",
+    "power",
+    "aerobic capacity",
+    "vo2max",
+    "sprint",
+    "grip strength",
+    "bone mineral density",
+    "tendon",
+    "ligament",
+    "injury",
+    "recovery",
+    "athletic",
+    "muscle fiber",
+    "creatine kinase",
+    "lactate"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps"
+  }
+}
