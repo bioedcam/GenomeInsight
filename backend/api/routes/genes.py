@@ -276,24 +276,32 @@ def _fetch_uniprot_from_api(gene_symbol: str) -> UniProtData | None:
 
             if feat_type in ("Domain", "Region", "Repeat", "Zinc finger", "Motif"):
                 if start_val is not None and end_val is not None:
-                    domains.append(ProteinDomain(
+                    domains.append(
+                        ProteinDomain(
+                            type=feat_type,
+                            description=desc,
+                            start=start_val,
+                            end=end_val,
+                        )
+                    )
+            elif feat_type in (
+                "Active site",
+                "Binding site",
+                "Site",
+                "Disulfide bond",
+                "Modified residue",
+                "Glycosylation",
+                "Lipidation",
+            ):
+                features.append(
+                    ProteinFeature(
                         type=feat_type,
                         description=desc,
+                        position=start_val,
                         start=start_val,
                         end=end_val,
-                    ))
-            elif feat_type in (
-                "Active site", "Binding site", "Site",
-                "Disulfide bond", "Modified residue",
-                "Glycosylation", "Lipidation",
-            ):
-                features.append(ProteinFeature(
-                    type=feat_type,
-                    description=desc,
-                    position=start_val,
-                    start=start_val,
-                    end=end_val,
-                ))
+                    )
+                )
 
         # Store in cache
         _store_uniprot_cache(
@@ -343,9 +351,7 @@ def _store_uniprot_cache(
 
     with registry.reference_engine.begin() as conn:
         existing = conn.execute(
-            sa.select(uniprot_cache.c.accession).where(
-                uniprot_cache.c.gene_symbol == gene_symbol
-            )
+            sa.select(uniprot_cache.c.accession).where(uniprot_cache.c.gene_symbol == gene_symbol)
         ).fetchone()
 
         if existing:
@@ -395,9 +401,7 @@ def _fetch_gene_phenotypes(gene_symbol: str) -> list[GenePhenotypeRecord]:
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
         rows = conn.execute(
-            sa.select(gene_phenotype).where(
-                gene_phenotype.c.gene_symbol == gene_symbol
-            )
+            sa.select(gene_phenotype).where(gene_phenotype.c.gene_symbol == gene_symbol)
         ).fetchall()
 
     results = []
@@ -455,9 +459,7 @@ def _fetch_gene_literature(gene_symbol: str) -> tuple[list[PubMedArticleResponse
     return articles, result.errors
 
 
-def _fetch_gene_variants(
-    gene_symbol: str, sample_engine: sa.Engine
-) -> list[GeneVariantSummary]:
+def _fetch_gene_variants(gene_symbol: str, sample_engine: sa.Engine) -> list[GeneVariantSummary]:
     """Fetch all annotated variants for a gene from the sample DB."""
     av = annotated_variants
     stmt = (
@@ -497,9 +499,7 @@ def _fetch_gene_variants(
             gnomad_af_global=row.gnomad_af_global,
             cadd_phred=row.cadd_phred,
             evidence_conflict=(
-                bool(row.evidence_conflict)
-                if row.evidence_conflict is not None
-                else None
+                bool(row.evidence_conflict) if row.evidence_conflict is not None else None
             ),
             annotation_coverage=row.annotation_coverage,
         )
@@ -507,9 +507,7 @@ def _fetch_gene_variants(
     ]
 
 
-def _fetch_population_af(
-    gene_symbol: str, sample_engine: sa.Engine
-) -> list[PopulationAFSummary]:
+def _fetch_population_af(gene_symbol: str, sample_engine: sa.Engine) -> list[PopulationAFSummary]:
     """Fetch per-population AF for gene variants (for the AF bar chart)."""
     av = annotated_variants
     stmt = (
