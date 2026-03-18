@@ -292,7 +292,7 @@
           "description": "Full alpha-actinin-3 expression. Fast-twitch muscle fiber composition favors power/sprint activities."
         },
         "RX": {
-          "genotype": "CT",
+          "genotypes": ["CT", "TC"],
           "label": "RX — Mixed",
           "description": "One functional copy. Mixed muscle fiber profile. No strong bias toward endurance or power."
         },

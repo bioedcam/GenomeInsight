@@ -48,7 +48,7 @@ EXPECTED_GENES = {"ACTN3", "ACE", "PPARGC1A", "AMPD1", "COL5A1", "COL1A1", "MCT1
 @pytest.fixture()
 def panel_data() -> dict:
     """Load the raw panel JSON."""
-    with open(PANEL_PATH) as f:
+    with open(PANEL_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -59,10 +59,8 @@ class TestPanelStructure:
     def test_panel_file_exists(self) -> None:
         assert PANEL_PATH.exists(), f"Panel file not found: {PANEL_PATH}"
 
-    def test_panel_is_valid_json(self) -> None:
-        with open(PANEL_PATH) as f:
-            data = json.load(f)
-        assert isinstance(data, dict)
+    def test_panel_is_valid_json(self, panel_data: dict) -> None:
+        assert isinstance(panel_data, dict)
 
     def test_panel_module_name(self, panel_data: dict) -> None:
         assert panel_data["module"] == "fitness"
@@ -124,6 +122,7 @@ class TestSNPFields:
             "gene",
             "variant_name",
             "risk_allele",
+            "ref_allele",
             "genotype_effects",
             "evidence_level",
             "pmids",
@@ -231,6 +230,13 @@ class TestACTN3ThreeState:
         assert effect["category"] == "Moderate"
         assert "mixed" in effect["effect_summary"].lower()
 
+    def test_actn3_tc_moderate_mixed(self, panel_data: dict) -> None:
+        """RX genotype (TC) → Moderate category (mixed profile), same as CT."""
+        actn3 = self._get_actn3(panel_data)
+        effect = actn3["genotype_effects"]["TC"]
+        assert effect["category"] == "Moderate"
+        assert "mixed" in effect["effect_summary"].lower()
+
     def test_actn3_tt_elevated_endurance(self, panel_data: dict) -> None:
         """XX genotype (TT) → Elevated category (endurance shift)."""
         actn3 = self._get_actn3(panel_data)
@@ -250,6 +256,8 @@ class TestACTN3ThreeState:
         assert "RR" in sc["states"]
         assert "RX" in sc["states"]
         assert "XX" in sc["states"]
+        # RX state documents both heterozygous genotype orientations
+        assert set(sc["states"]["RX"]["genotypes"]) == {"CT", "TC"}
 
 
 # ── ACE I/D proxy tests ─────────────────────────────────────────────────
