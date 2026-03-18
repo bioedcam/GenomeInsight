@@ -313,8 +313,8 @@ def _score_snp(snp: PanelSNP, genotype: str | None) -> SNPResult:
             coverage_note=snp.coverage_note,
         )
 
-    category = effect["category"]
-    effect_summary = effect["effect_summary"]
+    category = effect.get("category", STANDARD)
+    effect_summary = effect.get("effect_summary", "Effect not documented.")
 
     # Evidence-level gating: ★☆ hard-caps at Moderate
     if snp.evidence_level < _ELEVATED_MIN_STARS and category == ELEVATED:
@@ -422,6 +422,7 @@ def _generate_cross_context_findings(
                             "three_state_label": three_state,
                             "genotype": actn3_result.genotype,
                             "source_category": actn3_result.category,
+                            "source_pathway": "Endurance",
                         },
                     )
                 )
@@ -469,6 +470,7 @@ def _generate_cross_context_findings(
                             "genotype": ace_result.genotype,
                             "source_category": ace_result.category,
                             "coverage_note": ace_result.coverage_note,
+                            "source_pathway": "Power",
                         },
                     )
                 )

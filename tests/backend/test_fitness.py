@@ -773,6 +773,12 @@ class TestStoreFindingsIntegration:
 
         assert len(cross_rows) >= 1
 
+        # Verify source_pathway is in detail_json
+        for cr in cross_rows:
+            detail = json.loads(cr.detail_json)
+            assert "source_pathway" in detail
+            assert detail["source_pathway"] in ("Endurance", "Power")
+
     def test_store_clears_previous_findings(
         self,
         panel: FitnessPanel,
