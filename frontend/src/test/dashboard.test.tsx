@@ -223,7 +223,7 @@ describe('ModuleCard', () => {
 
 describe('ModuleCardsGrid', () => {
   it('renders all 7 module cards', () => {
-    render(<ModuleCardsGrid />)
+    render(<ModuleCardsGrid sampleId={null} />)
     expect(screen.getByText('Pharmacogenomics')).toBeInTheDocument()
     expect(screen.getByText('Nutrigenomics')).toBeInTheDocument()
     expect(screen.getByText('Cancer')).toBeInTheDocument()
@@ -234,12 +234,12 @@ describe('ModuleCardsGrid', () => {
   })
 
   it('has an accessible section label', () => {
-    render(<ModuleCardsGrid />)
+    render(<ModuleCardsGrid sampleId={null} />)
     expect(screen.getByRole('region', { name: /Analysis modules/i })).toBeInTheDocument()
   })
 
   it('shows APOE as gated', () => {
-    render(<ModuleCardsGrid />)
+    render(<ModuleCardsGrid sampleId={null} />)
     expect(screen.getByText('Tap to learn more')).toBeInTheDocument()
   })
 })
@@ -248,14 +248,14 @@ describe('ModuleCardsGrid', () => {
 
 describe('FindingsPreview', () => {
   it('shows empty state placeholder', () => {
-    render(<FindingsPreview />)
+    render(<FindingsPreview sampleId={null} />)
     expect(screen.getByText('High-Confidence Findings')).toBeInTheDocument()
     expect(screen.getByText('No findings yet')).toBeInTheDocument()
     expect(screen.getByText(/Run annotation/)).toBeInTheDocument()
   })
 
   it('has an accessible section label', () => {
-    render(<FindingsPreview />)
+    render(<FindingsPreview sampleId={null} />)
     expect(screen.getByRole('region', { name: /High-confidence findings/i })).toBeInTheDocument()
   })
 })
