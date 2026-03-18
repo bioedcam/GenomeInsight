@@ -11,6 +11,7 @@ import APOEView from '@/pages/APOEView'
 import CarrierStatusView from '@/pages/CarrierStatusView'
 import AncestryView from '@/pages/AncestryView'
 import FitnessView from '@/pages/FitnessView'
+import SleepView from '@/pages/SleepView'
 import RareVariantsView from '@/pages/RareVariantsView'
 import GenomeBrowser from '@/pages/GenomeBrowser'
 import ReportBuilder from '@/pages/ReportBuilder'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/carrier-status" element={<CarrierStatusView />} />
         <Route path="/ancestry" element={<AncestryView />} />
         <Route path="/fitness" element={<FitnessView />} />
+        <Route path="/sleep" element={<SleepView />} />
         <Route path="/rare-variants" element={<RareVariantsView />} />
         <Route path="/genome-browser" element={<GenomeBrowser />} />
         <Route path="/reports" element={<ReportBuilder />} />
