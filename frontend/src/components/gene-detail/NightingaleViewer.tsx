@@ -7,7 +7,7 @@
  * protein notation (e.g., p.Arg175His → position 175).
  */
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useMemo } from "react"
 
 // Side-effect imports register custom elements globally
 import "@nightingale-elements/nightingale-manager"
@@ -39,8 +39,9 @@ function getDomainColor(index: number): string {
 function getVariantColor(significance: string | null): string {
   if (!significance) return "#6B7280" // gray-500
   const sig = significance.toLowerCase()
-  if (sig.includes("pathogenic") && !sig.includes("benign")) return "#DC2626" // red
+  // Check "likely pathogenic" before "pathogenic" to avoid substring match
   if (sig.includes("likely_pathogenic") || sig.includes("likely pathogenic")) return "#EA580C" // orange
+  if (sig.includes("pathogenic") && !sig.includes("benign")) return "#DC2626" // red
   if (sig.includes("uncertain") || sig.includes("vus")) return "#D97706" // amber
   if (sig.includes("benign")) return "#16A34A" // green
   return "#6B7280" // gray
@@ -135,6 +136,12 @@ export default function NightingaleViewer({
       .filter(Boolean)
     ;(variantTrackRef.current as unknown as { data: unknown[] }).data = variantData
   }, [variants, sequenceLength])
+
+  // Memoize variants with valid protein positions
+  const mappedVariants = useMemo(
+    () => variants.filter((v) => parseProteinPosition(v.hgvs_protein) != null),
+    [variants],
+  )
 
   // No protein data
   if (sequenceLength === 0) {
@@ -234,15 +241,13 @@ export default function NightingaleViewer({
       </nightingale-manager>
 
       {/* Variant list below the viewer */}
-      {variants.filter((v) => parseProteinPosition(v.hgvs_protein) != null).length > 0 && (
+      {mappedVariants.length > 0 && (
         <div className="mt-3 space-y-1">
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Mapped Variants
           </h4>
           <div className="divide-y divide-border rounded-lg border bg-card">
-            {variants
-              .filter((v) => parseProteinPosition(v.hgvs_protein) != null)
-              .map((v) => (
+            {mappedVariants.map((v) => (
                 <button
                   key={v.rsid}
                   type="button"

@@ -37,9 +37,14 @@ export default function PopulationAFChart({ data, selectedVariant }: PopulationA
     ? data.find((d) => d.rsid === selectedVariant) ?? data[0]
     : data[0]
 
-  const values = POPULATIONS.map((pop) => (variant[pop.key] ?? 0) as number)
-  const labels = POPULATIONS.map((pop) => pop.label)
-  const colors = POPULATIONS.map((pop) => pop.color)
+  // Filter out populations with zero/null AF to avoid log(0) on the log scale
+  const popEntries = POPULATIONS
+    .map((pop) => ({ ...pop, value: (variant[pop.key] ?? 0) as number }))
+    .filter((p) => p.value > 0)
+
+  const values = popEntries.map((p) => p.value)
+  const labels = popEntries.map((p) => p.label)
+  const colors = popEntries.map((p) => p.color)
 
   return (
     <div data-testid="population-af-chart">
@@ -79,7 +84,7 @@ export default function PopulationAFChart({ data, selectedVariant }: PopulationA
         style={{ width: "100%" }}
       />
 
-      {/* Variant selector if multiple variants */}
+      {/* Variant count when multiple variants available */}
       {data.length > 1 && (
         <div className="mt-2 text-xs text-muted-foreground">
           {data.length} variant{data.length !== 1 ? "s" : ""} with population frequency data

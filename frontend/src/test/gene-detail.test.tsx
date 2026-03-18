@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, within } from "./test-utils"
+import { render, screen } from "./test-utils"
 import userEvent from "@testing-library/user-event"
 import { NightingaleViewer } from "@/components/gene-detail"
 import { PopulationAFChart } from "@/components/gene-detail"

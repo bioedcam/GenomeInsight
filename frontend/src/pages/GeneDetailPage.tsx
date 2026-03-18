@@ -280,6 +280,15 @@ export default function GeneDetailPage() {
                       selectedVariantRsid === v.rsid && "bg-accent/70",
                     )}
                     onClick={() => handleVariantClick(v)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleVariantClick(v)
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-pressed={selectedVariantRsid === v.rsid}
                     data-testid={`variant-row-${v.rsid}`}
                   >
                     <td className="px-3 py-2">
