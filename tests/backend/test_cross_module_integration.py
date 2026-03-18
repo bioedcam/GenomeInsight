@@ -420,6 +420,7 @@ class TestCrossModuleIntegration:
         alerts = generate_prescribing_alerts(star_results, registry.reference_engine)
         pharma_count = store_prescribing_alerts(alerts, sample_engine)
         update_annotation_coverage_cpic(star_results, sample_engine)
+        sample_engine.dispose()
 
         run_results["pharmacogenomics"] = {
             "genes_called": len(star_results),
@@ -521,7 +522,9 @@ class TestCrossModuleIntegration:
         data = resp.json()
 
         # rs429358=TT (no C allele) + rs7412=CC (no T allele) → ε3/ε3
-        assert "genotype" in data or "diplotype" in data
+        genotype = data.get("genotype") or data.get("diplotype")
+        assert genotype is not None, "No genotype/diplotype in APOE response"
+        assert "3" in str(genotype), f"Expected ε3/ε3, got {genotype}"
 
     def test_cancer_module_processes_panel(self, cross_module_client: TestClient) -> None:
         """Cancer module processes the gene panel without errors."""
@@ -601,8 +604,10 @@ class TestCrossModuleIntegration:
                     f"{finding.get('module')}/{finding.get('gene_symbol')}"
                 )
 
-    def test_high_confidence_findings_exist(self, cross_module_client: TestClient) -> None:
-        """Summary endpoint returns high confidence findings (≥3 stars)."""
+    def test_high_confidence_findings_limited_to_top_five(
+        self, cross_module_client: TestClient
+    ) -> None:
+        """Summary endpoint limits high-confidence findings to top 5 and all are ≥3 stars."""
         client = cross_module_client
         sample_id = self._upload_and_annotate(client)
         self._run_all_modules(client, sample_id)
@@ -730,6 +735,7 @@ class TestCrossModuleIntegration:
         alerts = generate_prescribing_alerts(star_results, registry.reference_engine)
         store_prescribing_alerts(alerts, sample_engine)
         update_annotation_coverage_cpic(star_results, sample_engine)
+        sample_engine.dispose()
 
     @staticmethod
     def _get_finding_count(result: dict) -> int:
