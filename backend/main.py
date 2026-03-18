@@ -36,8 +36,8 @@ from backend.api.routes.nutrigenomics import router as nutrigenomics_router
 from backend.api.routes.pharma import router as pharma_router
 from backend.api.routes.rare_variants import router as rare_variants_router
 from backend.api.routes.samples import router as samples_router
-from backend.api.routes.sleep import router as sleep_router
 from backend.api.routes.setup import router as setup_router
+from backend.api.routes.sleep import router as sleep_router
 from backend.api.routes.variant_detail import router as variant_detail_router
 from backend.api.routes.variants import router as variants_router
 from backend.config import get_settings
