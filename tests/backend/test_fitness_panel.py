@@ -221,7 +221,8 @@ class TestACTN3ThreeState:
         actn3 = self._get_actn3(panel_data)
         effect = actn3["genotype_effects"]["CC"]
         assert effect["category"] == "Standard"
-        assert "power" in effect["effect_summary"].lower() or "fast-twitch" in effect["effect_summary"].lower()
+        summary = effect["effect_summary"].lower()
+        assert "power" in summary or "fast-twitch" in summary
 
     def test_actn3_ct_moderate_mixed(self, panel_data: dict) -> None:
         """RX genotype (CT) → Moderate category (mixed profile)."""
@@ -284,7 +285,8 @@ class TestACEProxy:
         ace = self._get_ace(panel_data)
         effect = ace["genotype_effects"]["GG"]
         assert effect["category"] == "Elevated"
-        assert "power" in effect["effect_summary"].lower() or "sprint" in effect["effect_summary"].lower()
+        summary = effect["effect_summary"].lower()
+        assert "power" in summary or "sprint" in summary
 
     def test_ace_aa_standard_endurance(self, panel_data: dict) -> None:
         """II proxy (AA) → Standard category (endurance)."""
@@ -319,7 +321,8 @@ class TestScoringRules:
         assert panel_data["scoring_rules"]["elevated_requires_min_stars"] == 2
 
     def test_pathway_level_determination(self, panel_data: dict) -> None:
-        assert panel_data["scoring_rules"]["pathway_level_determination"] == "highest_category_across_snps"
+        rules = panel_data["scoring_rules"]
+        assert rules["pathway_level_determination"] == "highest_category_across_snps"
 
     def test_valid_categories_listed(self, panel_data: dict) -> None:
         cats = panel_data["scoring_rules"]["categories"]
