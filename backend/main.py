@@ -32,6 +32,7 @@ from backend.api.routes.fitness import router as fitness_router
 from backend.api.routes.genes import router as genes_router
 from backend.api.routes.igv_tracks import router as igv_tracks_router
 from backend.api.routes.ingest import router as ingest_router
+from backend.api.routes.methylation import router as methylation_router
 from backend.api.routes.nutrigenomics import router as nutrigenomics_router
 from backend.api.routes.pharma import router as pharma_router
 from backend.api.routes.rare_variants import router as rare_variants_router
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     api_router.include_router(genes_router)
     api_router.include_router(igv_tracks_router)
     api_router.include_router(ingest_router)
+    api_router.include_router(methylation_router)
     api_router.include_router(nutrigenomics_router)
     api_router.include_router(pharma_router)
     api_router.include_router(rare_variants_router)
