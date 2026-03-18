@@ -1,0 +1,670 @@
+"""Tests for the curated MTHFR & Methylation SNP panel (P3-51).
+
+Covers:
+  - Panel JSON loading and structural validation
+  - ~35 curated SNPs present across 5 sub-pathways
+  - 5 pathway cards (Folate & MTHFR, Methionine Cycle, Transsulfuration,
+    BH4 & Neurotransmitter Synthesis, Choline & Betaine)
+  - MTHFR C677T and A1298C as flagship variants
+  - CBS rs234706 proxy with coverage caveat
+  - COMT Val158Met framed as catecholamine clearance only
+  - MTHFR compound heterozygosity special calling
+  - Genotype effects categories are valid (Elevated/Moderate/Standard)
+  - Evidence levels within expected range
+  - Nutrigenomics migration note for MTHFR
+  - Scoring rules match project conventions with additive scoring note
+  - GWAS EFO methylation terms included
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+PANEL_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "backend"
+    / "data"
+    / "panels"
+    / "methylation_panel.json"
+)
+
+VALID_CATEGORIES = {"Elevated", "Moderate", "Standard"}
+
+EXPECTED_PATHWAYS = {
+    "folate_mthfr",
+    "methionine_cycle",
+    "transsulfuration",
+    "bh4_neurotransmitter",
+    "choline_betaine",
+}
+
+# All expected rsids across the 5 pathways (~35 SNPs)
+EXPECTED_RSIDS = {
+    # Folate & MTHFR (8)
+    "rs1801133",  # MTHFR C677T
+    "rs1801131",  # MTHFR A1298C
+    "rs70991108",  # DHFR 19bp del
+    "rs1051266",  # SLC19A1
+    "rs202676",  # FOLH1
+    "rs1801198",  # TCN2
+    "rs3758149",  # GGH
+    "rs1979277",  # SHMT1
+    # Methionine Cycle (7)
+    "rs1805087",  # MTR
+    "rs1801394",  # MTRR
+    "rs10887718",  # MAT1A
+    "rs819147",  # AHCY
+    "rs3733890",  # BHMT
+    "rs2228611",  # DNMT1
+    "rs2424913",  # DNMT3B
+    # Transsulfuration (7)
+    "rs234706",  # CBS proxy
+    "rs1021737",  # CTH
+    "rs17883901",  # GCLC
+    "rs41303970",  # GCLM
+    "rs1050450",  # GPX1
+    "rs4880",  # SOD2
+    "rs3761144",  # GSS
+    # BH4 & Neurotransmitter (7)
+    "rs4680",  # COMT Val158Met
+    "rs2228570",  # VDR FokI
+    "rs1544410",  # VDR BsmI
+    "rs2236225",  # MTHFD1
+    "rs6495446",  # MTHFS
+    "rs8007267",  # GCH1
+    "rs1677693",  # QDPR
+    # Choline & Betaine (6)
+    "rs12325817",  # PEMT
+    "rs9001",  # CHDH
+    "rs585800",  # BHMT2
+    "rs3199966",  # SLC44A1
+    "rs2266782",  # FMO3
+    "rs7639752",  # PCYT1A
+}
+
+EXPECTED_GENES = {
+    "MTHFR",
+    "DHFR",
+    "SLC19A1",
+    "FOLH1",
+    "TCN2",
+    "GGH",
+    "SHMT1",
+    "MTR",
+    "MTRR",
+    "MAT1A",
+    "AHCY",
+    "BHMT",
+    "DNMT1",
+    "DNMT3B",
+    "CBS",
+    "CTH",
+    "GCLC",
+    "GCLM",
+    "GPX1",
+    "SOD2",
+    "GSS",
+    "COMT",
+    "VDR",
+    "MTHFD1",
+    "MTHFS",
+    "GCH1",
+    "QDPR",
+    "PEMT",
+    "CHDH",
+    "BHMT2",
+    "SLC44A1",
+    "FMO3",
+    "PCYT1A",
+}
+
+
+@pytest.fixture()
+def panel_data() -> dict:
+    """Load the raw panel JSON."""
+    with open(PANEL_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ── Panel structure tests ────────────────────────────────────────────────
+
+
+class TestPanelStructure:
+    def test_panel_file_exists(self) -> None:
+        assert PANEL_PATH.exists(), f"Panel file not found: {PANEL_PATH}"
+
+    def test_panel_is_valid_json(self, panel_data: dict) -> None:
+        assert isinstance(panel_data, dict)
+
+    def test_panel_module_name(self, panel_data: dict) -> None:
+        assert panel_data["module"] == "methylation"
+
+    def test_panel_version(self, panel_data: dict) -> None:
+        assert panel_data["version"] == "1.0.0"
+
+    def test_panel_has_description(self, panel_data: dict) -> None:
+        assert "description" in panel_data
+        assert len(panel_data["description"]) > 0
+
+    def test_panel_has_five_pathways(self, panel_data: dict) -> None:
+        assert len(panel_data["pathways"]) == 5
+
+    def test_pathway_ids(self, panel_data: dict) -> None:
+        pathway_ids = {p["id"] for p in panel_data["pathways"]}
+        assert pathway_ids == EXPECTED_PATHWAYS
+
+    def test_pathway_names(self, panel_data: dict) -> None:
+        pathway_names = {p["name"] for p in panel_data["pathways"]}
+        assert "Folate & MTHFR" in pathway_names
+        assert "Methionine Cycle" in pathway_names
+        assert "Transsulfuration" in pathway_names
+        assert "BH4 & Neurotransmitter Synthesis" in pathway_names
+        assert "Choline & Betaine" in pathway_names
+
+
+# ── SNP coverage tests ──────────────────────────────────────────────────
+
+
+class TestSNPCoverage:
+    def test_all_expected_rsids_present(self, panel_data: dict) -> None:
+        """All ~35 curated SNPs from the PRD must be present."""
+        all_rsids = set()
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                all_rsids.add(snp["rsid"])
+        assert all_rsids == EXPECTED_RSIDS
+
+    def test_all_expected_genes_present(self, panel_data: dict) -> None:
+        all_genes = set()
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                all_genes.add(snp["gene"])
+        assert all_genes == EXPECTED_GENES
+
+    def test_total_snp_count(self, panel_data: dict) -> None:
+        """~35 curated SNPs total across all pathways."""
+        count = sum(len(p["snps"]) for p in panel_data["pathways"])
+        assert count == 35
+
+    def test_folate_mthfr_snp_count(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "folate_mthfr")
+        assert len(pw["snps"]) == 8
+
+    def test_methionine_cycle_snp_count(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "methionine_cycle")
+        assert len(pw["snps"]) == 7
+
+    def test_transsulfuration_snp_count(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "transsulfuration")
+        assert len(pw["snps"]) == 7
+
+    def test_bh4_neurotransmitter_snp_count(self, panel_data: dict) -> None:
+        pw = next(
+            p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter"
+        )
+        assert len(pw["snps"]) == 7
+
+    def test_choline_betaine_snp_count(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "choline_betaine")
+        assert len(pw["snps"]) == 6
+
+
+# ── SNP field validation tests ──────────────────────────────────────────
+
+
+class TestSNPFields:
+    def test_snps_have_required_fields(self, panel_data: dict) -> None:
+        required_fields = {
+            "rsid",
+            "gene",
+            "variant_name",
+            "risk_allele",
+            "ref_allele",
+            "genotype_effects",
+            "evidence_level",
+            "pmids",
+            "recommendation_text",
+        }
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                for field in required_fields:
+                    assert field in snp, f"{snp['rsid']} missing field: {field}"
+
+    def test_rsids_start_with_rs(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                assert snp["rsid"].startswith("rs"), f"Invalid rsid: {snp['rsid']}"
+
+    def test_evidence_levels_valid(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                assert snp["evidence_level"] in (1, 2, 3, 4), (
+                    f"{snp['rsid']} has invalid evidence_level: {snp['evidence_level']}"
+                )
+
+    def test_pmids_are_nonempty_lists(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                assert isinstance(snp["pmids"], list)
+                assert len(snp["pmids"]) > 0, f"{snp['rsid']} has no PMIDs"
+                for pmid in snp["pmids"]:
+                    assert pmid.isdigit(), (
+                        f"{snp['rsid']} has non-numeric PMID: {pmid}"
+                    )
+
+
+# ── Genotype effects validation ─────────────────────────────────────────
+
+
+class TestGenotypeEffects:
+    def test_genotype_effects_have_valid_categories(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                for gt, effect in snp["genotype_effects"].items():
+                    assert "category" in effect, f"{snp['rsid']}:{gt} missing category"
+                    assert effect["category"] in VALID_CATEGORIES, (
+                        f"{snp['rsid']}:{gt} invalid category: {effect['category']}"
+                    )
+
+    def test_genotype_effects_have_effect_summary(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                for gt, effect in snp["genotype_effects"].items():
+                    assert "effect_summary" in effect, (
+                        f"{snp['rsid']}:{gt} missing effect_summary"
+                    )
+                    assert len(effect["effect_summary"]) > 0
+
+    def test_each_snp_has_standard_category(self, panel_data: dict) -> None:
+        """Every SNP must have at least one Standard genotype."""
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                categories = {
+                    e["category"] for e in snp["genotype_effects"].values()
+                }
+                assert "Standard" in categories, (
+                    f"{snp['rsid']} has no Standard genotype category"
+                )
+
+    def test_genotypes_are_two_char(self, panel_data: dict) -> None:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                for gt in snp["genotype_effects"]:
+                    assert len(gt) == 2, (
+                        f"{snp['rsid']} has invalid genotype length: {gt}"
+                    )
+                    assert gt.isalpha(), (
+                        f"{snp['rsid']} has non-alpha genotype: {gt}"
+                    )
+
+    def test_evidence_gating_star_1_no_elevated(self, panel_data: dict) -> None:
+        """SNPs with evidence_level=1 must NOT have Elevated category (star_1_cap)."""
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["evidence_level"] == 1:
+                    for gt, effect in snp["genotype_effects"].items():
+                        assert effect["category"] != "Elevated", (
+                            f"{snp['rsid']}:{gt} has Elevated with evidence_level=1 "
+                            f"(violates star_1_cap=Moderate)"
+                        )
+
+
+# ── MTHFR flagship variant tests ────────────────────────────────────────
+
+
+class TestMTHFRFlagship:
+    """Validate MTHFR C677T and A1298C as flagship methylation variants."""
+
+    def _get_snp(self, panel_data: dict, rsid: str) -> dict:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["rsid"] == rsid:
+                    return snp
+        pytest.fail(f"{rsid} not found in panel")
+
+    def test_c677t_in_folate_pathway(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "folate_mthfr")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs1801133" in rsids
+
+    def test_a1298c_in_folate_pathway(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "folate_mthfr")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs1801131" in rsids
+
+    def test_c677t_aa_elevated(self, panel_data: dict) -> None:
+        """C677T TT (AA on plus strand) → Elevated (~30% residual activity)."""
+        snp = self._get_snp(panel_data, "rs1801133")
+        assert snp["genotype_effects"]["AA"]["category"] == "Elevated"
+        summary = snp["genotype_effects"]["AA"]["effect_summary"].lower()
+        assert "30%" in summary or "significantly reduced" in summary
+
+    def test_c677t_gg_standard(self, panel_data: dict) -> None:
+        """C677T CC (GG on plus strand) → Standard."""
+        snp = self._get_snp(panel_data, "rs1801133")
+        assert snp["genotype_effects"]["GG"]["category"] == "Standard"
+
+    def test_c677t_evidence_level(self, panel_data: dict) -> None:
+        snp = self._get_snp(panel_data, "rs1801133")
+        assert snp["evidence_level"] == 2
+
+    def test_a1298c_cc_moderate(self, panel_data: dict) -> None:
+        """A1298C CC → Moderate (milder than C677T)."""
+        snp = self._get_snp(panel_data, "rs1801131")
+        assert snp["genotype_effects"]["CC"]["category"] == "Moderate"
+
+    def test_a1298c_aa_standard(self, panel_data: dict) -> None:
+        snp = self._get_snp(panel_data, "rs1801131")
+        assert snp["genotype_effects"]["AA"]["category"] == "Standard"
+
+    def test_a1298c_evidence_level(self, panel_data: dict) -> None:
+        snp = self._get_snp(panel_data, "rs1801131")
+        assert snp["evidence_level"] == 2
+
+    def test_c677t_has_hgvs_protein(self, panel_data: dict) -> None:
+        snp = self._get_snp(panel_data, "rs1801133")
+        assert snp["hgvs_protein"] == "p.Ala222Val"
+
+    def test_a1298c_has_hgvs_protein(self, panel_data: dict) -> None:
+        snp = self._get_snp(panel_data, "rs1801131")
+        assert snp["hgvs_protein"] == "p.Glu429Ala"
+
+
+# ── CBS proxy tests ─────────────────────────────────────────────────────
+
+
+class TestCBSProxy:
+    """Validate CBS rs234706 proxy SNP with coverage caveat."""
+
+    def _get_cbs(self, panel_data: dict) -> dict:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["rsid"] == "rs234706":
+                    return snp
+        pytest.fail("CBS rs234706 not found in panel")
+
+    def test_cbs_in_transsulfuration(self, panel_data: dict) -> None:
+        pw = next(p for p in panel_data["pathways"] if p["id"] == "transsulfuration")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs234706" in rsids
+
+    def test_cbs_has_coverage_note(self, panel_data: dict) -> None:
+        cbs = self._get_cbs(panel_data)
+        assert "coverage_note" in cbs
+        assert "proxy" in cbs["coverage_note"].lower()
+        assert "synonymous" in cbs["coverage_note"].lower()
+
+    def test_cbs_coverage_note_mentions_ancestry(self, panel_data: dict) -> None:
+        cbs = self._get_cbs(panel_data)
+        assert "ancestry" in cbs["coverage_note"].lower()
+
+    def test_cbs_cc_standard(self, panel_data: dict) -> None:
+        cbs = self._get_cbs(panel_data)
+        assert cbs["genotype_effects"]["CC"]["category"] == "Standard"
+
+    def test_cbs_evidence_level(self, panel_data: dict) -> None:
+        """CBS proxy → evidence_level 1 (proxy, not fully characterized)."""
+        cbs = self._get_cbs(panel_data)
+        assert cbs["evidence_level"] == 1
+
+    def test_cbs_in_special_calling(self, panel_data: dict) -> None:
+        assert "CBS_proxy_note" in panel_data["special_calling"]
+        sc = panel_data["special_calling"]["CBS_proxy_note"]
+        assert sc["rsid"] == "rs234706"
+        assert "proxy_accuracy_note" in sc
+
+
+# ── COMT catecholamine framing tests ────────────────────────────────────
+
+
+class TestCOMTFraming:
+    """Validate COMT Val158Met is framed as catecholamine clearance only."""
+
+    def _get_comt(self, panel_data: dict) -> dict:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["rsid"] == "rs4680":
+                    return snp
+        pytest.fail("COMT rs4680 not found in panel")
+
+    def test_comt_in_bh4_pathway(self, panel_data: dict) -> None:
+        pw = next(
+            p for p in panel_data["pathways"] if p["id"] == "bh4_neurotransmitter"
+        )
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs4680" in rsids
+
+    def test_comt_aa_elevated(self, panel_data: dict) -> None:
+        """Met/Met (AA) → Elevated (slower catecholamine clearance)."""
+        comt = self._get_comt(panel_data)
+        assert comt["genotype_effects"]["AA"]["category"] == "Elevated"
+
+    def test_comt_gg_standard(self, panel_data: dict) -> None:
+        """Val/Val (GG) → Standard."""
+        comt = self._get_comt(panel_data)
+        assert comt["genotype_effects"]["GG"]["category"] == "Standard"
+
+    def test_comt_framing_mentions_catecholamine(self, panel_data: dict) -> None:
+        comt = self._get_comt(panel_data)
+        summary = comt["genotype_effects"]["AA"]["effect_summary"].lower()
+        assert "catecholamine" in summary
+
+    def test_comt_framing_no_psychiatric(self, panel_data: dict) -> None:
+        """COMT must NOT be framed in psychiatric/warrior-worrier terms."""
+        comt = self._get_comt(panel_data)
+        for gt, effect in comt["genotype_effects"].items():
+            summary_lower = effect["effect_summary"].lower()
+            assert "warrior" not in summary_lower, (
+                f"COMT {gt} uses warrior framing"
+            )
+            assert "worrier" not in summary_lower, (
+                f"COMT {gt} uses worrier framing"
+            )
+            assert "psychiatric" not in summary_lower, (
+                f"COMT {gt} uses psychiatric framing"
+            )
+
+    def test_comt_evidence_level(self, panel_data: dict) -> None:
+        comt = self._get_comt(panel_data)
+        assert comt["evidence_level"] == 2
+
+    def test_comt_in_special_calling(self, panel_data: dict) -> None:
+        assert "COMT_catecholamine_framing" in panel_data["special_calling"]
+        sc = panel_data["special_calling"]["COMT_catecholamine_framing"]
+        assert sc["rsid"] == "rs4680"
+        assert sc["framing_restriction"] == "catecholamine_clearance_only"
+
+    def test_comt_has_hgvs_protein(self, panel_data: dict) -> None:
+        comt = self._get_comt(panel_data)
+        assert comt["hgvs_protein"] == "p.Val158Met"
+
+
+# ── MTHFR compound heterozygosity special calling tests ──────────────────
+
+
+class TestMTHFRCompoundHet:
+    """Validate MTHFR compound heterozygosity special calling metadata."""
+
+    def test_compound_het_in_special_calling(self, panel_data: dict) -> None:
+        assert "MTHFR_compound_heterozygosity" in panel_data["special_calling"]
+
+    def test_compound_het_rsids(self, panel_data: dict) -> None:
+        sc = panel_data["special_calling"]["MTHFR_compound_heterozygosity"]
+        assert set(sc["rsids"]) == {"rs1801133", "rs1801131"}
+
+    def test_compound_het_states(self, panel_data: dict) -> None:
+        sc = panel_data["special_calling"]["MTHFR_compound_heterozygosity"]
+        assert "compound_het" in sc["states"]
+        assert "double_homozygous" in sc["states"]
+
+    def test_compound_het_genotypes(self, panel_data: dict) -> None:
+        state = panel_data["special_calling"]["MTHFR_compound_heterozygosity"][
+            "states"
+        ]["compound_het"]
+        assert set(state["c677t_genotypes"]) == {"GA", "AG"}
+        assert set(state["a1298c_genotypes"]) == {"AC", "CA"}
+
+
+# ── Scoring rules tests ─────────────────────────────────────────────────
+
+
+class TestScoringRules:
+    def test_scoring_rules_present(self, panel_data: dict) -> None:
+        assert "scoring_rules" in panel_data
+
+    def test_star_1_cap(self, panel_data: dict) -> None:
+        """★☆ evidence hard-caps at Moderate (project convention)."""
+        assert panel_data["scoring_rules"]["star_1_cap"] == "Moderate"
+
+    def test_elevated_requires_min_stars(self, panel_data: dict) -> None:
+        assert panel_data["scoring_rules"]["elevated_requires_min_stars"] == 2
+
+    def test_pathway_level_determination(self, panel_data: dict) -> None:
+        rules = panel_data["scoring_rules"]
+        assert rules["pathway_level_determination"] == "highest_category_across_snps"
+
+    def test_valid_categories_listed(self, panel_data: dict) -> None:
+        cats = panel_data["scoring_rules"]["categories"]
+        assert set(cats) == VALID_CATEGORIES
+
+    def test_additive_scoring_note(self, panel_data: dict) -> None:
+        """Methylation module uses additive scoring (documented in panel)."""
+        rules = panel_data["scoring_rules"]
+        assert "additive_scoring_note" in rules
+        assert "additive" in rules["additive_scoring_note"].lower()
+
+
+# ── GWAS EFO terms tests ────────────────────────────────────────────────
+
+
+class TestGWASEFOTerms:
+    def test_gwas_efo_terms_present(self, panel_data: dict) -> None:
+        assert "gwas_efo_terms" in panel_data
+        terms = panel_data["gwas_efo_terms"]
+        assert isinstance(terms, list)
+        assert len(terms) > 0
+
+    def test_key_methylation_efo_terms_included(self, panel_data: dict) -> None:
+        terms = set(panel_data["gwas_efo_terms"])
+        assert "methylation" in terms
+        assert "homocysteine" in terms
+        assert "folate" in terms
+        assert "methionine" in terms
+        assert "glutathione" in terms
+        assert "choline" in terms
+        assert "betaine" in terms
+
+    def test_gwas_efo_terms_match_gwas_loader(self, panel_data: dict) -> None:
+        """Panel EFO terms should match the _METHYLATION_TERMS in gwas.py."""
+        from backend.annotation.gwas import _METHYLATION_TERMS
+
+        panel_terms = frozenset(panel_data["gwas_efo_terms"])
+        assert panel_terms == _METHYLATION_TERMS
+
+
+# ── Pathway-specific SNP allocation tests ────────────────────────────────
+
+
+class TestPathwayAllocation:
+    def _get_pathway(self, panel_data: dict, pathway_id: str) -> dict:
+        for p in panel_data["pathways"]:
+            if p["id"] == pathway_id:
+                return p
+        pytest.fail(f"Pathway {pathway_id} not found")
+
+    def test_folate_mthfr_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "folate_mthfr")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs1801133" in rsids  # MTHFR C677T
+        assert "rs1801131" in rsids  # MTHFR A1298C
+        assert "rs70991108" in rsids  # DHFR
+        assert "rs1051266" in rsids  # SLC19A1
+        assert "rs202676" in rsids  # FOLH1
+        assert "rs1801198" in rsids  # TCN2
+        assert "rs3758149" in rsids  # GGH
+        assert "rs1979277" in rsids  # SHMT1
+
+    def test_methionine_cycle_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "methionine_cycle")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs1805087" in rsids  # MTR
+        assert "rs1801394" in rsids  # MTRR
+        assert "rs10887718" in rsids  # MAT1A
+        assert "rs819147" in rsids  # AHCY
+        assert "rs3733890" in rsids  # BHMT
+        assert "rs2228611" in rsids  # DNMT1
+        assert "rs2424913" in rsids  # DNMT3B
+
+    def test_transsulfuration_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "transsulfuration")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs234706" in rsids  # CBS
+        assert "rs1021737" in rsids  # CTH
+        assert "rs17883901" in rsids  # GCLC
+        assert "rs41303970" in rsids  # GCLM
+        assert "rs1050450" in rsids  # GPX1
+        assert "rs4880" in rsids  # SOD2
+        assert "rs3761144" in rsids  # GSS
+
+    def test_bh4_neurotransmitter_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "bh4_neurotransmitter")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs4680" in rsids  # COMT
+        assert "rs2228570" in rsids  # VDR FokI
+        assert "rs1544410" in rsids  # VDR BsmI
+        assert "rs2236225" in rsids  # MTHFD1
+        assert "rs6495446" in rsids  # MTHFS
+        assert "rs8007267" in rsids  # GCH1
+        assert "rs1677693" in rsids  # QDPR
+
+    def test_choline_betaine_snps(self, panel_data: dict) -> None:
+        pw = self._get_pathway(panel_data, "choline_betaine")
+        rsids = {s["rsid"] for s in pw["snps"]}
+        assert "rs12325817" in rsids  # PEMT
+        assert "rs9001" in rsids  # CHDH
+        assert "rs585800" in rsids  # BHMT2
+        assert "rs3199966" in rsids  # SLC44A1
+        assert "rs2266782" in rsids  # FMO3
+        assert "rs7639752" in rsids  # PCYT1A
+
+
+# ── Nutrigenomics migration note tests ──────────────────────────────────
+
+
+class TestNutrigenomicsMigration:
+    """Validate migration metadata for MTHFR from Nutrigenomics."""
+
+    def test_additional_genes_has_migration_note(self, panel_data: dict) -> None:
+        assert "additional_genes" in panel_data
+        assert "nutrigenomics_migration" in panel_data["additional_genes"]
+
+    def test_migration_rsids(self, panel_data: dict) -> None:
+        migration = panel_data["additional_genes"]["nutrigenomics_migration"]
+        assert set(migration["rsids"]) == {"rs1801133", "rs1801131", "rs1801394"}
+
+    def test_migration_note_content(self, panel_data: dict) -> None:
+        migration = panel_data["additional_genes"]["nutrigenomics_migration"]
+        assert "nutrigenomics" in migration["note"].lower()
+        assert "migrate" in migration["note"].lower() or "migration" in migration["note"].lower()
+
+
+# ── DHFR coverage note test ─────────────────────────────────────────────
+
+
+class TestDHFRCoverage:
+    """Validate DHFR 19bp deletion coverage note."""
+
+    def _get_dhfr(self, panel_data: dict) -> dict:
+        for pathway in panel_data["pathways"]:
+            for snp in pathway["snps"]:
+                if snp["rsid"] == "rs70991108":
+                    return snp
+        pytest.fail("DHFR rs70991108 not found in panel")
+
+    def test_dhfr_has_coverage_note(self, panel_data: dict) -> None:
+        dhfr = self._get_dhfr(panel_data)
+        assert "coverage_note" in dhfr
+        assert "19bp" in dhfr["coverage_note"].lower() or "deletion" in dhfr["coverage_note"].lower()

@@ -190,6 +190,23 @@ _ALLERGY_TERMS = frozenset(
     }
 )
 
+_METHYLATION_TERMS = frozenset(
+    {
+        "methylation",
+        "homocysteine",
+        "folate",
+        "methionine",
+        "s-adenosylmethionine",
+        "glutathione",
+        "choline",
+        "betaine",
+        "one-carbon",
+        "vitamin b12",
+        "vitamin b6",
+        "cobalamin",
+    }
+)
+
 _TRAITS_TERMS = frozenset(
     {
         "educational attainment",
@@ -225,6 +242,7 @@ EFO_WHITELIST: frozenset[str] = (
     | _SLEEP_TERMS
     | _SKIN_TERMS
     | _ALLERGY_TERMS
+    | _METHYLATION_TERMS
     | _TRAITS_TERMS
 )
 
@@ -235,6 +253,7 @@ EFO_MODULES: dict[str, frozenset[str]] = {
     "sleep": _SLEEP_TERMS,
     "skin": _SKIN_TERMS,
     "allergy": _ALLERGY_TERMS,
+    "methylation": _METHYLATION_TERMS,
     "traits": _TRAITS_TERMS,
 }
 

@@ -1,0 +1,1118 @@
+{
+  "module": "methylation",
+  "version": "1.0.0",
+  "description": "Curated MTHFR & Methylation SNP panel for GenomeInsight (P3-51). Covers 5 sub-pathways (Folate/MTHFR, Methionine Cycle, Transsulfuration, BH4 & Neurotransmitter Synthesis, Choline & Betaine) with ~35 curated SNPs. MTHFR C677T and A1298C are flagship variants. CBS rs234706 is a proxy SNP with coverage caveat. COMT Val158Met is framed as catecholamine clearance only (not psychiatric). This panel migrates MTHFR findings from the Nutrigenomics module for deeper pathway-level analysis.",
+  "pathways": [
+    {
+      "id": "folate_mthfr",
+      "name": "Folate & MTHFR",
+      "description": "Variants affecting the folate cycle and MTHFR enzyme activity. MTHFR converts 5,10-methylenetetrahydrofolate to 5-methyltetrahydrofolate, the primary methyl donor for homocysteine remethylation. Impaired MTHFR activity can reduce methylfolate availability and elevate homocysteine.",
+      "snps": [
+        {
+          "rsid": "rs1801133",
+          "gene": "MTHFR",
+          "variant_name": "C677T",
+          "hgvs_protein": "p.Ala222Val",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal MTHFR enzyme activity (~100%). Standard methylfolate production and homocysteine remethylation capacity."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Reduced MTHFR enzyme activity (~65% of normal). Mildly elevated homocysteine possible, especially with low folate intake."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Reduced MTHFR enzyme activity (~65% of normal). Mildly elevated homocysteine possible, especially with low folate intake."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Significantly reduced MTHFR enzyme activity (~30% of normal). Thermolabile enzyme variant. Elevated homocysteine likely without adequate folate. Consider dietary folate sources and discuss methylfolate supplementation with a clinician."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["23824729", "16825279", "9545397"],
+          "recommendation_text": "MTHFR C677T is the most studied methylation variant. TT (AA) carriers have ~30% residual enzyme activity. Adequate folate intake (leafy greens, legumes, fortified foods) is especially important. Discuss methylfolate (5-MTHF) supplementation with a clinician."
+        },
+        {
+          "rsid": "rs1801131",
+          "gene": "MTHFR",
+          "variant_name": "A1298C",
+          "hgvs_protein": "p.Glu429Ala",
+          "risk_allele": "C",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal MTHFR enzyme activity at the A1298C locus."
+            },
+            "AC": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced MTHFR enzyme activity at A1298C locus. Effect is less pronounced than C677T alone."
+            },
+            "CA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced MTHFR enzyme activity at A1298C locus. Effect is less pronounced than C677T alone."
+            },
+            "CC": {
+              "category": "Moderate",
+              "effect_summary": "Moderately reduced MTHFR enzyme activity at A1298C locus. Compound heterozygosity with C677T (677CT + 1298AC) may have additive effects on enzyme function."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["11129332", "16825279", "15060097"],
+          "recommendation_text": "A1298C has a milder effect than C677T. Compound heterozygosity (one copy of each variant) may additively reduce MTHFR function. Relevant primarily in combination with C677T status."
+        },
+        {
+          "rsid": "rs70991108",
+          "gene": "DHFR",
+          "variant_name": "19bp deletion",
+          "hgvs_protein": null,
+          "risk_allele": "D",
+          "ref_allele": "I",
+          "genotype_effects": {
+            "II": {
+              "category": "Standard",
+              "effect_summary": "Normal dihydrofolate reductase expression. Standard conversion of dietary folic acid to dihydrofolate."
+            },
+            "ID": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous 19bp deletion in DHFR promoter. May modestly increase DHFR expression and alter folic acid metabolism."
+            },
+            "DI": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous 19bp deletion in DHFR promoter. May modestly increase DHFR expression and alter folic acid metabolism."
+            },
+            "DD": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous 19bp deletion in DHFR promoter. Associated with increased DHFR expression. May affect response to folic acid supplementation vs. methylfolate."
+            }
+          },
+          "coverage_note": "rs70991108 represents a 19bp insertion/deletion polymorphism in the DHFR promoter region. Not all SNP arrays genotype this variant directly. Coverage depends on the specific array version used.",
+          "evidence_level": 1,
+          "pmids": ["18175331", "20162554"],
+          "recommendation_text": "DHFR converts dietary folic acid to dihydrofolate. The 19bp deletion may alter the efficiency of folic acid utilization. Relevance is primarily in the context of folic acid supplementation vs. natural folate sources."
+        },
+        {
+          "rsid": "rs1051266",
+          "gene": "SLC19A1",
+          "variant_name": "G80A (His27Arg)",
+          "hgvs_protein": "p.His27Arg",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard reduced folate carrier (RFC1) function. Normal cellular folate uptake."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous RFC1 variant. May modestly reduce folate transport into cells."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous RFC1 variant. May modestly reduce folate transport into cells."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous RFC1 variant. Reduced folate carrier efficiency. May require higher dietary folate intake to maintain adequate intracellular folate levels."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["11745004", "17445041"],
+          "recommendation_text": "SLC19A1 encodes the reduced folate carrier (RFC1), the primary transporter for folate into cells. AA carriers may have reduced folate transport efficiency."
+        },
+        {
+          "rsid": "rs202676",
+          "gene": "FOLH1",
+          "variant_name": "T484S",
+          "hgvs_protein": "p.Thr484Ser",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard folylpolyglutamate hydrolase activity. Normal intestinal folate absorption."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous FOLH1 variant. May modestly affect intestinal folate absorption."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous FOLH1 variant. May modestly affect intestinal folate absorption."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous FOLH1 variant. Reduced folylpolyglutamate hydrolase activity may decrease intestinal absorption of dietary folate polyglutamates."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["19190234", "22012967"],
+          "recommendation_text": "FOLH1 (GCPII) cleaves polyglutamated folates in the gut for absorption. Variants may reduce dietary folate bioavailability from natural food sources."
+        },
+        {
+          "rsid": "rs1801198",
+          "gene": "TCN2",
+          "variant_name": "C776G (Pro259Arg)",
+          "hgvs_protein": "p.Pro259Arg",
+          "risk_allele": "G",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard transcobalamin II binding. Normal vitamin B12 cellular delivery."
+            },
+            "CG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous TCN2 variant. May reduce holotranscobalamin (active B12) levels, though total B12 may appear normal."
+            },
+            "GC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous TCN2 variant. May reduce holotranscobalamin (active B12) levels, though total B12 may appear normal."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous TCN2 variant. Reduced transcobalamin II binding affinity. May lower active B12 (holotranscobalamin) available to cells, even with normal total B12 levels."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["12161596", "16159893", "19187342"],
+          "recommendation_text": "TCN2 encodes transcobalamin II, the B12 transport protein. GG carriers may have lower active B12 despite normal total B12. Consider holotranscobalamin testing rather than total B12 alone."
+        },
+        {
+          "rsid": "rs3758149",
+          "gene": "GGH",
+          "variant_name": "-401C>T",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard gamma-glutamyl hydrolase activity. Normal folate polyglutamate processing."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GGH promoter variant. May alter folate polyglutamate hydrolysis and intracellular folate retention."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GGH promoter variant. May alter folate polyglutamate hydrolysis and intracellular folate retention."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous GGH promoter variant. Altered gamma-glutamyl hydrolase expression may affect folate retention within cells."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16234067", "21212450"],
+          "recommendation_text": "GGH removes glutamate residues from folate polyglutamates. Variants may affect intracellular folate retention and methotrexate response."
+        },
+        {
+          "rsid": "rs1979277",
+          "gene": "SHMT1",
+          "variant_name": "C1420T (Leu474Phe)",
+          "hgvs_protein": "p.Leu474Phe",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal serine hydroxymethyltransferase 1 activity. Standard conversion of serine + THF to glycine + 5,10-methylene-THF."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous SHMT1 variant. May modestly alter the balance between thymidylate synthesis and homocysteine remethylation."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous SHMT1 variant. May modestly alter the balance between thymidylate synthesis and homocysteine remethylation."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous SHMT1 variant. Altered enzyme activity may shift one-carbon flux toward thymidylate synthesis at the expense of methyl group availability."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12815591", "16200083"],
+          "recommendation_text": "SHMT1 directs one-carbon units from serine into the folate cycle. Variants may alter the partitioning of folate-derived one-carbon units between DNA synthesis and methylation."
+        }
+      ]
+    },
+    {
+      "id": "methionine_cycle",
+      "name": "Methionine Cycle",
+      "description": "Variants affecting the methionine cycle, which converts homocysteine back to methionine and generates S-adenosylmethionine (SAM) — the universal methyl donor for DNA, RNA, protein, and neurotransmitter methylation.",
+      "snps": [
+        {
+          "rsid": "rs1805087",
+          "gene": "MTR",
+          "variant_name": "A2756G (Asp919Gly)",
+          "hgvs_protein": "p.Asp919Gly",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal methionine synthase activity. Standard B12-dependent homocysteine remethylation."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTR variant. May modestly alter methionine synthase activity and B12 utilization."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTR variant. May modestly alter methionine synthase activity and B12 utilization."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous MTR variant. Altered methionine synthase activity may affect homocysteine remethylation efficiency. Adequate B12 status is especially important."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["11595027", "15637710", "19190234"],
+          "recommendation_text": "MTR (methionine synthase) uses B12 as a cofactor to remethylate homocysteine to methionine. GG carriers may benefit from ensuring adequate B12 intake."
+        },
+        {
+          "rsid": "rs1801394",
+          "gene": "MTRR",
+          "variant_name": "A66G (Ile22Met)",
+          "hgvs_protein": "p.Ile22Met",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal methionine synthase reductase activity. Efficient regeneration of active MTR."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced methionine synthase reductase activity. May contribute to elevated homocysteine in combination with MTHFR variants."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Mildly reduced methionine synthase reductase activity. May contribute to elevated homocysteine in combination with MTHFR variants."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Reduced MTRR activity. Less efficient regeneration of active methionine synthase. Effect is primarily relevant in combination with MTHFR C677T or MTR A2756G variants."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["23824729", "12181445"],
+          "recommendation_text": "MTRR regenerates the active form of methionine synthase (MTR). Variants have a supportive effect and are most relevant when combined with MTHFR or MTR variants."
+        },
+        {
+          "rsid": "rs10887718",
+          "gene": "MAT1A",
+          "variant_name": "MAT1A intronic",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Standard MAT1A expression. Normal hepatic S-adenosylmethionine (SAM) synthesis."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MAT1A variant. May modestly affect hepatic SAM production."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MAT1A variant. May modestly affect hepatic SAM production."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous MAT1A variant. May reduce hepatic MAT activity and SAM availability."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["17190769", "21399649"],
+          "recommendation_text": "MAT1A converts methionine to S-adenosylmethionine (SAM) in the liver. Variants may affect the rate of SAM synthesis from dietary methionine."
+        },
+        {
+          "rsid": "rs819147",
+          "gene": "AHCY",
+          "variant_name": "AHCY intronic",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard S-adenosylhomocysteine hydrolase activity. Normal SAH clearance."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous AHCY variant. May modestly affect SAH hydrolysis, potentially altering the SAM/SAH ratio."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous AHCY variant. May modestly affect SAH hydrolysis, potentially altering the SAM/SAH ratio."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous AHCY variant. Reduced SAH hydrolase activity may increase SAH levels, which inhibits methyltransferases."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["17190769", "20299362"],
+          "recommendation_text": "AHCY hydrolyzes S-adenosylhomocysteine (SAH), a potent inhibitor of methyltransferases. Efficient SAH clearance is essential for maintaining methylation capacity."
+        },
+        {
+          "rsid": "rs3733890",
+          "gene": "BHMT",
+          "variant_name": "G742A (Arg239Gln)",
+          "hgvs_protein": "p.Arg239Gln",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal betaine-homocysteine methyltransferase activity. Standard betaine-dependent homocysteine remethylation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous BHMT variant. May modestly alter betaine-dependent homocysteine remethylation."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous BHMT variant. May modestly alter betaine-dependent homocysteine remethylation."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous BHMT variant. Reduced betaine-dependent homocysteine remethylation. This alternative pathway becomes especially important when MTHFR function is impaired."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["15477547", "18175331"],
+          "recommendation_text": "BHMT provides an alternative homocysteine remethylation pathway using betaine (from choline) as the methyl donor. Especially relevant when MTHFR function is reduced."
+        },
+        {
+          "rsid": "rs2228611",
+          "gene": "DNMT1",
+          "variant_name": "DNMT1 synonymous",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard DNA methyltransferase 1 expression. Normal maintenance DNA methylation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous DNMT1 variant. May modestly affect DNMT1 expression or stability."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous DNMT1 variant. May modestly affect DNMT1 expression or stability."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous DNMT1 variant. May alter maintenance DNA methylation patterns."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["15950375", "19190234"],
+          "recommendation_text": "DNMT1 is responsible for maintaining DNA methylation patterns during cell division. Variants may influence global methylation maintenance."
+        },
+        {
+          "rsid": "rs2424913",
+          "gene": "DNMT3B",
+          "variant_name": "-149C>T",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard DNMT3B promoter activity. Normal de novo DNA methylation."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous DNMT3B promoter variant. May modestly affect de novo methylation capacity."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous DNMT3B promoter variant. May modestly affect de novo methylation capacity."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous DNMT3B promoter variant. Altered DNMT3B expression may affect de novo DNA methylation establishment."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["15950375", "15701835"],
+          "recommendation_text": "DNMT3B performs de novo DNA methylation. Promoter variants may influence the establishment of new methylation patterns."
+        }
+      ]
+    },
+    {
+      "id": "transsulfuration",
+      "name": "Transsulfuration",
+      "description": "Variants affecting the transsulfuration pathway, which diverts homocysteine toward cysteine and glutathione synthesis. This pathway is the primary route for homocysteine disposal when methionine is abundant and is critical for antioxidant defense via glutathione production.",
+      "snps": [
+        {
+          "rsid": "rs234706",
+          "gene": "CBS",
+          "variant_name": "C699T (Tyr233Tyr)",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard cystathionine beta-synthase activity. Normal transsulfuration flux."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CBS C699T. This synonymous variant is a proxy for functional CBS variants in linkage disequilibrium. May modestly affect transsulfuration flux."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CBS C699T. This synonymous variant is a proxy for functional CBS variants in linkage disequilibrium. May modestly affect transsulfuration flux."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous CBS C699T proxy. Associated with upregulated transsulfuration, potentially increasing homocysteine clearance through the cysteine/glutathione pathway. May increase sulfite/sulfate production. Evidence is limited due to proxy nature of this variant."
+            }
+          },
+          "coverage_note": "rs234706 (CBS C699T) is a synonymous variant used as a proxy for functional CBS polymorphisms in linkage disequilibrium. It does not directly alter CBS protein sequence. The proxy relationship varies by ancestry population, and the functional variant(s) it tags are not fully characterized. Results should be interpreted with caution.",
+          "evidence_level": 1,
+          "pmids": ["12815591", "15637710", "18175331"],
+          "recommendation_text": "CBS catalyzes the first step of transsulfuration (homocysteine → cystathionine). rs234706 is a proxy SNP — the functional variant it tags is not fully characterized. Upregulated CBS may increase homocysteine clearance but also increase demand for vitamin B6 (the CBS cofactor)."
+        },
+        {
+          "rsid": "rs1021737",
+          "gene": "CTH",
+          "variant_name": "S403I",
+          "hgvs_protein": "p.Ser403Ile",
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal cystathionine gamma-lyase activity. Standard conversion of cystathionine to cysteine."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CTH variant. May modestly reduce cystathionine-to-cysteine conversion."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CTH variant. May modestly reduce cystathionine-to-cysteine conversion."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous CTH variant. Reduced cystathionine gamma-lyase activity may lower cysteine and hydrogen sulfide production."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["18404103", "21399649"],
+          "recommendation_text": "CTH performs the second step of transsulfuration (cystathionine → cysteine + α-ketobutyrate). Also produces hydrogen sulfide (H₂S), a gasotransmitter with vasodilatory effects."
+        },
+        {
+          "rsid": "rs17883901",
+          "gene": "GCLC",
+          "variant_name": "-129C>T",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard glutamate-cysteine ligase catalytic subunit expression. Normal glutathione synthesis capacity."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCLC promoter variant. May modestly reduce GCLC expression and glutathione synthesis."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCLC promoter variant. May modestly reduce GCLC expression and glutathione synthesis."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous GCLC promoter variant. Reduced GCLC expression may lower glutathione synthesis, affecting antioxidant defense capacity."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["10662760", "15277203"],
+          "recommendation_text": "GCLC is the rate-limiting enzyme in glutathione synthesis. TT carriers may have lower glutathione production, which can be supported by adequate cysteine-rich protein intake and N-acetylcysteine (discuss with a clinician)."
+        },
+        {
+          "rsid": "rs41303970",
+          "gene": "GCLM",
+          "variant_name": "-588C>T",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard glutamate-cysteine ligase modifier subunit expression. Normal modulation of GCL activity."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCLM promoter variant. May modestly reduce GCLM expression, affecting GCL holoenzyme efficiency."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCLM promoter variant. May modestly reduce GCLM expression, affecting GCL holoenzyme efficiency."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous GCLM promoter variant. Reduced GCLM expression may lower GCL holoenzyme efficiency and glutathione synthesis."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["10662760", "16217669"],
+          "recommendation_text": "GCLM modulates the catalytic subunit (GCLC) of glutamate-cysteine ligase. Combined GCLC + GCLM variants may have additive effects on glutathione production."
+        },
+        {
+          "rsid": "rs1050450",
+          "gene": "GPX1",
+          "variant_name": "Pro198Leu",
+          "hgvs_protein": "p.Pro198Leu",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal glutathione peroxidase 1 activity. Standard selenium-dependent antioxidant defense."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GPX1 variant. Modestly reduced glutathione peroxidase activity, especially under low selenium conditions."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GPX1 variant. Modestly reduced glutathione peroxidase activity, especially under low selenium conditions."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous GPX1 Leu198 variant. Reduced glutathione peroxidase 1 activity. Adequate selenium intake is especially important for antioxidant defense."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["15504747", "17709398"],
+          "recommendation_text": "GPX1 uses glutathione to neutralize hydrogen peroxide. Leu198 carriers have reduced enzyme activity, particularly under low selenium conditions. Adequate selenium intake (Brazil nuts, seafood) supports GPX1 function."
+        },
+        {
+          "rsid": "rs4880",
+          "gene": "SOD2",
+          "variant_name": "Val16Ala (MnSOD)",
+          "hgvs_protein": "p.Val16Ala",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "SOD2 Ala/Ala (CC). More efficient mitochondrial targeting signal. Higher MnSOD activity in mitochondria."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "SOD2 Ala/Val (CT). Intermediate MnSOD mitochondrial import efficiency."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "SOD2 Ala/Val (TC). Intermediate MnSOD mitochondrial import efficiency."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "SOD2 Val/Val (TT). Less efficient mitochondrial targeting. Lower MnSOD activity in mitochondria. May increase mitochondrial oxidative stress."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["10085127", "15509580"],
+          "recommendation_text": "SOD2 (MnSOD) is the primary mitochondrial superoxide dismutase. The Val16 allele has less efficient mitochondrial import. Antioxidant-rich diet may support mitochondrial redox balance."
+        },
+        {
+          "rsid": "rs3761144",
+          "gene": "GSS",
+          "variant_name": "GSS 5' UTR",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard glutathione synthetase expression. Normal second step of glutathione synthesis."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GSS variant. May modestly alter glutathione synthetase expression."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GSS variant. May modestly alter glutathione synthetase expression."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous GSS variant. May reduce glutathione synthetase expression, affecting the second step of glutathione biosynthesis."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12815591", "18404103"],
+          "recommendation_text": "GSS catalyzes the second step of glutathione synthesis (γ-glutamylcysteine + glycine → glutathione). Variants may affect overall glutathione production capacity."
+        }
+      ]
+    },
+    {
+      "id": "bh4_neurotransmitter",
+      "name": "BH4 & Neurotransmitter Synthesis",
+      "description": "Variants affecting tetrahydrobiopterin (BH4) recycling and neurotransmitter methylation. BH4 is a cofactor for phenylalanine hydroxylase, tyrosine hydroxylase, and tryptophan hydroxylase. MTHFR-derived methylfolate contributes to BH4 recycling. COMT methylates catecholamines (dopamine, norepinephrine, epinephrine) using SAM as a methyl donor.",
+      "snps": [
+        {
+          "rsid": "rs4680",
+          "gene": "COMT",
+          "variant_name": "Val158Met",
+          "hgvs_protein": "p.Val158Met",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "COMT Val/Val. Higher COMT enzyme activity. Faster catecholamine clearance (dopamine, norepinephrine, epinephrine). Standard methylation demand on SAM for catecholamine metabolism."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "COMT Val/Met. Intermediate COMT activity. Moderate catecholamine clearance rate. Intermediate SAM consumption for catecholamine methylation."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "COMT Val/Met. Intermediate COMT activity. Moderate catecholamine clearance rate. Intermediate SAM consumption for catecholamine methylation."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "COMT Met/Met. Reduced COMT enzyme activity (~3–4x lower than Val/Val). Slower catecholamine clearance — dopamine, norepinephrine, and epinephrine persist longer. Lower SAM consumption for catecholamine methylation, but higher catecholamine signaling."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["8807664", "15642756", "18725925"],
+          "recommendation_text": "COMT Val158Met affects catecholamine clearance rate. In the methylation context, Met/Met carriers use less SAM for catecholamine degradation but experience prolonged catecholamine signaling. This is relevant to stress response and estrogen metabolism, not psychiatric diagnosis."
+        },
+        {
+          "rsid": "rs2228570",
+          "gene": "VDR",
+          "variant_name": "FokI (Met1Thr)",
+          "hgvs_protein": "p.Met1Thr",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "VDR FokI FF genotype. Produces the shorter, more transcriptionally active VDR protein. Standard vitamin D receptor signaling."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "VDR FokI Ff genotype. Intermediate VDR transcriptional activity."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "VDR FokI Ff genotype. Intermediate VDR transcriptional activity."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "VDR FokI ff genotype. Produces the longer, less transcriptionally active VDR protein. May reduce vitamin D-mediated gene regulation, including genes involved in methylation and immune function."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12815591", "18404103"],
+          "recommendation_text": "VDR FokI affects vitamin D receptor activity. VDR influences expression of genes involved in methylation, immune regulation, and calcium homeostasis. Adequate vitamin D status supports these functions."
+        },
+        {
+          "rsid": "rs1544410",
+          "gene": "VDR",
+          "variant_name": "BsmI",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "VDR BsmI BB genotype. Standard VDR mRNA stability and expression."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "VDR BsmI Bb genotype. Intermediate VDR mRNA stability."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "VDR BsmI Bb genotype. Intermediate VDR mRNA stability."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "VDR BsmI bb genotype. May affect VDR mRNA stability and expression levels. Associated with altered vitamin D-responsive gene regulation."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12815591", "15509580"],
+          "recommendation_text": "VDR BsmI is in the 3' region and may affect mRNA stability. Combined with FokI, provides a more complete picture of VDR functional status."
+        },
+        {
+          "rsid": "rs2236225",
+          "gene": "MTHFD1",
+          "variant_name": "G1958A (Arg653Gln)",
+          "hgvs_protein": "p.Arg653Gln",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal C1-synthase (MTHFD1) activity. Standard channeling of one-carbon units through the folate cycle."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTHFD1 variant. May modestly affect the trifunctional enzyme's 10-formyl-THF synthetase activity."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTHFD1 variant. May modestly affect the trifunctional enzyme's 10-formyl-THF synthetase activity."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous MTHFD1 variant. Reduced 10-formyl-THF synthetase activity may alter folate-dependent purine synthesis and affect BH4 recycling through the folate pool."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["16200083", "15477547"],
+          "recommendation_text": "MTHFD1 is a trifunctional enzyme connecting multiple folate cycle reactions. The Arg653Gln variant may affect purine synthesis and indirectly influence BH4 availability through folate pool partitioning."
+        },
+        {
+          "rsid": "rs6495446",
+          "gene": "MTHFS",
+          "variant_name": "MTHFS intron",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard 5,10-methenyltetrahydrofolate synthetase expression. Normal folate cycle flux."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTHFS variant. May modestly affect folate interconversion."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous MTHFS variant. May modestly affect folate interconversion."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous MTHFS variant. May alter folate interconversion efficiency, affecting downstream methylation and purine synthesis."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16200083", "19190234"],
+          "recommendation_text": "MTHFS regulates folate interconversion, channeling 5-formyl-THF into the active folate pool. Variants may affect overall folate cycle efficiency."
+        },
+        {
+          "rsid": "rs8007267",
+          "gene": "GCH1",
+          "variant_name": "GCH1 5' UTR",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard GTP cyclohydrolase I expression. Normal BH4 de novo synthesis."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCH1 variant. May modestly affect BH4 synthesis rate."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous GCH1 variant. May modestly affect BH4 synthesis rate."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous GCH1 variant. May reduce BH4 de novo synthesis, affecting cofactor availability for phenylalanine, tyrosine, and tryptophan hydroxylases."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16962000", "21680034"],
+          "recommendation_text": "GCH1 is the rate-limiting enzyme for BH4 de novo synthesis. BH4 is essential for neurotransmitter precursor synthesis (serotonin, dopamine, norepinephrine). Adequate folate supports BH4 recycling."
+        },
+        {
+          "rsid": "rs1677693",
+          "gene": "QDPR",
+          "variant_name": "QDPR intronic",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard dihydropteridine reductase activity. Normal BH4 recycling."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous QDPR variant. May modestly affect BH4 recycling efficiency."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous QDPR variant. May modestly affect BH4 recycling efficiency."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous QDPR variant. May reduce BH4 recycling, increasing demand for de novo BH4 synthesis and folate-mediated BH4 regeneration."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16962000", "21680034"],
+          "recommendation_text": "QDPR recycles quinonoid-dihydrobiopterin back to BH4. Efficient BH4 recycling reduces demand for de novo synthesis and supports continuous neurotransmitter production."
+        }
+      ]
+    },
+    {
+      "id": "choline_betaine",
+      "name": "Choline & Betaine",
+      "description": "Variants affecting choline metabolism and betaine availability. Choline is oxidized to betaine, which serves as a methyl donor for BHMT-mediated homocysteine remethylation — an alternative to the MTHFR/folate pathway. Phosphatidylcholine (PC) synthesis via PEMT also depends on SAM-derived methyl groups, linking choline metabolism directly to the methylation cycle.",
+      "snps": [
+        {
+          "rsid": "rs12325817",
+          "gene": "PEMT",
+          "variant_name": "PEMT G5465A",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard PEMT activity. Normal endogenous phosphatidylcholine synthesis from phosphatidylethanolamine via three sequential SAM-dependent methylations."
+            },
+            "GC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PEMT variant. May modestly reduce endogenous choline/phosphatidylcholine synthesis, increasing dietary choline requirements."
+            },
+            "CG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PEMT variant. May modestly reduce endogenous choline/phosphatidylcholine synthesis, increasing dietary choline requirements."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous PEMT variant. Reduced endogenous phosphatidylcholine synthesis. Significantly increased dietary choline requirement. PEMT is the primary endogenous source of choline in the liver."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["16207938", "17522615", "19064519"],
+          "recommendation_text": "PEMT synthesizes phosphatidylcholine from phosphatidylethanolamine using three SAM-derived methyl groups. CC carriers have higher dietary choline requirements. Good sources include eggs, liver, and soybeans."
+        },
+        {
+          "rsid": "rs9001",
+          "gene": "CHDH",
+          "variant_name": "G233T (Ala119Ser)",
+          "hgvs_protein": "p.Ala119Ser",
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal choline dehydrogenase activity. Standard oxidation of choline to betaine aldehyde."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CHDH variant. May modestly affect choline-to-betaine conversion."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous CHDH variant. May modestly affect choline-to-betaine conversion."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous CHDH variant. Reduced choline dehydrogenase activity may lower betaine production from choline, affecting BHMT-mediated homocysteine remethylation."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16207938", "19064519"],
+          "recommendation_text": "CHDH oxidizes choline to betaine (via betaine aldehyde). Variants may reduce betaine availability for BHMT-mediated homocysteine remethylation."
+        },
+        {
+          "rsid": "rs585800",
+          "gene": "BHMT2",
+          "variant_name": "BHMT2 intronic",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard BHMT2 expression. Normal S-methylmethionine-dependent homocysteine remethylation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous BHMT2 variant. May modestly affect S-methylmethionine-dependent homocysteine remethylation."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous BHMT2 variant. May modestly affect S-methylmethionine-dependent homocysteine remethylation."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous BHMT2 variant. May reduce S-methylmethionine-dependent homocysteine remethylation, an alternative to BHMT."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["15477547", "18175331"],
+          "recommendation_text": "BHMT2 uses S-methylmethionine (from plant sources) as a methyl donor for homocysteine remethylation. This provides a plant-derived backup pathway for the betaine-dependent BHMT enzyme."
+        },
+        {
+          "rsid": "rs3199966",
+          "gene": "SLC44A1",
+          "variant_name": "SLC44A1 missense",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Standard choline transporter-like protein 1 function. Normal choline uptake into cells."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous SLC44A1 variant. May modestly reduce cellular choline uptake."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous SLC44A1 variant. May modestly reduce cellular choline uptake."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous SLC44A1 variant. Reduced choline transporter function may decrease intracellular choline availability for betaine and phosphatidylcholine synthesis."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16207938", "20860029"],
+          "recommendation_text": "SLC44A1 is the primary choline transporter. Variants may reduce cellular choline uptake, potentially increasing dietary choline requirements."
+        },
+        {
+          "rsid": "rs2266782",
+          "gene": "FMO3",
+          "variant_name": "E158K",
+          "hgvs_protein": "p.Glu158Lys",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal flavin-containing monooxygenase 3 activity. Standard TMA oxidation to TMAO."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous FMO3 variant. Mildly reduced TMA→TMAO conversion. Usually no noticeable trimethylaminuria."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous FMO3 variant. Mildly reduced TMA→TMAO conversion. Usually no noticeable trimethylaminuria."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous FMO3 E158K. Reduced TMA oxidation. In the methylation context, altered TMA/TMAO balance reflects choline catabolism efficiency. Rarely sufficient alone for primary trimethylaminuria."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["10666248", "15289165"],
+          "recommendation_text": "FMO3 oxidizes trimethylamine (TMA, from choline/carnitine gut metabolism) to TMAO. In the methylation context, FMO3 activity reflects the fate of choline-derived metabolites. E158K alone rarely causes clinically significant trimethylaminuria."
+        },
+        {
+          "rsid": "rs7639752",
+          "gene": "PCYT1A",
+          "variant_name": "PCYT1A intronic",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Standard CTP:phosphocholine cytidylyltransferase activity. Normal CDP-choline pathway for phosphatidylcholine synthesis."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PCYT1A variant. May modestly affect the Kennedy pathway for phosphatidylcholine synthesis."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous PCYT1A variant. May modestly affect the Kennedy pathway for phosphatidylcholine synthesis."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous PCYT1A variant. May alter CDP-choline pathway flux, shifting phosphatidylcholine synthesis demand toward the PEMT (SAM-dependent) pathway."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["16207938", "20860029"],
+          "recommendation_text": "PCYT1A is the rate-limiting enzyme of the CDP-choline (Kennedy) pathway. Variants may increase reliance on the PEMT pathway for phosphatidylcholine synthesis, which consumes 3 SAM molecules per PC molecule."
+        }
+      ]
+    }
+  ],
+  "special_calling": {
+    "MTHFR_compound_heterozygosity": {
+      "description": "MTHFR compound heterozygosity: one copy of C677T (rs1801133 GA/AG) + one copy of A1298C (rs1801131 AC/CA). Compound heterozygotes may have additively reduced MTHFR function comparable to C677T heterozygosity alone. This is assessed at the module level, not per-SNP.",
+      "rsids": ["rs1801133", "rs1801131"],
+      "states": {
+        "compound_het": {
+          "c677t_genotypes": ["GA", "AG"],
+          "a1298c_genotypes": ["AC", "CA"],
+          "label": "MTHFR compound heterozygote",
+          "description": "One copy of C677T + one copy of A1298C. Additive reduction in MTHFR function. Approximately equivalent to C677T heterozygosity (~65% residual activity). Relevant to folate pathway scoring."
+        },
+        "double_homozygous": {
+          "c677t_genotypes": ["AA"],
+          "a1298c_genotypes": ["CC"],
+          "label": "MTHFR double variant",
+          "description": "Homozygous C677T + homozygous A1298C. Very rare due to linkage disequilibrium (variants are on the same gene). If observed, significant MTHFR impairment expected."
+        }
+      }
+    },
+    "CBS_proxy_note": {
+      "description": "CBS rs234706 (C699T) is a synonymous variant used as a proxy for functional CBS polymorphisms. It does not directly alter CBS protein sequence. The proxy relationship and the specific functional variant(s) it tags are incompletely characterized.",
+      "rsid": "rs234706",
+      "proxy_target": "Functional CBS polymorphism(s) in linkage disequilibrium",
+      "proxy_accuracy_note": "rs234706 is a synonymous (silent) variant. Its association with altered CBS activity is based on linkage disequilibrium with nearby functional variants, which are not fully identified. The proxy relationship varies by ancestry. Results should be interpreted as suggestive, not definitive."
+    },
+    "COMT_catecholamine_framing": {
+      "description": "COMT Val158Met is included in the methylation panel specifically for its role in catecholamine clearance (SAM consumption for catechol-O-methylation). This module does NOT interpret COMT in psychiatric, cognitive, or warrior/worrier frameworks. Framing is strictly metabolic: SAM consumption rate and catecholamine signaling duration.",
+      "rsid": "rs4680",
+      "framing_restriction": "catecholamine_clearance_only"
+    }
+  },
+  "additional_genes": {
+    "nutrigenomics_migration": {
+      "note": "MTHFR C677T (rs1801133) and A1298C (rs1801131) also appear in the Nutrigenomics module's Folate Metabolism pathway. The Methylation module provides a deeper analysis with 5 sub-pathways and ~35 SNPs. On first run, P3-52 will migrate MTHFR findings from Nutrigenomics to this module to prevent duplicates.",
+      "rsids": ["rs1801133", "rs1801131", "rs1801394"]
+    }
+  },
+  "gwas_efo_terms": [
+    "methylation",
+    "homocysteine",
+    "folate",
+    "methionine",
+    "s-adenosylmethionine",
+    "glutathione",
+    "choline",
+    "betaine",
+    "one-carbon",
+    "vitamin b12",
+    "vitamin b6",
+    "cobalamin"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps",
+    "additive_scoring_note": "The methylation module uses additive scoring within pathways: multiple Moderate-level SNPs in the same pathway may collectively warrant a higher pathway-level assessment. This is implemented in P3-52 (methylation.py), not in the panel definition."
+  }
+}
