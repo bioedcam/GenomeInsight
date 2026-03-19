@@ -347,7 +347,8 @@ class TestCeliacCombined:
         """Neither DQ2 nor DQ8 → emphasize high NPV."""
         sc = panel_data["special_calling"]["celiac_DQ2_DQ8_combined"]
         neither = sc["combined_states"]["neither"]
-        assert "npv" in neither["description"].lower() or "99%" in neither["description"]
+        desc_lower = neither["description"].lower()
+        assert "npv" in desc_lower or "99%" in desc_lower
 
     def test_celiac_combined_rsids(self, panel_data: dict) -> None:
         sc = panel_data["special_calling"]["celiac_DQ2_DQ8_combined"]
@@ -553,10 +554,10 @@ class TestGWASEFOTerms:
 
     def test_gwas_efo_terms_match_gwas_loader(self, panel_data: dict) -> None:
         """Panel EFO terms should match the _ALLERGY_TERMS in gwas.py."""
-        from backend.annotation.gwas import _ALLERGY_TERMS
+        from backend.annotation.gwas import EFO_MODULES
 
         panel_terms = frozenset(panel_data["gwas_efo_terms"])
-        assert panel_terms == _ALLERGY_TERMS
+        assert panel_terms == EFO_MODULES["allergy"]
 
 
 # ── Pathway-specific SNP allocation tests ────────────────────────────────
