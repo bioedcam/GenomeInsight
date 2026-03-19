@@ -213,8 +213,8 @@ class TestHLAProxyQueries:
         assert len(dq2) >= 1
         assert len(dq8) >= 1
         # Verify celiac context
-        assert any("celiac" in r.clinical_context.lower() for r in dq2)
-        assert any("celiac" in r.clinical_context.lower() for r in dq8)
+        assert any(r.clinical_context and "celiac" in r.clinical_context.lower() for r in dq2)
+        assert any(r.clinical_context and "celiac" in r.clinical_context.lower() for r in dq8)
 
     def test_all_clinical_contexts_non_empty(self, reference_engine: sa.Engine) -> None:
         self._seed(reference_engine)
