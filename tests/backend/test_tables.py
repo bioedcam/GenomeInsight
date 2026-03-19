@@ -109,7 +109,7 @@ class TestSampleMetadata:
     """Verify sample_metadata_obj contains all expected tables."""
 
     def test_sample_table_count(self):
-        assert len(sample_metadata_obj.tables) == 10
+        assert len(sample_metadata_obj.tables) == 11
 
     def test_sample_table_names(self):
         expected = {
@@ -122,6 +122,7 @@ class TestSampleMetadata:
             "tags",
             "variant_tags",
             "haplogroup_assignments",
+            "panel_coverage",
             "watched_variants",
         }
         assert set(sample_metadata_obj.tables.keys()) == expected
