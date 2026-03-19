@@ -350,12 +350,6 @@
       "to_module": "gene_health",
       "link_type": "ADHD",
       "note": "DRD4 VNTR has been associated with ADHD susceptibility in candidate gene studies."
-    },
-    {
-      "from_trait": "chronotype",
-      "to_module": "sleep",
-      "link_type": "chronotype",
-      "note": "Chronotype-related findings overlap with Gene Sleep module. See Sleep module for CYP1A2 and PER3 variants."
     }
   ],
   "gwas_efo_terms": [

@@ -536,12 +536,6 @@ class TestCrossModuleLinks:
         assert len(adhd_links) == 1
         assert adhd_links[0]["to_module"] == "gene_health"
 
-    def test_chronotype_sleep_link(self, panel_data: dict) -> None:
-        """Chronotype cross-link to Sleep module."""
-        links = panel_data["cross_module_links"]
-        chrono_links = [lk for lk in links if lk["link_type"] == "chronotype"]
-        assert len(chrono_links) == 1
-        assert chrono_links[0]["to_module"] == "sleep"
 
 
 # ── GWAS EFO terms tests ────────────────────────────────────────────────
