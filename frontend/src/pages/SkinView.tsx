@@ -247,7 +247,7 @@ export default function SkinView() {
             "bg-primary/10 text-primary",
           )}
         >
-          <Sun className="h-5 w-5" />
+          <Sun className="h-5 w-5" aria-hidden="true" />
         </div>
         <div>
           <h1 className="text-2xl font-bold">Gene Skin</h1>
