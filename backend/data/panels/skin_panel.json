@@ -1,0 +1,414 @@
+{
+  "module": "skin",
+  "version": "1.0.0",
+  "description": "Curated Gene Skin SNP panel for GenomeInsight (P3-54). Covers 4 skin pathways (Pigmentation & UV Response, Skin Barrier & Inflammation, Oxidative Stress & Aging, Skin Micronutrients) with 10 curated SNPs across MC1R, FLG, GSTP1, MMP1, VDR, and SOD2 plus GWAS Catalog skin/pigmentation EFO term associations. MC1R uses multi-allele haplotype-aware calling (0/1/2 R alleles). FLG 2282del4 flagged as Insufficient Data due to lacking full array coverage.",
+  "pathways": [
+    {
+      "id": "pigmentation_uv",
+      "name": "Pigmentation & UV Response",
+      "description": "Variants influencing melanin production, skin pigmentation, UV sensitivity, and freckling. MC1R is the primary determinant of red hair / fair skin phenotype and melanoma susceptibility.",
+      "snps": [
+        {
+          "rsid": "rs1805007",
+          "gene": "MC1R",
+          "variant_name": "R151C",
+          "hgvs_protein": "p.Arg151Cys",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No R151C variant. Normal MC1R signaling for eumelanin production at this position."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R151C 'R' allele. Reduced MC1R signaling shifts melanin production partially toward pheomelanin. Associated with lighter skin, freckling, and modest increase in UV sensitivity."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R151C 'R' allele. Reduced MC1R signaling shifts melanin production partially toward pheomelanin. Associated with lighter skin, freckling, and modest increase in UV sensitivity."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous R151C. Strongly reduced MC1R function. Associated with red hair, very fair skin, high freckling, and significantly elevated UV sensitivity and melanoma risk."
+            }
+          },
+          "mc1r_allele_class": "R",
+          "evidence_level": 3,
+          "pmids": ["11260714", "17044734", "18488027"],
+          "recommendation_text": "MC1R R151C is a well-established 'R' (strong loss-of-function) allele. Carriers should practice rigorous sun protection including SPF 30+ sunscreen, protective clothing, and avoidance of peak UV hours. Discuss melanoma screening with a dermatologist.",
+          "cross_module": {
+            "module": "cancer",
+            "note": "MC1R R151C is associated with melanoma predisposition. See Cancer module for melanoma risk assessment."
+          }
+        },
+        {
+          "rsid": "rs1805008",
+          "gene": "MC1R",
+          "variant_name": "R160W",
+          "hgvs_protein": "p.Arg160Trp",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No R160W variant. Normal MC1R function at this position."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R160W 'R' allele. Reduced eumelanin production. Associated with lighter pigmentation, freckling, and increased UV sensitivity."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R160W 'R' allele. Reduced eumelanin production. Associated with lighter pigmentation, freckling, and increased UV sensitivity."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous R160W. Strongly impaired MC1R function. Associated with red/auburn hair, very fair skin, and significantly elevated UV sensitivity and melanoma risk."
+            }
+          },
+          "mc1r_allele_class": "R",
+          "evidence_level": 3,
+          "pmids": ["11260714", "17044734", "18488027"],
+          "recommendation_text": "MC1R R160W is a strong loss-of-function ('R') allele. Sun protection is essential for carriers. Discuss skin cancer screening with a healthcare provider.",
+          "cross_module": {
+            "module": "cancer",
+            "note": "MC1R R160W contributes to melanoma predisposition."
+          }
+        },
+        {
+          "rsid": "rs1805009",
+          "gene": "MC1R",
+          "variant_name": "D294H",
+          "hgvs_protein": "p.Asp294His",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No D294H variant. Normal MC1R function at this position."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the D294H 'R' allele. Partial MC1R loss-of-function. Increased pheomelanin relative to eumelanin. Lighter skin pigmentation and increased UV sensitivity."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the D294H 'R' allele. Partial MC1R loss-of-function. Increased pheomelanin relative to eumelanin. Lighter skin pigmentation and increased UV sensitivity."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous D294H. Substantially impaired MC1R signaling. Strong shift toward pheomelanin. Associated with fair skin, red/auburn hair, and significantly elevated melanoma risk."
+            }
+          },
+          "mc1r_allele_class": "R",
+          "evidence_level": 3,
+          "pmids": ["11260714", "17044734", "20197410"],
+          "recommendation_text": "MC1R D294H is classified as a strong 'R' allele. Carriers have elevated melanoma risk and should follow dermatologist-recommended screening schedules.",
+          "cross_module": {
+            "module": "cancer",
+            "note": "MC1R D294H is associated with melanoma predisposition."
+          }
+        },
+        {
+          "rsid": "rs885479",
+          "gene": "MC1R",
+          "variant_name": "R163Q",
+          "hgvs_protein": "p.Arg163Gln",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No R163Q variant. Normal MC1R function at this position."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R163Q 'r' (mild) allele. Modestly reduced MC1R signaling. May contribute to lighter pigmentation and mild increase in UV sensitivity, especially when combined with other MC1R variants."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R163Q 'r' (mild) allele. Modestly reduced MC1R signaling. May contribute to lighter pigmentation and mild increase in UV sensitivity, especially when combined with other MC1R variants."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous R163Q. Mildly impaired MC1R function. Associated with modest pigmentation changes. Lower melanoma risk than strong 'R' alleles, but still contributes to cumulative MC1R effect."
+            }
+          },
+          "mc1r_allele_class": "r",
+          "evidence_level": 2,
+          "pmids": ["11260714", "18488027", "21683322"],
+          "recommendation_text": "MC1R R163Q is classified as a mild 'r' allele with weaker effect than R151C, R160W, or D294H. Its impact is most significant in combination with other MC1R variants. Standard sun protection is recommended."
+        }
+      ]
+    },
+    {
+      "id": "skin_barrier_inflammation",
+      "name": "Skin Barrier & Inflammation",
+      "description": "Variants affecting skin barrier integrity and susceptibility to inflammatory skin conditions such as eczema, psoriasis, and dermatitis.",
+      "snps": [
+        {
+          "rsid": "rs61816761",
+          "gene": "FLG",
+          "variant_name": "2282del4",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No 2282del4 variant detected at this tag SNP. Normal filaggrin expression and skin barrier function."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the FLG loss-of-function tag. Reduced filaggrin expression. Associated with impaired skin barrier and increased susceptibility to atopic dermatitis and eczema."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the FLG loss-of-function tag. Reduced filaggrin expression. Associated with impaired skin barrier and increased susceptibility to atopic dermatitis and eczema."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous FLG loss-of-function tag. Severely impaired skin barrier. Strong association with atopic dermatitis, ichthyosis vulgaris, and increased allergen penetration."
+            }
+          },
+          "coverage_note": "rs61816761 is a tag SNP for the FLG 2282del4 frameshift mutation. The actual 4-base-pair deletion is not directly genotyped on most SNP arrays. This proxy has reduced sensitivity — a negative result does not rule out FLG loss-of-function. Flagged as Insufficient Data for clinical-grade assessment.",
+          "insufficient_data_flag": true,
+          "evidence_level": 2,
+          "pmids": ["16550169", "17597076", "21714652"],
+          "recommendation_text": "FLG loss-of-function variants are the strongest genetic risk factor for atopic dermatitis. Carriers benefit from regular emollient use to maintain skin barrier. Note: this result is based on a proxy SNP and may not capture all FLG mutations. Discuss comprehensive testing with a dermatologist if clinically relevant.",
+          "cross_module": {
+            "module": "allergy",
+            "note": "FLG barrier defects increase allergen penetration and are linked to the atopic march (eczema → rhinitis → asthma)."
+          }
+        }
+      ]
+    },
+    {
+      "id": "oxidative_stress_aging",
+      "name": "Oxidative Stress & Aging",
+      "description": "Variants influencing antioxidant defense, collagen metabolism, and skin aging processes including photoaging and wrinkle formation.",
+      "snps": [
+        {
+          "rsid": "rs1695",
+          "gene": "GSTP1",
+          "variant_name": "Ile105Val",
+          "hgvs_protein": "p.Ile105Val",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Normal GSTP1 enzyme activity (Ile/Ile). Standard glutathione S-transferase detoxification and antioxidant capacity in skin."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Val105 variant (Ile/Val). Mildly reduced GSTP1 enzyme activity. Modestly decreased oxidative stress detoxification capacity in skin cells."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Val105 variant (Ile/Val). Mildly reduced GSTP1 enzyme activity. Modestly decreased oxidative stress detoxification capacity in skin cells."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous Val105 (Val/Val). Reduced GSTP1 detoxification activity. Associated with decreased antioxidant defense in skin and potentially accelerated oxidative skin aging."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["10508479", "21203561", "25589359"],
+          "recommendation_text": "GSTP1 Ile105Val affects glutathione-mediated detoxification. Individuals with reduced activity may benefit from dietary antioxidants (vitamins C and E, selenium) and minimizing environmental oxidative stressors (UV, pollution)."
+        },
+        {
+          "rsid": "rs1799750",
+          "gene": "MMP1",
+          "variant_name": "1G/2G promoter",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "GG",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "1G/1G promoter genotype. Lower MMP1 (collagenase-1) transcription. Standard rate of type I collagen degradation in skin."
+            },
+            "GGGG": {
+              "category": "Elevated",
+              "effect_summary": "2G/2G promoter genotype. Higher MMP1 transcription. Increased collagenase activity leads to accelerated type I collagen degradation. Associated with more pronounced photoaging and wrinkle formation."
+            },
+            "GGG": {
+              "category": "Moderate",
+              "effect_summary": "1G/2G heterozygous promoter. Intermediate MMP1 expression. Mildly increased collagen degradation rate compared to 1G/1G."
+            }
+          },
+          "coverage_note": "The MMP1 -1607 1G/2G polymorphism involves a guanine insertion creating an ETS binding site. On SNP arrays, this is typically captured as rs1799750 with alleles reported as a single G vs GG insertion. Genotype representation may vary by platform.",
+          "evidence_level": 1,
+          "pmids": ["11251926", "16826401", "20622888"],
+          "recommendation_text": "MMP1 2G allele carriers have higher collagenase expression, which may accelerate collagen breakdown and photoaging. Consistent sunscreen use and topical retinoids (under dermatologist guidance) can help counteract collagen degradation."
+        },
+        {
+          "rsid": "rs4880",
+          "gene": "SOD2",
+          "variant_name": "Val16Ala",
+          "hgvs_protein": "p.Val16Ala",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Ala/Ala genotype. SOD2 mitochondrial targeting signal is efficiently processed. Higher baseline mitochondrial superoxide dismutase activity."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Val/Ala heterozygous. Intermediate SOD2 activity. Modest reduction in mitochondrial antioxidant defense."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Val/Ala heterozygous. Intermediate SOD2 activity. Modest reduction in mitochondrial antioxidant defense."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Val/Val genotype. Reduced mitochondrial SOD2 import efficiency. Lower superoxide dismutase activity. Associated with increased oxidative stress and potentially accelerated skin aging."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["10071056", "18466508", "23090862"],
+          "recommendation_text": "SOD2 Val16Ala affects mitochondrial antioxidant defense. Val/Val carriers may benefit from antioxidant-rich diet and UV protection to mitigate oxidative damage to skin."
+        }
+      ]
+    },
+    {
+      "id": "skin_micronutrients",
+      "name": "Skin Micronutrients",
+      "description": "Variants affecting vitamin D receptor signaling and nutrient pathways relevant to skin health, wound healing, and immune modulation in the skin.",
+      "snps": [
+        {
+          "rsid": "rs2228570",
+          "gene": "VDR",
+          "variant_name": "FokI (M1T)",
+          "hgvs_protein": "p.Met1Thr",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "VDR FokI FF genotype. Shorter, more active vitamin D receptor protein. Efficient vitamin D signaling for skin immune function and keratinocyte differentiation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "VDR FokI Ff heterozygous. Intermediate vitamin D receptor activity. Mildly reduced vitamin D-mediated skin immune modulation."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "VDR FokI Ff heterozygous. Intermediate vitamin D receptor activity. Mildly reduced vitamin D-mediated skin immune modulation."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "VDR FokI ff genotype. Longer, less active vitamin D receptor. Reduced vitamin D signaling in skin. Associated with increased susceptibility to psoriasis and reduced skin immune defense."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12773612", "21575918", "26199118"],
+          "recommendation_text": "VDR FokI affects vitamin D receptor activity in skin. Adequate vitamin D status is important for all genotypes but particularly for ff carriers. Discuss vitamin D supplementation with a healthcare provider.",
+          "cross_module": {
+            "module": "nutrigenomics",
+            "note": "VDR FokI is shared with the Nutrigenomics vitamin D pathway. See Nutrigenomics module for dietary vitamin D considerations."
+          }
+        },
+        {
+          "rsid": "rs1544410",
+          "gene": "VDR",
+          "variant_name": "BsmI",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "VDR BsmI BB genotype. Standard vitamin D receptor expression level. Normal vitamin D-mediated skin processes."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "VDR BsmI Bb heterozygous. Mildly altered VDR expression. Subtle effects on vitamin D-related skin health."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "VDR BsmI Bb heterozygous. Mildly altered VDR expression. Subtle effects on vitamin D-related skin health."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "VDR BsmI bb genotype. Reduced VDR expression levels. Associated with lower vitamin D responsiveness in skin and modestly increased psoriasis susceptibility."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12773612", "21575918", "23796876"],
+          "recommendation_text": "VDR BsmI influences vitamin D receptor expression. Maintaining adequate vitamin D levels through diet or supplementation supports skin health across all genotypes.",
+          "cross_module": {
+            "module": "nutrigenomics",
+            "note": "VDR BsmI is relevant to the Nutrigenomics vitamin D pathway."
+          }
+        }
+      ]
+    }
+  ],
+  "special_calling": {
+    "MC1R_multi_allele": {
+      "description": "MC1R multi-allele haplotype-aware calling. MC1R variants are classified as 'R' (strong loss-of-function: R151C, R160W, D294H) or 'r' (mild: R163Q). The cumulative count of R alleles across all MC1R positions determines UV sensitivity and melanoma risk. 0 R alleles → low risk, 1 R allele → moderate risk, 2 R alleles → high risk (regardless of which specific variants).",
+      "rsids": ["rs1805007", "rs1805008", "rs1805009", "rs885479"],
+      "allele_classes": {
+        "rs1805007": "R",
+        "rs1805008": "R",
+        "rs1805009": "R",
+        "rs885479": "r"
+      },
+      "risk_states": {
+        "0_R_alleles": {
+          "label": "Low UV Sensitivity",
+          "description": "No strong MC1R loss-of-function alleles detected. Standard eumelanin production. Baseline melanoma risk."
+        },
+        "1_R_allele": {
+          "label": "Moderate UV Sensitivity",
+          "description": "One strong MC1R loss-of-function allele. Partial shift toward pheomelanin. Increased UV sensitivity and moderately elevated melanoma risk."
+        },
+        "2_R_alleles": {
+          "label": "High UV Sensitivity",
+          "description": "Two or more strong MC1R loss-of-function alleles (compound heterozygous or homozygous). Strongly impaired eumelanin production. Very fair skin, high freckling, and significantly elevated melanoma risk. Rigorous sun protection essential."
+        }
+      }
+    },
+    "FLG_2282del4_proxy": {
+      "description": "FLG 2282del4 is a 4-base-pair frameshift deletion not directly genotyped on most SNP arrays. rs61816761 serves as a proxy tag SNP. The proxy has reduced sensitivity, so absence of the risk allele does not rule out FLG loss-of-function mutations. Result is flagged as Insufficient Data for clinical-grade skin barrier assessment.",
+      "rsid": "rs61816761",
+      "proxy_target": "FLG 2282del4 (c.6867delTATT)",
+      "insufficient_data_reason": "Tag SNP proxy with incomplete linkage — does not capture all FLG null mutations (e.g., R501X). Full sequencing required for comprehensive FLG assessment."
+    }
+  },
+  "gwas_efo_terms": [
+    "skin",
+    "pigmentation",
+    "melanoma",
+    "hair color",
+    "eye color",
+    "freckling",
+    "sun sensitivity",
+    "sunburn",
+    "psoriasis",
+    "eczema",
+    "dermatitis",
+    "acne",
+    "aging",
+    "wrinkle",
+    "vitiligo",
+    "tanning",
+    "skin cancer",
+    "basal cell carcinoma",
+    "squamous cell",
+    "collagen"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps",
+    "mc1r_aggregate_rule": "Count R alleles across all MC1R positions. 0 R alleles → Low, 1 R allele → Moderate, 2+ R alleles → Elevated."
+  }
+}
