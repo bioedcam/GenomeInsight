@@ -212,6 +212,36 @@ class TestPanelCoverageSchema:
             ).fetchall()
             assert len(skin_rows) == 2
 
+    def test_coverage_status_not_nullable(self, sample_engine: sa.Engine) -> None:
+        """coverage_status column rejects NULL values."""
+        with pytest.raises(sa.exc.IntegrityError):
+            with sample_engine.begin() as conn:
+                conn.execute(
+                    sa.insert(panel_coverage),
+                    {
+                        "module": "test",
+                        "rsid": "rs123",
+                        "gene": "GENE",
+                        "expected_trait": "Trait",
+                        "coverage_status": None,
+                    },
+                )
+
+    def test_invalid_coverage_status_rejected(self, sample_engine: sa.Engine) -> None:
+        """CHECK constraint rejects invalid coverage_status values."""
+        with pytest.raises(sa.exc.IntegrityError):
+            with sample_engine.begin() as conn:
+                conn.execute(
+                    sa.insert(panel_coverage),
+                    {
+                        "module": "test",
+                        "rsid": "rs123",
+                        "gene": "GENE",
+                        "expected_trait": "Trait",
+                        "coverage_status": "invalid_status",
+                    },
+                )
+
 
 class TestPanelCoverageMigration:
     """Test ensure_sample_schema_current() adds panel_coverage to old DBs."""

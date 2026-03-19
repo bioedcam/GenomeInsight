@@ -611,7 +611,11 @@ panel_coverage = sa.Table(
         "coverage_status",
         sa.Text,
         nullable=False,
-    ),  # 'called', 'no_call', 'not_on_array'
+    ),
+    sa.CheckConstraint(
+        "coverage_status IN ('called', 'no_call', 'not_on_array')",
+        name="ck_panel_coverage_status",
+    ),
 )
 
 # ── Watched Variants (VUS tracking) ───────────────────────────────────
