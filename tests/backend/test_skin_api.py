@@ -59,8 +59,7 @@ PATHWAY_SUMMARY_FINDINGS = [
                         "genotype": "CT",
                         "category": "Elevated",
                         "effect_summary": (
-                            "MC1R R allele — associated with fair skin"
-                            " and UV sensitivity."
+                            "MC1R R allele — associated with fair skin and UV sensitivity."
                         ),
                         "evidence_level": 3,
                         "mc1r_allele_class": "R",
@@ -74,8 +73,7 @@ PATHWAY_SUMMARY_FINDINGS = [
                         "genotype": "CC",
                         "category": "Standard",
                         "effect_summary": (
-                            "Wild-type — no increased UV sensitivity"
-                            " from this variant."
+                            "Wild-type — no increased UV sensitivity from this variant."
                         ),
                         "evidence_level": 3,
                         "mc1r_allele_class": None,
@@ -89,8 +87,7 @@ PATHWAY_SUMMARY_FINDINGS = [
                         "genotype": "GG",
                         "category": "Standard",
                         "effect_summary": (
-                            "Wild-type — no increased UV sensitivity"
-                            " from this variant."
+                            "Wild-type — no increased UV sensitivity from this variant."
                         ),
                         "evidence_level": 3,
                         "mc1r_allele_class": None,
@@ -209,8 +206,7 @@ SNP_FINDINGS = [
         "gene_symbol": "MC1R",
         "rsid": "rs1805007",
         "finding_text": (
-            "MC1R R151C (CT) — MC1R R allele —"
-            " associated with fair skin and UV sensitivity."
+            "MC1R R151C (CT) — MC1R R allele — associated with fair skin and UV sensitivity."
         ),
         "pathway": "Pigmentation & UV Response",
         "pathway_level": "Elevated",
@@ -220,8 +216,7 @@ SNP_FINDINGS = [
                 "variant_name": "R151C",
                 "genotype": "CT",
                 "recommendation": (
-                    "Consider enhanced UV protection"
-                    " and regular dermatological screenings."
+                    "Consider enhanced UV protection and regular dermatological screenings."
                 ),
                 "mc1r_allele_class": "R",
             }
@@ -242,8 +237,7 @@ SNP_FINDINGS = [
                 "variant_name": "I105V",
                 "genotype": "AG",
                 "recommendation": (
-                    "Consider antioxidant-rich diet"
-                    " and topical antioxidant products."
+                    "Consider antioxidant-rich diet and topical antioxidant products."
                 ),
             }
         ),
@@ -271,8 +265,7 @@ MC1R_AGGREGATE_FINDING = {
             "total_mc1r_called": 3,
             "risk_label": "Moderate UV Sensitivity",
             "risk_description": (
-                "Carrier of one strong MC1R variant;"
-                " moderately increased UV sensitivity."
+                "Carrier of one strong MC1R variant; moderately increased UV sensitivity."
             ),
         }
     ),
@@ -321,8 +314,7 @@ CROSS_MODULE_FINDINGS = [
                 "source_module": "skin",
                 "target_module": "cancer",
                 "cross_link_reason": (
-                    "MC1R loss-of-function variants"
-                    " associated with melanoma risk."
+                    "MC1R loss-of-function variants associated with melanoma risk."
                 ),
             }
         ),
