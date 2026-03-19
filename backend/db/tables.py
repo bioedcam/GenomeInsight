@@ -328,6 +328,37 @@ gwas_associations = sa.Table(
     sa.Column("sample_size", sa.Integer),
 )
 
+# ── HLA Proxy Lookup ─────────────────────────────────────────────────
+
+hla_proxy_lookup = sa.Table(
+    "hla_proxy_lookup",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("hla_allele", sa.Text, nullable=False, comment="e.g. HLA-B*57:01"),
+    sa.Column("proxy_rsid", sa.Text, nullable=False, comment="Tagging SNP rsid"),
+    sa.Column(
+        "r_squared",
+        sa.Float,
+        nullable=False,
+        comment="Linkage disequilibrium r² value",
+    ),
+    sa.Column(
+        "ancestry_pop",
+        sa.Text,
+        nullable=False,
+        comment="Ancestry population e.g. EUR, EAS, ALL",
+    ),
+    sa.Column(
+        "clinical_context",
+        sa.Text,
+        comment="Clinical association e.g. Abacavir hypersensitivity",
+    ),
+    sa.Column("pmid", sa.Text, comment="Supporting publication PMID"),
+)
+
+sa.Index("idx_hla_proxy_rsid", hla_proxy_lookup.c.proxy_rsid)
+sa.Index("idx_hla_proxy_allele", hla_proxy_lookup.c.hla_allele)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sample DB (sample_{id}.db) — Created programmatically per sample
