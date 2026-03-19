@@ -48,15 +48,6 @@ export interface PathwaysResponse {
 }
 
 /** Full pathway detail with per-SNP breakdown. */
-export interface PathwayDetailResponse {
-  pathway_id: string
-  pathway_name: string
-  level: PathwayLevel
-  evidence_level: number
-  called_snps: number
-  total_snps: number
-  missing_snps: string[]
-  pmids: string[]
-  additive_promoted: boolean
+export interface PathwayDetailResponse extends PathwaySummary {
   snp_details: SNPDetail[]
 }
