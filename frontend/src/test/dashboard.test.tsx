@@ -222,7 +222,7 @@ describe('ModuleCard', () => {
 // ─── ModuleCardsGrid ────────────────────────────────────────
 
 describe('ModuleCardsGrid', () => {
-  it('renders all 7 module cards', () => {
+  it('renders all 10 module cards', () => {
     render(<ModuleCardsGrid sampleId={null} />)
     expect(screen.getByText('Pharmacogenomics')).toBeInTheDocument()
     expect(screen.getByText('Nutrigenomics')).toBeInTheDocument()
@@ -231,6 +231,9 @@ describe('ModuleCardsGrid', () => {
     expect(screen.getByText('APOE')).toBeInTheDocument()
     expect(screen.getByText('Carrier Status')).toBeInTheDocument()
     expect(screen.getByText('Ancestry')).toBeInTheDocument()
+    expect(screen.getByText('Gene Fitness')).toBeInTheDocument()
+    expect(screen.getByText('Gene Sleep')).toBeInTheDocument()
+    expect(screen.getByText('Gene Allergy')).toBeInTheDocument()
   })
 
   it('has an accessible section label', () => {
