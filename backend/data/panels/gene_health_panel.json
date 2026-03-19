@@ -1,0 +1,1361 @@
+{
+  "module": "gene_health",
+  "version": "1.0.0",
+  "description": "Curated Gene Health expansion panel for GenomeInsight (P3-65). Covers 17 disease conditions across 4 body-system pathways (Neurological, Metabolic, Autoimmune, Sensory) with variants from ClinVar pathogenic classifications and replicated GWAS findings. Includes cross-module links to APOE, Allergy, Methylation, Nutrigenomics, and Traits modules.",
+  "evidence_cap": null,
+  "module_disclaimer": "Gene Health findings are based on published genetic association studies and ClinVar pathogenic classifications. Results indicate statistical associations, not diagnoses. Many conditions have complex environmental and lifestyle components. Consult a healthcare provider or genetic counselor for clinical interpretation.",
+  "pathways": [
+    {
+      "id": "neurological",
+      "name": "Neurological Conditions",
+      "description": "Variants associated with neurological disease susceptibility including Alzheimer's disease, Parkinson's disease, multiple sclerosis, ADHD, and migraine. These variants affect neuroinflammatory, dopaminergic, and vascular pathways. Many neurological conditions are polygenic with significant environmental contributions.",
+      "snps": [
+        {
+          "rsid": "rs429358",
+          "gene": "APOE",
+          "variant_name": "APOE epsilon 4 determinant",
+          "hgvs_protein": "p.Cys112Arg",
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No APOE epsilon 4 allele at this position. Baseline population risk for late-onset Alzheimer's disease."
+            },
+            "TC": {
+              "category": "Elevated",
+              "effect_summary": "One copy of the APOE epsilon 4 determinant. Associated with approximately 3-fold increased risk of late-onset Alzheimer's disease compared to epsilon 3/3. Earlier average age of onset."
+            },
+            "CT": {
+              "category": "Elevated",
+              "effect_summary": "One copy of the APOE epsilon 4 determinant. Associated with approximately 3-fold increased risk of late-onset Alzheimer's disease compared to epsilon 3/3. Earlier average age of onset."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous APOE epsilon 4 determinant. Associated with approximately 12-fold increased risk of late-onset Alzheimer's disease. Substantially earlier average age of onset. This is the strongest common genetic risk factor for Alzheimer's disease."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["8346443", "19734902", "23571587"],
+          "recommendation_text": "APOE epsilon 4 is the strongest common genetic risk factor for late-onset Alzheimer's disease. Carriers should discuss risk management with a neurologist or genetic counselor. Modifiable risk factors include cardiovascular health, physical activity, and cognitive engagement. See the APOE module for comprehensive epsilon allele calling and additional context.",
+          "cross_module": {
+            "module": "apoe",
+            "note": "This SNP is a component of APOE epsilon allele determination. See APOE module for full epsilon 2/3/4 haplotype calling and cardiovascular implications."
+          }
+        },
+        {
+          "rsid": "rs3764650",
+          "gene": "ABCA7",
+          "variant_name": "ABCA7 intron 13",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at ABCA7 locus. Baseline population risk for Alzheimer's disease at this locus."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ABCA7 risk allele. Modestly increased risk of late-onset Alzheimer's disease. ABCA7 is involved in lipid transport and amyloid-beta clearance in the brain."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ABCA7 risk allele. Modestly increased risk of late-onset Alzheimer's disease. ABCA7 is involved in lipid transport and amyloid-beta clearance in the brain."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous ABCA7 risk allele. Associated with increased risk of late-onset Alzheimer's disease. ABCA7 loss-of-function variants impair amyloid-beta phagocytosis and lipid homeostasis in the central nervous system."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["21460841", "22005930", "25188341"],
+          "recommendation_text": "ABCA7 is a replicated GWAS locus for Alzheimer's disease risk, independent of APOE. The gene product mediates lipid transport across cell membranes and is involved in amyloid-beta clearance. Risk allele carriers should maintain cardiovascular health and discuss screening with a neurologist if family history is present."
+        },
+        {
+          "rsid": "rs11136000",
+          "gene": "CLU",
+          "variant_name": "CLU intergenic",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Carries the protective C allele. CLU (clusterin/apolipoprotein J) is involved in amyloid-beta clearance and neuroinflammation regulation."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T risk allele. Modestly reduced CLU expression associated with slightly increased Alzheimer's disease risk. Clusterin plays a role in amyloid-beta clearance."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the T risk allele. Modestly reduced CLU expression associated with slightly increased Alzheimer's disease risk. Clusterin plays a role in amyloid-beta clearance."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous T risk allele. Associated with reduced clusterin levels and modestly increased Alzheimer's disease risk. Effect size is small (OR ~1.16) and insufficient for individual prediction."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["19734903", "21460841", "24162737"],
+          "recommendation_text": "CLU is a replicated Alzheimer's disease GWAS locus with a modest effect size. Clusterin (apolipoprotein J) is involved in amyloid-beta clearance and complement regulation. This finding contributes to polygenic risk assessment but has limited individual predictive value."
+        },
+        {
+          "rsid": "rs34637584",
+          "gene": "LRRK2",
+          "variant_name": "G2019S",
+          "hgvs_protein": "p.Gly2019Ser",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No LRRK2 G2019S variant detected. Baseline population risk for Parkinson's disease at this locus."
+            },
+            "GA": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous LRRK2 G2019S. This is the most common genetic cause of familial Parkinson's disease. Penetrance is age-dependent: approximately 28% by age 59, 51% by age 69, and 74% by age 79."
+            },
+            "AG": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous LRRK2 G2019S. This is the most common genetic cause of familial Parkinson's disease. Penetrance is age-dependent: approximately 28% by age 59, 51% by age 69, and 74% by age 79."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous LRRK2 G2019S. Very rare genotype. High risk of Parkinson's disease with increased kinase activity. Clinical presentation is typically similar to idiopathic Parkinson's disease."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["15541309", "18322019", "30957308"],
+          "recommendation_text": "LRRK2 G2019S is the most common cause of autosomal dominant Parkinson's disease, found in ~1-2% of sporadic and ~5% of familial cases. Carriers should discuss screening and monitoring with a neurologist. Clinical trials targeting LRRK2 kinase inhibitors are active. Genetic counseling is recommended for family planning."
+        },
+        {
+          "rsid": "rs76763715",
+          "gene": "GBA",
+          "variant_name": "N370S (GBA1)",
+          "hgvs_protein": "p.Asn370Ser",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No GBA N370S variant detected. Baseline population risk for Parkinson's disease at this locus."
+            },
+            "CT": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous GBA N370S. Associated with approximately 5-fold increased risk of Parkinson's disease. GBA variants impair lysosomal glucocerebrosidase activity and alpha-synuclein clearance."
+            },
+            "TC": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous GBA N370S. Associated with approximately 5-fold increased risk of Parkinson's disease. GBA variants impair lysosomal glucocerebrosidase activity and alpha-synuclein clearance."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous GBA N370S. Associated with Gaucher disease (type 1) and substantially elevated Parkinson's disease risk. Severely reduced glucocerebrosidase activity."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["19846850", "25064009", "29847231"],
+          "recommendation_text": "GBA N370S is a well-established risk factor for Parkinson's disease. Heterozygous carriers have ~5-fold increased risk. The variant also causes Gaucher disease in homozygotes. Carriers should discuss neurological monitoring with a specialist. GBA-targeted therapies (substrate reduction, chaperone therapy) are under investigation for GBA-associated Parkinson's disease."
+        },
+        {
+          "rsid": "rs356219",
+          "gene": "SNCA",
+          "variant_name": "SNCA 3' UTR",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at SNCA locus. Baseline alpha-synuclein expression levels."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SNCA risk allele. Associated with modestly increased alpha-synuclein expression and slightly elevated Parkinson's disease risk."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SNCA risk allele. Associated with modestly increased alpha-synuclein expression and slightly elevated Parkinson's disease risk."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous SNCA risk allele. Associated with increased alpha-synuclein expression. Replicated GWAS association with Parkinson's disease, though individual effect size is small (OR ~1.3)."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["19915575", "21738487", "24842889"],
+          "recommendation_text": "SNCA encodes alpha-synuclein, the primary component of Lewy bodies in Parkinson's disease. This common variant modestly increases alpha-synuclein expression and Parkinson's risk. Effect size is small and insufficient for individual prediction. Contributes to polygenic risk assessment."
+        },
+        {
+          "rsid": "rs3135388",
+          "gene": "HLA-DRB1",
+          "variant_name": "HLA-DRB1*15:01 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No HLA-DRB1*15:01 proxy allele detected. Baseline population risk for multiple sclerosis at this locus."
+            },
+            "GA": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DRB1*15:01 proxy allele. Associated with approximately 3-fold increased risk of multiple sclerosis. HLA-DRB1*15:01 is the strongest genetic risk factor for MS."
+            },
+            "AG": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DRB1*15:01 proxy allele. Associated with approximately 3-fold increased risk of multiple sclerosis. HLA-DRB1*15:01 is the strongest genetic risk factor for MS."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-DRB1*15:01 proxy. Associated with approximately 6-fold increased risk of multiple sclerosis. Homozygous carriers have the highest HLA-attributable MS risk."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17660530", "21833088", "29904014"],
+          "recommendation_text": "HLA-DRB1*15:01 is the strongest genetic risk factor for multiple sclerosis, accounting for ~30% of the genetic risk. This proxy tag SNP (r² ~0.97 in EUR for DRB1*15:01) indicates MS susceptibility. Environmental factors including vitamin D, EBV infection, and smoking modulate penetrance. Neurological evaluation is recommended if symptoms develop."
+        },
+        {
+          "rsid": "rs6897932",
+          "gene": "IL7R",
+          "variant_name": "T244I",
+          "hgvs_protein": "p.Thr244Ile",
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at IL7R. Standard IL-7 receptor alpha chain expression and T-cell homeostasis."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IL7R risk allele. Modestly increased proportion of soluble IL-7 receptor alpha, which may affect T-cell development and increase multiple sclerosis susceptibility."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IL7R risk allele. Modestly increased proportion of soluble IL-7 receptor alpha, which may affect T-cell development and increase multiple sclerosis susceptibility."
+            },
+            "CC": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous IL7R risk allele. Increased soluble IL-7R alpha levels. Replicated GWAS association with multiple sclerosis (OR ~1.2). Effect size is modest."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17660530", "18385739", "21833088"],
+          "recommendation_text": "IL7R T244I affects the ratio of membrane-bound to soluble IL-7 receptor alpha, influencing T-cell homeostasis. This is a replicated MS GWAS locus with modest effect size. Contributes to polygenic risk alongside HLA-DRB1*15:01."
+        },
+        {
+          "rsid": "rs2104286",
+          "gene": "IL2RA",
+          "variant_name": "IL2RA intron 1",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at IL2RA. Standard CD25 (IL-2 receptor alpha) expression on regulatory T cells."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IL2RA risk allele. Associated with reduced CD25 expression on regulatory T cells, potentially impairing immune tolerance. Modestly increased MS susceptibility."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IL2RA risk allele. Associated with reduced CD25 expression on regulatory T cells, potentially impairing immune tolerance. Modestly increased MS susceptibility."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous IL2RA risk allele. Reduced CD25 expression may impair regulatory T-cell function. Replicated GWAS association with multiple sclerosis and type 1 diabetes (OR ~1.2)."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17660530", "19525953", "21833088"],
+          "recommendation_text": "IL2RA (CD25) variants affect regulatory T-cell function and have been associated with multiple sclerosis and type 1 diabetes in GWAS. Effect size is modest. This locus highlights shared autoimmune genetic architecture."
+        },
+        {
+          "rsid": "rs747302",
+          "gene": "DRD4",
+          "variant_name": "DRD4 exon III VNTR proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No DRD4 7-repeat proxy allele detected. Baseline dopamine D4 receptor function."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of DRD4 VNTR proxy risk allele. The 7-repeat allele has been associated with ADHD susceptibility and altered dopamine D4 receptor signaling, though effect sizes are small and replication is inconsistent."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of DRD4 VNTR proxy risk allele. The 7-repeat allele has been associated with ADHD susceptibility and altered dopamine D4 receptor signaling, though effect sizes are small and replication is inconsistent."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous DRD4 VNTR proxy risk allele. Associated with ADHD susceptibility in candidate gene studies. The DRD4 7-repeat allele results in blunted dopamine D4 receptor response. Evidence is at the candidate gene level with inconsistent replication."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["11244489", "16999713", "20732625"],
+          "recommendation_text": "DRD4 exon III VNTR 7-repeat allele is one of the most studied ADHD candidate gene variants. This is a proxy tag SNP with moderate accuracy (r² ~0.3-0.5 in EUR). ADHD is highly heritable (~75%) but polygenic. Clinical ADHD diagnosis requires comprehensive behavioral evaluation and cannot be determined by genotype alone.",
+          "cross_module": {
+            "module": "traits",
+            "note": "DRD4 VNTR proxy is the canonical ADHD finding. Cross-linked from Traits module where it also appears under novelty seeking."
+          }
+        },
+        {
+          "rsid": "rs3746544",
+          "gene": "SNAP25",
+          "variant_name": "SNAP25 3' UTR",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at SNAP25 locus. Standard synaptosomal-associated protein 25 expression and synaptic vesicle exocytosis."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SNAP25 risk allele. SNAP25 is involved in synaptic vesicle docking and neurotransmitter release. Associated with modest ADHD susceptibility in candidate gene studies."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SNAP25 risk allele. SNAP25 is involved in synaptic vesicle docking and neurotransmitter release. Associated with modest ADHD susceptibility in candidate gene studies."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous SNAP25 risk allele. Associated with ADHD susceptibility in candidate gene studies. SNAP25 is part of the SNARE complex essential for synaptic transmission. Evidence is at the candidate gene level."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["12402218", "17965720", "20584310"],
+          "recommendation_text": "SNAP25 variants have been associated with ADHD in candidate gene studies. The SNAP25 protein is critical for synaptic vesicle fusion and neurotransmitter release. Effect sizes are small and this finding contributes to polygenic ADHD risk assessment only."
+        },
+        {
+          "rsid": "rs1801133",
+          "gene": "MTHFR",
+          "variant_name": "C677T",
+          "hgvs_protein": "p.Ala222Val",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Normal MTHFR enzyme activity. Standard folate metabolism and homocysteine levels. No increased migraine risk at this locus."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of MTHFR C677T. Approximately 35% reduced enzyme activity. Mildly elevated homocysteine levels, which have been associated with migraine with aura susceptibility."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of MTHFR C677T. Approximately 35% reduced enzyme activity. Mildly elevated homocysteine levels, which have been associated with migraine with aura susceptibility."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous MTHFR C677T (TT genotype). Approximately 70% reduced enzyme activity. Significantly elevated homocysteine levels. Associated with increased risk of migraine with aura (OR ~2.0) and potentially other vascular conditions."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["15592354", "20689844", "25904306"],
+          "recommendation_text": "MTHFR C677T TT genotype is associated with elevated homocysteine and increased risk of migraine with aura. Folate supplementation (as methylfolate) may help reduce homocysteine levels. See the Methylation module for comprehensive MTHFR functional assessment and folate pathway analysis.",
+          "cross_module": {
+            "module": "methylation",
+            "note": "MTHFR C677T is the primary variant in the Methylation module. See Methylation for folate cycle analysis and supplementation guidance."
+          }
+        },
+        {
+          "rsid": "rs10166942",
+          "gene": "TRPM8",
+          "variant_name": "TRPM8 upstream",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at TRPM8 locus. Standard cold-sensing receptor expression."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TRPM8 risk allele. TRPM8 encodes a cold and menthol receptor. This variant is associated with modestly increased migraine susceptibility in large GWAS."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TRPM8 risk allele. TRPM8 encodes a cold and menthol receptor. This variant is associated with modestly increased migraine susceptibility in large GWAS."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous TRPM8 risk allele. Replicated GWAS association with migraine (OR ~1.2). TRPM8 is a cold-sensitive ion channel expressed in trigeminal sensory neurons involved in migraine pathophysiology."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["20418890", "23793025", "27322543"],
+          "recommendation_text": "TRPM8 is one of the most replicated GWAS loci for migraine. The cold-sensing ion channel is expressed in trigeminal neurons. This finding has modest effect size and contributes to polygenic migraine risk assessment. Trigger avoidance and prophylactic therapies should be discussed with a neurologist."
+        }
+      ]
+    },
+    {
+      "id": "metabolic",
+      "name": "Metabolic Conditions",
+      "description": "Variants associated with metabolic disease susceptibility including type 2 diabetes, obesity, gout, and non-alcoholic fatty liver disease. These variants affect insulin signaling, lipid metabolism, urate transport, and hepatic lipid handling. Metabolic conditions are strongly influenced by diet, physical activity, and body composition.",
+      "snps": [
+        {
+          "rsid": "rs7903146",
+          "gene": "TCF7L2",
+          "variant_name": "TCF7L2 intron 3",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at TCF7L2. Standard beta-cell function and incretin signaling."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TCF7L2 risk allele. Associated with impaired beta-cell function and reduced incretin effect. Approximately 1.4-fold increased type 2 diabetes risk."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TCF7L2 risk allele. Associated with impaired beta-cell function and reduced incretin effect. Approximately 1.4-fold increased type 2 diabetes risk."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous TCF7L2 risk allele. The strongest common genetic risk factor for type 2 diabetes (OR ~2.0). Associated with significantly impaired beta-cell function, reduced insulin secretion, and diminished incretin response."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["16415884", "17463246", "22977957"],
+          "recommendation_text": "TCF7L2 is the strongest and most replicated common genetic risk factor for type 2 diabetes. Risk allele carriers have impaired beta-cell insulin secretion and reduced incretin effect. Regular glucose monitoring, healthy diet, physical activity, and weight management are recommended. Metformin has shown benefit in diabetes prevention trials."
+        },
+        {
+          "rsid": "rs1801282",
+          "gene": "PPARG",
+          "variant_name": "Pro12Ala",
+          "hgvs_protein": "p.Pro12Ala",
+          "risk_allele": "C",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous for the Ala12 variant. This is actually the protective allele associated with improved insulin sensitivity and reduced type 2 diabetes risk."
+            },
+            "GC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous Pro12Ala. Intermediate insulin sensitivity. The Ala12 allele confers modest protection against type 2 diabetes."
+            },
+            "CG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous Pro12Ala. Intermediate insulin sensitivity. The Ala12 allele confers modest protection against type 2 diabetes."
+            },
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Homozygous Pro12 (common allele). Standard PPARG activity. This is the more common genotype associated with baseline type 2 diabetes risk at this locus."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["10862766", "16702423", "17463246"],
+          "recommendation_text": "PPARG Pro12Ala is a well-replicated type 2 diabetes locus. The Pro12 allele (common) confers modestly increased risk. PPARG is the molecular target of thiazolidinedione drugs. Lifestyle intervention remains effective regardless of genotype."
+        },
+        {
+          "rsid": "rs5219",
+          "gene": "KCNJ11",
+          "variant_name": "E23K",
+          "hgvs_protein": "p.Glu23Lys",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at KCNJ11 E23K. Standard KATP channel function and insulin secretion."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of KCNJ11 E23K risk allele. Modest alteration in pancreatic KATP channel activity. Associated with slightly reduced insulin secretion and increased type 2 diabetes susceptibility."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of KCNJ11 E23K risk allele. Modest alteration in pancreatic KATP channel activity. Associated with slightly reduced insulin secretion and increased type 2 diabetes susceptibility."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous KCNJ11 E23K. Altered KATP channel activity leads to reduced glucose-stimulated insulin secretion. Replicated GWAS association with type 2 diabetes (OR ~1.15). Sulfonylureas target this channel."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["12874175", "17463246", "22101970"],
+          "recommendation_text": "KCNJ11 E23K affects the pancreatic beta-cell KATP channel and is a replicated type 2 diabetes risk locus. The KATP channel is the molecular target of sulfonylurea drugs. This finding contributes to polygenic diabetes risk assessment."
+        },
+        {
+          "rsid": "rs13266634",
+          "gene": "SLC30A8",
+          "variant_name": "R325W",
+          "hgvs_protein": "p.Arg325Trp",
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Homozygous for the Trp325 (protective) allele. Loss-of-function variants in SLC30A8 are associated with reduced type 2 diabetes risk."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous R325W. Intermediate zinc transporter 8 activity in pancreatic beta cells."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous R325W. Intermediate zinc transporter 8 activity in pancreatic beta cells."
+            },
+            "CC": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous Arg325 (common/risk allele). Standard SLC30A8 zinc transporter activity. Associated with modestly increased type 2 diabetes risk (OR ~1.12). SLC30A8 transports zinc into insulin secretory granules."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17460697", "17463246", "24584071"],
+          "recommendation_text": "SLC30A8 encodes the zinc transporter ZnT8, which is critical for insulin crystallization in beta-cell secretory granules. The R325W variant is a replicated type 2 diabetes locus. Interestingly, loss-of-function variants in SLC30A8 protect against type 2 diabetes, making this a potential therapeutic target."
+        },
+        {
+          "rsid": "rs9939609",
+          "gene": "FTO",
+          "variant_name": "FTO intron 1",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No FTO risk allele. Baseline adiposity regulation at this locus."
+            },
+            "TA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of FTO risk allele. Associated with approximately 1.2 kg higher average body weight and modestly increased obesity risk (OR ~1.3). FTO variants influence appetite regulation via hypothalamic signaling."
+            },
+            "AT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of FTO risk allele. Associated with approximately 1.2 kg higher average body weight and modestly increased obesity risk (OR ~1.3). FTO variants influence appetite regulation via hypothalamic signaling."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous FTO risk allele. Associated with approximately 3 kg higher average body weight and ~1.7-fold increased obesity risk. The strongest common genetic contributor to BMI variation. Effect is modulated by physical activity."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17434869", "18454148", "23563607"],
+          "recommendation_text": "FTO is the most replicated obesity GWAS locus. Risk allele effect on BMI is attenuated by physical activity. Carriers benefit from regular exercise and mindful eating. See the Nutrigenomics module for dietary considerations related to FTO genotype.",
+          "cross_module": {
+            "module": "nutrigenomics",
+            "note": "FTO rs9939609 influences appetite regulation and macronutrient metabolism. See Nutrigenomics for dietary recommendations."
+          }
+        },
+        {
+          "rsid": "rs17782313",
+          "gene": "MC4R",
+          "variant_name": "MC4R downstream",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No risk allele near MC4R. Standard melanocortin 4 receptor signaling and appetite regulation."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of MC4R risk allele. Associated with modestly increased BMI and childhood obesity risk. MC4R is a key appetite regulator in the hypothalamic leptin-melanocortin pathway."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of MC4R risk allele. Associated with modestly increased BMI and childhood obesity risk. MC4R is a key appetite regulator in the hypothalamic leptin-melanocortin pathway."
+            },
+            "CC": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous MC4R risk allele. Replicated GWAS association with increased BMI and obesity (OR ~1.2 per allele). MC4R loss-of-function is the most common monogenic cause of severe obesity, though this common variant has a modest effect."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["18454148", "19151714", "23563607"],
+          "recommendation_text": "MC4R is a central regulator of appetite and energy balance. This common variant near MC4R has a modest effect on BMI. Rare MC4R loss-of-function mutations cause severe monogenic obesity. Setmelanotide, an MC4R agonist, is FDA-approved for rare obesity syndromes."
+        },
+        {
+          "rsid": "rs2231142",
+          "gene": "ABCG2",
+          "variant_name": "Q141K",
+          "hgvs_protein": "p.Gln141Lys",
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at ABCG2 Q141K. Normal renal and intestinal urate excretion via ABCG2 transporter."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ABCG2 Q141K. Approximately 50% reduced ABCG2 urate transport capacity. Associated with elevated serum urate and increased gout risk (OR ~1.7)."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ABCG2 Q141K. Approximately 50% reduced ABCG2 urate transport capacity. Associated with elevated serum urate and increased gout risk (OR ~1.7)."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous ABCG2 Q141K. Severely reduced urate excretion capacity. Strongly associated with hyperuricemia and gout (OR ~3.0). Earlier onset and more severe gout episodes reported. May also affect drug transport (e.g., rosuvastatin)."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["18834626", "22884227", "27457907"],
+          "recommendation_text": "ABCG2 Q141K is one of the strongest genetic risk factors for gout. The variant reduces urate excretion through the kidneys and intestines. Carriers should monitor serum urate levels, maintain hydration, limit purine-rich foods and alcohol, and discuss urate-lowering therapy with a rheumatologist if symptomatic."
+        },
+        {
+          "rsid": "rs12498742",
+          "gene": "SLC2A9",
+          "variant_name": "SLC2A9 intron",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at SLC2A9. Standard renal urate reabsorption. SLC2A9 (GLUT9) is the primary renal urate transporter."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SLC2A9 risk allele. Associated with altered urate handling and modestly elevated serum urate levels. SLC2A9 explains the largest proportion of serum urate variation among GWAS loci."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SLC2A9 risk allele. Associated with altered urate handling and modestly elevated serum urate levels. SLC2A9 explains the largest proportion of serum urate variation among GWAS loci."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous SLC2A9 risk allele. Associated with significantly elevated serum urate levels and increased gout risk. SLC2A9 variants account for ~3-4% of serum urate variance, the largest single-gene contribution."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["18327257", "19503597", "22884227"],
+          "recommendation_text": "SLC2A9 (GLUT9) is the principal renal urate transporter and the largest single genetic contributor to serum urate variation. Risk allele carriers should monitor serum urate, stay well hydrated, and moderate purine and fructose intake."
+        },
+        {
+          "rsid": "rs738409",
+          "gene": "PNPLA3",
+          "variant_name": "I148M",
+          "hgvs_protein": "p.Ile148Met",
+          "risk_allele": "G",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No PNPLA3 I148M variant. Standard hepatic triglyceride metabolism."
+            },
+            "CG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of PNPLA3 I148M. Associated with increased hepatic fat accumulation and modestly elevated risk of non-alcoholic fatty liver disease (NAFLD) and steatohepatitis (NASH)."
+            },
+            "GC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of PNPLA3 I148M. Associated with increased hepatic fat accumulation and modestly elevated risk of non-alcoholic fatty liver disease (NAFLD) and steatohepatitis (NASH)."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous PNPLA3 I148M. Strongly associated with hepatic steatosis, NASH, fibrosis, and hepatocellular carcinoma. The I148M variant impairs hepatic lipid droplet remodeling, leading to triglyceride accumulation. OR ~3.2 for NAFLD."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["18820647", "21111025", "26752085"],
+          "recommendation_text": "PNPLA3 I148M is the strongest genetic risk factor for NAFLD/NASH. Homozygous carriers have substantially elevated risk of hepatic steatosis and progression to fibrosis. Risk is amplified by obesity, alcohol, and high-sugar diets. Carriers should maintain healthy weight, limit alcohol, and consider liver health monitoring."
+        },
+        {
+          "rsid": "rs58542926",
+          "gene": "TM6SF2",
+          "variant_name": "E167K",
+          "hgvs_protein": "p.Glu167Lys",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No TM6SF2 E167K variant. Standard hepatic VLDL secretion and lipid export."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TM6SF2 E167K. Reduced VLDL secretion from the liver. Associated with increased hepatic fat content but paradoxically lower serum triglycerides and reduced cardiovascular risk."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of TM6SF2 E167K. Reduced VLDL secretion from the liver. Associated with increased hepatic fat content but paradoxically lower serum triglycerides and reduced cardiovascular risk."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous TM6SF2 E167K. Significantly impaired hepatic VLDL secretion. Associated with NAFLD and hepatic fibrosis progression. Paradoxically protective against cardiovascular disease due to lower circulating lipids."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["24531328", "25129146", "27184023"],
+          "recommendation_text": "TM6SF2 E167K illustrates the 'liver vs. cardiovascular' trade-off: the variant increases hepatic fat but lowers circulating lipids. Carriers should be monitored for liver health, particularly in the context of obesity or metabolic syndrome."
+        }
+      ]
+    },
+    {
+      "id": "autoimmune",
+      "name": "Autoimmune Conditions",
+      "description": "Variants associated with autoimmune disease susceptibility including rheumatoid arthritis, type 1 diabetes, inflammatory bowel disease, celiac disease, and systemic lupus erythematosus. Autoimmune diseases share genetic architecture, particularly in HLA and immune signaling genes, reflecting common dysregulation of self-tolerance.",
+      "snps": [
+        {
+          "rsid": "rs6910071",
+          "gene": "HLA-DRB1",
+          "variant_name": "HLA-DRB1 shared epitope proxy",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No HLA-DRB1 shared epitope proxy allele detected. Baseline population risk for rheumatoid arthritis at this locus."
+            },
+            "GA": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DRB1 shared epitope proxy. Associated with approximately 2.5-fold increased risk of seropositive (anti-CCP positive) rheumatoid arthritis. The shared epitope drives aberrant T-cell activation against citrullinated peptides."
+            },
+            "AG": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DRB1 shared epitope proxy. Associated with approximately 2.5-fold increased risk of seropositive (anti-CCP positive) rheumatoid arthritis. The shared epitope drives aberrant T-cell activation against citrullinated peptides."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-DRB1 shared epitope proxy. Associated with ~5-fold increased risk of seropositive rheumatoid arthritis. Homozygous shared epitope carriers may have more severe disease and erosive joint damage."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17804836", "20453842", "24449576"],
+          "recommendation_text": "HLA-DRB1 shared epitope alleles are the strongest genetic risk factor for seropositive rheumatoid arthritis, explaining ~40% of genetic risk. Risk is amplified by smoking. Anti-CCP antibody testing is recommended for at-risk individuals. Early detection and treatment with disease-modifying antirheumatic drugs (DMARDs) can prevent joint destruction."
+        },
+        {
+          "rsid": "rs2476601",
+          "gene": "PTPN22",
+          "variant_name": "R620W",
+          "hgvs_protein": "p.Arg620Trp",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No PTPN22 R620W variant. Normal lymphoid tyrosine phosphatase function and T-cell receptor signaling threshold."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of PTPN22 R620W. Gain-of-function variant that lowers the T-cell activation threshold. Associated with increased risk of multiple autoimmune conditions including rheumatoid arthritis (OR ~1.8), type 1 diabetes (OR ~1.9), and SLE."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of PTPN22 R620W. Gain-of-function variant that lowers the T-cell activation threshold. Associated with increased risk of multiple autoimmune conditions including rheumatoid arthritis (OR ~1.8), type 1 diabetes (OR ~1.9), and SLE."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous PTPN22 R620W. Strongly enhanced autoimmune susceptibility across multiple conditions. Substantially lowered T-cell activation threshold and impaired negative selection. Associated with RA, T1D, SLE, and other autoimmune diseases."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["15208781", "17804836", "25533199"],
+          "recommendation_text": "PTPN22 R620W is a master autoimmune susceptibility variant associated with rheumatoid arthritis, type 1 diabetes, SLE, and other autoimmune diseases. It is the strongest non-HLA genetic risk factor for multiple autoimmune conditions. Carriers should be aware of autoimmune disease symptoms and seek early evaluation if they develop joint pain, rash, or unexplained fatigue."
+        },
+        {
+          "rsid": "rs7574865",
+          "gene": "STAT4",
+          "variant_name": "STAT4 intron 3",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at STAT4. Standard STAT4 signaling in Th1 and NK cell differentiation."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of STAT4 risk allele. Associated with increased STAT4 expression and enhanced Th1/interferon-gamma responses. Modestly increased risk of rheumatoid arthritis and systemic lupus erythematosus."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of STAT4 risk allele. Associated with increased STAT4 expression and enhanced Th1/interferon-gamma responses. Modestly increased risk of rheumatoid arthritis and systemic lupus erythematosus."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous STAT4 risk allele. Significantly enhanced STAT4-mediated Th1 responses. Replicated GWAS association with both rheumatoid arthritis (OR ~1.3) and systemic lupus erythematosus (OR ~1.6)."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17804836", "19503088", "22286173"],
+          "recommendation_text": "STAT4 is a shared autoimmune risk locus for both rheumatoid arthritis and systemic lupus erythematosus. STAT4 mediates IL-12 and IL-23 signaling in Th1 cell differentiation. This finding contributes to polygenic autoimmune risk assessment."
+        },
+        {
+          "rsid": "rs9273363",
+          "gene": "HLA-DQB1",
+          "variant_name": "HLA-DQ risk proxy (T1D)",
+          "hgvs_protein": null,
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No HLA-DQ T1D risk proxy allele detected. Baseline population risk for type 1 diabetes at this locus."
+            },
+            "TC": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DQ T1D risk proxy allele. HLA class II alleles account for ~50% of the genetic risk for type 1 diabetes. Associated with aberrant presentation of pancreatic beta-cell autoantigens."
+            },
+            "CT": {
+              "category": "Elevated",
+              "effect_summary": "One copy of HLA-DQ T1D risk proxy allele. HLA class II alleles account for ~50% of the genetic risk for type 1 diabetes. Associated with aberrant presentation of pancreatic beta-cell autoantigens."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-DQ T1D risk proxy. Strongly elevated type 1 diabetes risk. HLA-DQ2/DQ8 haplotypes are the primary genetic determinants of T1D susceptibility, driving autoimmune destruction of pancreatic beta cells."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17554260", "19430480", "25751624"],
+          "recommendation_text": "HLA-DQ alleles are the strongest genetic determinants of type 1 diabetes, accounting for approximately half of genetic risk. This proxy SNP tags high-risk HLA-DQ haplotypes. Family members of T1D patients who carry risk alleles may benefit from autoantibody screening (GAD65, IA-2, ZnT8). Early detection can guide monitoring and enable enrollment in prevention trials."
+        },
+        {
+          "rsid": "rs689",
+          "gene": "INS",
+          "variant_name": "INS VNTR proxy",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "Homozygous for INS VNTR class III proxy (protective). Higher thymic insulin expression promotes central tolerance to insulin, reducing autoimmune risk."
+            },
+            "TA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous INS VNTR proxy. Intermediate thymic insulin expression levels. Modestly increased type 1 diabetes susceptibility."
+            },
+            "AT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous INS VNTR proxy. Intermediate thymic insulin expression levels. Modestly increased type 1 diabetes susceptibility."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous INS VNTR class I proxy (risk). Lower thymic insulin expression reduces central immune tolerance to insulin. Associated with increased type 1 diabetes risk (OR ~2.0). This is the second strongest T1D locus after HLA."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["9399903", "17554260", "19430480"],
+          "recommendation_text": "INS VNTR is the second strongest genetic risk locus for type 1 diabetes after HLA. The class I VNTR (short repeats) reduces thymic insulin expression, impairing central tolerance to insulin autoantigens. This proxy tags the VNTR class I/III polymorphism."
+        },
+        {
+          "rsid": "rs2066844",
+          "gene": "NOD2",
+          "variant_name": "R702W",
+          "hgvs_protein": "p.Arg702Trp",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No NOD2 R702W variant. Normal NOD2-mediated innate immune sensing of bacterial muramyl dipeptide."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of NOD2 R702W. Impaired intracellular bacterial sensing. Associated with approximately 2-3 fold increased risk of Crohn's disease. NOD2 is the first and most replicated Crohn's disease susceptibility gene."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of NOD2 R702W. Impaired intracellular bacterial sensing. Associated with approximately 2-3 fold increased risk of Crohn's disease. NOD2 is the first and most replicated Crohn's disease susceptibility gene."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous NOD2 R702W. Severely impaired muramyl dipeptide sensing. Associated with ~20-40 fold increased risk of Crohn's disease, particularly ileal involvement. Compound heterozygosity with other NOD2 variants further increases risk."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["11385577", "12145745", "17804842"],
+          "recommendation_text": "NOD2 is the strongest genetic risk factor for Crohn's disease. R702W is one of three major NOD2 risk variants (along with G908R and 1007fs). NOD2 senses intracellular bacterial components — loss of function disrupts intestinal immune homeostasis. Carriers with GI symptoms should be evaluated by a gastroenterologist."
+        },
+        {
+          "rsid": "rs11209026",
+          "gene": "IL23R",
+          "variant_name": "R381Q",
+          "hgvs_protein": "p.Arg381Gln",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous for the protective Gln381 allele. Reduced IL-23 receptor signaling and Th17 cell differentiation. Significantly decreased risk of Crohn's disease, ulcerative colitis, and psoriasis."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous R381Q. The Gln381 allele provides partial protection against inflammatory bowel disease. IL23R is a key driver of Th17-mediated intestinal inflammation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous R381Q. The Gln381 allele provides partial protection against inflammatory bowel disease. IL23R is a key driver of Th17-mediated intestinal inflammation."
+            },
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Homozygous common allele (Arg381). Standard IL-23 receptor signaling. Baseline population risk for inflammatory bowel disease at this locus."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17435756", "17804842", "21297633"],
+          "recommendation_text": "IL23R R381Q is a protective variant against Crohn's disease and ulcerative colitis. The IL-23/Th17 pathway is a validated therapeutic target — anti-IL-23 antibodies (risankizumab, guselkumab) are approved for IBD treatment. This locus illustrates how genetic discovery has directly informed drug development."
+        },
+        {
+          "rsid": "rs2241880",
+          "gene": "ATG16L1",
+          "variant_name": "T300A",
+          "hgvs_protein": "p.Thr300Ala",
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "Homozygous Thr300 (protective allele). Normal ATG16L1 protein stability and autophagy function in intestinal Paneth cells."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous T300A. The Ala300 variant renders ATG16L1 susceptible to caspase-3 cleavage, partially impairing autophagy and Paneth cell antimicrobial function."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous T300A. The Ala300 variant renders ATG16L1 susceptible to caspase-3 cleavage, partially impairing autophagy and Paneth cell antimicrobial function."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous T300A. ATG16L1 is highly susceptible to caspase-3 cleavage, significantly impairing autophagy. Associated with Crohn's disease risk (OR ~1.3) through defective Paneth cell function and impaired intracellular bacterial clearance."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["17435756", "18341684", "24141364"],
+          "recommendation_text": "ATG16L1 T300A links autophagy dysfunction to Crohn's disease. The variant impairs Paneth cell antimicrobial function and intracellular bacterial clearance. This locus established autophagy as a key pathway in IBD pathogenesis."
+        },
+        {
+          "rsid": "rs6822844",
+          "gene": "IL2/IL21",
+          "variant_name": "IL2-IL21 intergenic",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous for the protective T allele. Reduced susceptibility to celiac disease, type 1 diabetes, and rheumatoid arthritis at this locus."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous at IL2-IL21 locus. Intermediate autoimmune disease risk. This locus affects IL-2 and IL-21 cytokine regulation, important for T-cell and B-cell function."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous at IL2-IL21 locus. Intermediate autoimmune disease risk. This locus affects IL-2 and IL-21 cytokine regulation, important for T-cell and B-cell function."
+            },
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "Homozygous common allele. Baseline population risk for celiac disease at this non-HLA locus. IL-2 and IL-21 are important regulators of adaptive immune responses."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17558408", "18311140", "20190752"],
+          "recommendation_text": "The IL2-IL21 locus is a shared autoimmune susceptibility region for celiac disease, type 1 diabetes, and rheumatoid arthritis. IL-21 promotes B-cell differentiation and antibody production. See the Allergy module for HLA-DQ2/DQ8-based celiac disease assessment, which provides the primary genetic risk stratification.",
+          "cross_module": {
+            "module": "allergy",
+            "note": "Celiac disease risk is primarily determined by HLA-DQ2/DQ8. See Allergy module for DQ2/DQ8 proxy results and combined celiac disease assessment."
+          }
+        },
+        {
+          "rsid": "rs2004640",
+          "gene": "IRF5",
+          "variant_name": "IRF5 exon 1B splice site",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at IRF5 splice site. Standard interferon regulatory factor 5 expression and type I interferon signaling."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IRF5 risk allele. Creates a splice donor site for exon 1B, increasing IRF5 expression. Associated with enhanced type I interferon pathway activation and modestly increased SLE risk."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of IRF5 risk allele. Creates a splice donor site for exon 1B, increasing IRF5 expression. Associated with enhanced type I interferon pathway activation and modestly increased SLE risk."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous IRF5 risk allele. Increased IRF5 expression drives enhanced type I interferon production. Replicated GWAS association with systemic lupus erythematosus (OR ~1.5). The type I interferon signature is a hallmark of SLE."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["16429160", "17620523", "25533199"],
+          "recommendation_text": "IRF5 is a key regulator of the type I interferon response and a replicated SLE susceptibility locus. The interferon pathway is a validated therapeutic target — anifrolumab (anti-IFNAR) is approved for SLE treatment. Carriers with symptoms of SLE (joint pain, malar rash, photosensitivity) should seek rheumatological evaluation."
+        },
+        {
+          "rsid": "rs1143679",
+          "gene": "ITGAM",
+          "variant_name": "R77H",
+          "hgvs_protein": "p.Arg77His",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No ITGAM R77H variant. Normal complement receptor 3 (CR3/Mac-1) function and immune complex clearance."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ITGAM R77H. Impaired Mac-1 integrin binding to complement iC3b and ICAM-1. Associated with reduced immune complex clearance and increased SLE risk (OR ~1.6)."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ITGAM R77H. Impaired Mac-1 integrin binding to complement iC3b and ICAM-1. Associated with reduced immune complex clearance and increased SLE risk (OR ~1.6)."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous ITGAM R77H. Significantly impaired complement-mediated immune complex clearance. Strongly associated with SLE, particularly lupus nephritis and severe disease manifestations."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["18204098", "18552285", "25533199"],
+          "recommendation_text": "ITGAM R77H impairs complement receptor 3 function, reducing immune complex clearance. This is a replicated SLE risk locus associated with severe disease. Carriers with lupus symptoms should be evaluated by a rheumatologist. Regular monitoring of renal function is recommended for known SLE patients with this variant."
+        }
+      ]
+    },
+    {
+      "id": "sensory",
+      "name": "Sensory Conditions",
+      "description": "Variants associated with sensory organ disease susceptibility including age-related macular degeneration, glaucoma, and age-related hearing loss. These conditions involve complement activation, intraocular pressure regulation, and cochlear cell maintenance, respectively.",
+      "snps": [
+        {
+          "rsid": "rs1061170",
+          "gene": "CFH",
+          "variant_name": "Y402H",
+          "hgvs_protein": "p.Tyr402His",
+          "risk_allele": "C",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No CFH Y402H variant. Normal complement factor H function and complement regulation in the retina."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CFH Y402H. Impaired complement factor H binding to heparan sulfate in Bruch's membrane. Associated with approximately 2.5-fold increased risk of age-related macular degeneration."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CFH Y402H. Impaired complement factor H binding to heparan sulfate in Bruch's membrane. Associated with approximately 2.5-fold increased risk of age-related macular degeneration."
+            },
+            "CC": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous CFH Y402H. Significantly impaired complement regulation in the retina. Associated with approximately 6-fold increased risk of AMD. CFH Y402H was one of the first GWAS discoveries and remains the strongest AMD risk locus."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["15761122", "15870199", "16080115"],
+          "recommendation_text": "CFH Y402H is the strongest genetic risk factor for age-related macular degeneration. Complement dysregulation in the retina drives drusen formation and photoreceptor damage. Risk carriers should have regular dilated eye exams, avoid smoking (which amplifies genetic risk), maintain cardiovascular health, and consider AREDS2 supplementation per ophthalmologist guidance."
+        },
+        {
+          "rsid": "rs10490924",
+          "gene": "ARMS2",
+          "variant_name": "A69S",
+          "hgvs_protein": "p.Ala69Ser",
+          "risk_allele": "T",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No ARMS2 A69S risk allele. Baseline population risk for AMD at this locus."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ARMS2 A69S risk allele. The ARMS2/HTRA1 locus is the second strongest AMD risk locus. Associated with approximately 2.7-fold increased AMD risk per allele."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of ARMS2 A69S risk allele. The ARMS2/HTRA1 locus is the second strongest AMD risk locus. Associated with approximately 2.7-fold increased AMD risk per allele."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous ARMS2 A69S. Strongly associated with advanced AMD, particularly the wet (neovascular) subtype. Combined with CFH Y402H, this substantially elevates overall AMD risk."
+            }
+          },
+          "evidence_level": 3,
+          "pmids": ["16174643", "18191106", "23455636"],
+          "recommendation_text": "ARMS2/HTRA1 is the second major AMD susceptibility locus. Risk carriers, especially those also carrying CFH Y402H, should prioritize regular retinal screening, smoking cessation, and discuss AREDS2 supplementation with their ophthalmologist."
+        },
+        {
+          "rsid": "rs2230199",
+          "gene": "C3",
+          "variant_name": "R102G",
+          "hgvs_protein": "p.Arg102Gly",
+          "risk_allele": "G",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No C3 R102G variant. Standard complement C3 function. Normal C3b inactivation by complement factor H."
+            },
+            "CG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of C3 R102G (C3F allotype). The Gly102 variant is resistant to complement factor H-mediated inactivation, leading to increased complement activation. Modestly increased AMD risk (OR ~1.4)."
+            },
+            "GC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of C3 R102G (C3F allotype). The Gly102 variant is resistant to complement factor H-mediated inactivation, leading to increased complement activation. Modestly increased AMD risk (OR ~1.4)."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous C3 R102G. The C3F allotype has increased resistance to CFH-mediated inactivation, resulting in enhanced complement activation in the retina. Contributes to AMD risk, particularly in combination with CFH Y402H."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17170444", "18191106", "23455636"],
+          "recommendation_text": "C3 R102G further implicates the alternative complement pathway in AMD pathogenesis. The C3F variant synergizes with CFH Y402H to amplify complement-mediated retinal damage. Complement-targeted therapies (pegcetacoplan) are approved for geographic atrophy AMD."
+        },
+        {
+          "rsid": "rs74315329",
+          "gene": "MYOC",
+          "variant_name": "Q368X",
+          "hgvs_protein": "p.Gln368Ter",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No MYOC Q368X variant. Normal myocilin protein production and trabecular meshwork function."
+            },
+            "GA": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous MYOC Q368X. This nonsense mutation causes myocilin misfolding and endoplasmic reticulum stress in trabecular meshwork cells, leading to elevated intraocular pressure. Associated with juvenile and adult-onset primary open-angle glaucoma."
+            },
+            "AG": {
+              "category": "Elevated",
+              "effect_summary": "Heterozygous MYOC Q368X. This nonsense mutation causes myocilin misfolding and endoplasmic reticulum stress in trabecular meshwork cells, leading to elevated intraocular pressure. Associated with juvenile and adult-onset primary open-angle glaucoma."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous MYOC Q368X. Very rare genotype. Severe myocilin dysfunction. High probability of early-onset glaucoma with significantly elevated intraocular pressure."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["9671762", "24507775", "29785011"],
+          "recommendation_text": "MYOC Q368X is the most common pathogenic MYOC mutation, found in ~1.6% of primary open-angle glaucoma patients. MYOC mutations cause autosomal dominant glaucoma through toxic gain-of-function (misfolded myocilin). Carriers require regular intraocular pressure monitoring and ophthalmological surveillance. Early treatment can prevent irreversible optic nerve damage."
+        },
+        {
+          "rsid": "rs4236601",
+          "gene": "CAV1/CAV2",
+          "variant_name": "CAV1-CAV2 intergenic",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at CAV1/CAV2 locus. Standard caveolin-1 and caveolin-2 expression in the trabecular meshwork."
+            },
+            "CA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CAV1/CAV2 risk allele. Caveolins regulate aqueous humor outflow through the trabecular meshwork. Associated with modestly increased primary open-angle glaucoma risk."
+            },
+            "AC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CAV1/CAV2 risk allele. Caveolins regulate aqueous humor outflow through the trabecular meshwork. Associated with modestly increased primary open-angle glaucoma risk."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous CAV1/CAV2 risk allele. Replicated GWAS association with primary open-angle glaucoma (OR ~1.3). Caveolin-1 is involved in nitric oxide signaling and mechanotransduction in the trabecular meshwork."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["21532571", "24076671", "29785011"],
+          "recommendation_text": "CAV1/CAV2 is a replicated GWAS locus for primary open-angle glaucoma. Caveolins regulate aqueous humor dynamics and intraocular pressure. This common variant has a modest effect and contributes to polygenic glaucoma risk. Regular eye exams with intraocular pressure measurement are recommended."
+        },
+        {
+          "rsid": "rs2157719",
+          "gene": "CDKN2B-AS1",
+          "variant_name": "CDKN2B-AS1 (ANRIL)",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at CDKN2B-AS1/9p21 locus. Standard CDKN2B expression and retinal ganglion cell regulation."
+            },
+            "TG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CDKN2B-AS1 risk allele. The 9p21 locus affects CDKN2B expression, which regulates cell cycle arrest and apoptosis. Associated with increased glaucoma susceptibility and optic disc morphology."
+            },
+            "GT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of CDKN2B-AS1 risk allele. The 9p21 locus affects CDKN2B expression, which regulates cell cycle arrest and apoptosis. Associated with increased glaucoma susceptibility and optic disc morphology."
+            },
+            "GG": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous CDKN2B-AS1 risk allele. Replicated GWAS association with primary open-angle glaucoma (OR ~1.3) and vertical cup-to-disc ratio. The 9p21 locus is also associated with cardiovascular disease and type 2 diabetes through different mechanisms."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["21532571", "24076671", "27064256"],
+          "recommendation_text": "CDKN2B-AS1 (ANRIL) at the 9p21 locus is associated with glaucoma susceptibility and optic disc morphology. This pleiotropic locus also influences cardiovascular and metabolic traits. Regular ophthalmological surveillance is recommended."
+        },
+        {
+          "rsid": "rs80338939",
+          "gene": "GJB2",
+          "variant_name": "35delG",
+          "hgvs_protein": null,
+          "risk_allele": "delG",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No GJB2 35delG variant. Normal connexin 26 gap junction function in the cochlea."
+            },
+            "G/delG": {
+              "category": "Moderate",
+              "effect_summary": "Heterozygous carrier of GJB2 35delG. Carrier status for the most common cause of autosomal recessive non-syndromic hearing loss. Normal hearing in most carriers. Reproductive risk if partner is also a carrier."
+            },
+            "delG/delG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous GJB2 35delG. Absence of functional connexin 26 in cochlear gap junctions. Associated with congenital severe-to-profound sensorineural hearing loss. This is the most common genetic cause of hearing loss worldwide."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["9462742", "10090481", "21280143"],
+          "recommendation_text": "GJB2 35delG is the most common cause of autosomal recessive non-syndromic hearing loss, with carrier frequency ~2-4% in European populations. Homozygotes typically have congenital severe-to-profound hearing loss. Carriers should be informed of reproductive implications. Cochlear implantation is highly effective for GJB2-related hearing loss."
+        },
+        {
+          "rsid": "rs111033253",
+          "gene": "SLC26A4",
+          "variant_name": "SLC26A4 coding",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No SLC26A4 risk variant detected. Normal pendrin function in the inner ear and thyroid."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SLC26A4 variant. Carrier of Pendred syndrome / DFNB4 risk allele. May have enlarged vestibular aqueduct (EVA) as a subclinical finding. Carrier status relevant for reproductive counseling."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of SLC26A4 variant. Carrier of Pendred syndrome / DFNB4 risk allele. May have enlarged vestibular aqueduct (EVA) as a subclinical finding. Carrier status relevant for reproductive counseling."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous SLC26A4 variant. Associated with Pendred syndrome (hearing loss + goiter) or non-syndromic hearing loss with enlarged vestibular aqueduct (DFNB4). Pendrin dysfunction disrupts endolymphatic ion homeostasis."
+            }
+          },
+          "evidence_level": 4,
+          "pmids": ["9002654", "12657976", "21280143"],
+          "recommendation_text": "SLC26A4 mutations cause Pendred syndrome (autosomal recessive hearing loss with goiter) and DFNB4 (non-syndromic hearing loss with enlarged vestibular aqueduct). Carriers should be informed of reproductive implications. Thyroid function monitoring is recommended for affected individuals."
+        },
+        {
+          "rsid": "rs10955255",
+          "gene": "GRHL2",
+          "variant_name": "GRHL2 intron",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at GRHL2 locus. Standard grainyhead-like protein 2 expression and cochlear epithelial maintenance."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of GRHL2 risk allele. GRHL2 is a transcription factor involved in cochlear epithelial integrity. Associated with modestly increased susceptibility to age-related hearing loss."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of GRHL2 risk allele. GRHL2 is a transcription factor involved in cochlear epithelial integrity. Associated with modestly increased susceptibility to age-related hearing loss."
+            },
+            "AA": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous GRHL2 risk allele. Replicated GWAS association with age-related hearing loss. GRHL2 regulates tight junctions and epithelial barriers in the cochlea. Effect size is modest (OR ~1.2)."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["19578363", "25006839", "30068587"],
+          "recommendation_text": "GRHL2 is a replicated GWAS locus for age-related hearing loss (presbycusis). The gene encodes a transcription factor critical for cochlear epithelial barrier integrity. Risk carriers should protect their hearing by limiting noise exposure and having regular audiometric assessments."
+        }
+      ]
+    }
+  ],
+  "cross_module_links": [
+    {
+      "to_module": "apoe",
+      "link_type": "phenotype_correlation",
+      "description": "Alzheimer's disease risk overlaps with APOE epsilon 4 findings"
+    },
+    {
+      "to_module": "allergy",
+      "link_type": "phenotype_correlation",
+      "description": "Celiac disease findings overlap with HLA-DQ2/DQ8 proxy results in Allergy module"
+    },
+    {
+      "to_module": "methylation",
+      "link_type": "shared_variant",
+      "description": "MTHFR C677T affects both migraine risk and methylation pathway"
+    },
+    {
+      "to_module": "nutrigenomics",
+      "link_type": "shared_variant",
+      "description": "FTO rs9939609 relates to both obesity risk and nutrigenomic findings"
+    },
+    {
+      "to_module": "traits",
+      "link_type": "phenotype_correlation",
+      "description": "ADHD canonical finding here, cross-linked from Traits module"
+    }
+  ],
+  "gwas_efo_terms": [
+    "alzheimer disease",
+    "parkinson disease",
+    "multiple sclerosis",
+    "attention deficit hyperactivity disorder",
+    "migraine",
+    "type 2 diabetes",
+    "obesity",
+    "body mass index",
+    "gout",
+    "urate",
+    "non-alcoholic fatty liver disease",
+    "rheumatoid arthritis",
+    "type 1 diabetes",
+    "inflammatory bowel disease",
+    "crohn disease",
+    "ulcerative colitis",
+    "celiac disease",
+    "systemic lupus erythematosus",
+    "macular degeneration",
+    "glaucoma",
+    "intraocular pressure",
+    "hearing loss",
+    "presbycusis"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps",
+    "condition_grouping": "SNPs are grouped by disease condition within each pathway. Each condition may have multiple contributing variants. Pathway-level status reflects the highest-risk condition within that pathway.",
+    "cross_module_deduplication": "Shared variants (rs429358, rs9939609, rs1801133, rs747302) should not be double-counted in aggregate risk scores. The canonical finding resides in this module except for rs429358 (canonical in APOE module) and rs9939609 (canonical in Nutrigenomics module)."
+  }
+}

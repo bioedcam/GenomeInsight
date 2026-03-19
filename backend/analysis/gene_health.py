@@ -1,0 +1,784 @@
+"""Gene Health expansion module — categorical pathway scoring for disease conditions.
+
+Implements P3-65:
+  - 17 disease conditions grouped by system across 4 pathway cards
+    (Neurological, Metabolic, Autoimmune, Sensory).
+  - No HLA proxy calling (unlike Allergy module).
+  - No celiac/histamine combined assessments.
+  - Cross-links to APOE (Alzheimer's), Allergy (celiac), Methylation (MTHFR),
+    Nutrigenomics (FTO), and Traits (ADHD).
+
+Panel definition lives in ``backend/data/panels/gene_health_panel.json``.
+
+Scoring follows the same algorithm as nutrigenomics / fitness / sleep / skin / allergy:
+  - No numeric scores, no summed risk alleles, no effect-size weighting.
+  - ★☆ evidence hard-caps pathway at Moderate.
+  - Elevated requires ≥★★ evidence + clinically meaningful genotype.
+  - Pathway level = highest category across called SNPs.
+
+Usage::
+
+    from backend.analysis.gene_health import (
+        load_gene_health_panel,
+        score_gene_health_pathways,
+        store_gene_health_findings,
+    )
+
+    panel = load_gene_health_panel()
+    results = score_gene_health_pathways(panel, sample_engine, reference_engine)
+    store_gene_health_findings(results, sample_engine)
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import sqlalchemy as sa
+import structlog
+
+from backend.annotation.engine import GWAS_BIT
+from backend.db.tables import (
+    annotated_variants,
+    findings,
+    gwas_associations,
+    panel_coverage,
+    raw_variants,
+)
+
+logger = structlog.get_logger(__name__)
+
+# Path to the curated panel JSON (relative to this file)
+_PANEL_PATH = Path(__file__).resolve().parent.parent / "data" / "panels" / "gene_health_panel.json"
+
+# Pathway scoring categories
+ELEVATED = "Elevated"
+MODERATE = "Moderate"
+STANDARD = "Standard"
+
+# Minimum evidence level required for Elevated category
+_ELEVATED_MIN_STARS = 2
+
+# Module name for findings storage
+MODULE_NAME = "gene_health"
+
+
+# ── Data classes ──────────────────────────────────────────────────────────
+
+
+@dataclass
+class PanelSNP:
+    """A single SNP entry from the curated gene health panel."""
+
+    rsid: str
+    gene: str
+    variant_name: str
+    hgvs_protein: str | None
+    risk_allele: str
+    ref_allele: str
+    genotype_effects: dict[str, dict[str, str]]
+    evidence_level: int
+    pmids: list[str]
+    recommendation_text: str
+    cross_module: dict | None = None
+    coverage_note: str | None = None
+
+
+@dataclass
+class Pathway:
+    """A gene health pathway with its curated SNPs."""
+
+    id: str
+    name: str
+    description: str
+    snps: list[PanelSNP]
+
+
+@dataclass
+class GeneHealthPanel:
+    """The complete curated gene health panel."""
+
+    module: str
+    version: str
+    pathways: list[Pathway]
+    cross_module_links: dict | None = None
+    module_disclaimer: str | None = None
+
+    def all_rsids(self) -> list[str]:
+        """Return all rsids in the panel."""
+        return [snp.rsid for pathway in self.pathways for snp in pathway.snps]
+
+
+@dataclass
+class SNPResult:
+    """Scoring result for a single SNP."""
+
+    rsid: str
+    gene: str
+    variant_name: str
+    genotype: str | None  # None if not genotyped
+    category: str  # Elevated / Moderate / Standard
+    effect_summary: str
+    evidence_level: int
+    pmids: list[str]
+    recommendation_text: str
+    present_in_sample: bool
+    coverage_note: str | None = None
+
+
+@dataclass
+class PathwayResult:
+    """Scoring result for a complete pathway."""
+
+    pathway_id: str
+    pathway_name: str
+    pathway_description: str
+    level: str  # Elevated / Moderate / Standard
+    snp_results: list[SNPResult] = field(default_factory=list)
+
+    @property
+    def called_snps(self) -> list[SNPResult]:
+        """SNPs that were present and genotyped in the sample."""
+        return [s for s in self.snp_results if s.present_in_sample]
+
+    @property
+    def missing_snps(self) -> list[SNPResult]:
+        """SNPs that were not present in the sample."""
+        return [s for s in self.snp_results if not s.present_in_sample]
+
+
+@dataclass
+class CrossModuleFinding:
+    """Cross-module reference finding."""
+
+    rsid: str
+    gene: str
+    source_module: str
+    target_module: str
+    finding_text: str
+    evidence_level: int
+    pmids: list[str]
+    detail: dict
+
+
+@dataclass
+class GeneHealthResult:
+    """Complete gene health scoring result for a sample."""
+
+    pathway_results: list[PathwayResult] = field(default_factory=list)
+    gwas_matched_rsids: list[str] = field(default_factory=list)
+    cross_module_findings: list[CrossModuleFinding] = field(default_factory=list)
+    panel_coverage_rows: list[dict] = field(default_factory=list)
+
+
+# ── Panel loading ─────────────────────────────────────────────────────────
+
+
+def load_gene_health_panel(panel_path: Path | None = None) -> GeneHealthPanel:
+    """Load the curated gene health panel from JSON.
+
+    Args:
+        panel_path: Optional override for the panel JSON path.
+            Defaults to ``backend/data/panels/gene_health_panel.json``.
+
+    Returns:
+        Parsed GeneHealthPanel with all pathways and SNPs.
+
+    Raises:
+        FileNotFoundError: If the panel JSON does not exist.
+        json.JSONDecodeError: If the panel JSON is malformed.
+    """
+    path = panel_path or _PANEL_PATH
+    logger.info("loading_gene_health_panel", path=str(path))
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    pathways: list[Pathway] = []
+    for pw_data in data["pathways"]:
+        snps: list[PanelSNP] = []
+        for snp_data in pw_data["snps"]:
+            snps.append(
+                PanelSNP(
+                    rsid=snp_data["rsid"],
+                    gene=snp_data["gene"],
+                    variant_name=snp_data["variant_name"],
+                    hgvs_protein=snp_data.get("hgvs_protein"),
+                    risk_allele=snp_data["risk_allele"],
+                    ref_allele=snp_data["ref_allele"],
+                    genotype_effects=snp_data["genotype_effects"],
+                    evidence_level=snp_data["evidence_level"],
+                    pmids=snp_data.get("pmids", []),
+                    recommendation_text=snp_data.get("recommendation_text", ""),
+                    cross_module=snp_data.get("cross_module"),
+                    coverage_note=snp_data.get("coverage_note"),
+                )
+            )
+        pathways.append(
+            Pathway(
+                id=pw_data["id"],
+                name=pw_data["name"],
+                description=pw_data["description"],
+                snps=snps,
+            )
+        )
+
+    return GeneHealthPanel(
+        module=data["module"],
+        version=data["version"],
+        pathways=pathways,
+        cross_module_links=data.get("cross_module_links"),
+        module_disclaimer=data.get("module_disclaimer"),
+    )
+
+
+# ── Genotype scoring ─────────────────────────────────────────────────────
+
+
+def _normalize_genotype(genotype: str | None) -> str | None:
+    """Normalize genotype string for lookup.
+
+    Handles common formats: 'CT', 'TC', '--' (no-call).
+    Returns None for no-calls or missing data.
+    """
+    if genotype is None or genotype.strip() in ("", "--", "II", "DD", "DI", "ID"):
+        return None
+    return genotype.strip().upper()
+
+
+def _score_snp(snp: PanelSNP, genotype: str | None) -> SNPResult:
+    """Score a single SNP given a genotype.
+
+    Applies evidence-level gating: ★☆ (evidence_level=1) variants
+    are hard-capped at Moderate regardless of genotype.
+    """
+    if genotype is None:
+        return SNPResult(
+            rsid=snp.rsid,
+            gene=snp.gene,
+            variant_name=snp.variant_name,
+            genotype=None,
+            category=STANDARD,
+            effect_summary="Variant not genotyped in this sample.",
+            evidence_level=snp.evidence_level,
+            pmids=snp.pmids,
+            recommendation_text=snp.recommendation_text,
+            present_in_sample=False,
+            coverage_note=snp.coverage_note,
+        )
+
+    # Look up genotype effect from panel definition
+    effect = snp.genotype_effects.get(genotype)
+    if effect is None:
+        # Try reversed genotype: "CT" → "TC", or "delG/G" → "G/delG"
+        if "/" in genotype:
+            parts = genotype.split("/", 1)
+            reversed_gt = f"{parts[1]}/{parts[0]}"
+        elif len(genotype) == 2:
+            reversed_gt = genotype[::-1]
+        else:
+            reversed_gt = genotype
+        effect = snp.genotype_effects.get(reversed_gt)
+
+    if effect is None:
+        logger.warning(
+            "unknown_genotype_for_gene_health_snp",
+            rsid=snp.rsid,
+            gene=snp.gene,
+            genotype=genotype,
+        )
+        return SNPResult(
+            rsid=snp.rsid,
+            gene=snp.gene,
+            variant_name=snp.variant_name,
+            genotype=genotype,
+            category=STANDARD,
+            effect_summary=f"Genotype {genotype} not in curated panel definitions.",
+            evidence_level=snp.evidence_level,
+            pmids=snp.pmids,
+            recommendation_text=snp.recommendation_text,
+            present_in_sample=True,
+            coverage_note=snp.coverage_note,
+        )
+
+    category = effect.get("category", STANDARD)
+    effect_summary = effect.get("effect_summary", "Effect not documented.")
+
+    # Evidence-level gating: ★☆ hard-caps at Moderate
+    if snp.evidence_level < _ELEVATED_MIN_STARS and category == ELEVATED:
+        category = MODERATE
+        logger.debug(
+            "evidence_gating_applied",
+            rsid=snp.rsid,
+            original_category=ELEVATED,
+            capped_to=MODERATE,
+            evidence_level=snp.evidence_level,
+        )
+
+    return SNPResult(
+        rsid=snp.rsid,
+        gene=snp.gene,
+        variant_name=snp.variant_name,
+        genotype=genotype,
+        category=category,
+        effect_summary=effect_summary,
+        evidence_level=snp.evidence_level,
+        pmids=snp.pmids,
+        recommendation_text=snp.recommendation_text,
+        present_in_sample=True,
+        coverage_note=snp.coverage_note,
+    )
+
+
+def _determine_pathway_level(snp_results: list[SNPResult]) -> str:
+    """Determine the overall pathway category from individual SNP results.
+
+    The pathway level is the highest category across all called SNPs.
+    Ordering: Elevated > Moderate > Standard.
+
+    Only SNPs present in the sample contribute to the pathway level.
+    If no SNPs are genotyped, the pathway defaults to Standard.
+    """
+    called = [r for r in snp_results if r.present_in_sample]
+    if not called:
+        return STANDARD
+
+    category_priority = {ELEVATED: 2, MODERATE: 1, STANDARD: 0}
+    present = {r.category for r in called}
+    return max(present, key=lambda c: category_priority.get(c, 0), default=STANDARD)
+
+
+# ── Cross-module references ──────────────────────────────────────────────
+
+
+def _generate_cross_module_findings(
+    pathway_results: list[PathwayResult],
+    panel: GeneHealthPanel,
+) -> list[CrossModuleFinding]:
+    """Generate cross-module reference findings.
+
+    Cross-links:
+      - APOE (Alzheimer's) → APOE module
+      - Celiac-related SNPs → Allergy module
+      - MTHFR variants → Methylation module
+      - FTO variants → Nutrigenomics module
+      - ADHD-related SNPs → Traits module
+    """
+    cross_findings: list[CrossModuleFinding] = []
+    seen_keys: set[tuple[str, str]] = set()
+
+    for pr in pathway_results:
+        for snp_result in pr.called_snps:
+            if snp_result.category == STANDARD:
+                continue
+
+            # Find the panel SNP to get cross_module metadata
+            panel_snp = _find_panel_snp(panel, snp_result.rsid)
+            if panel_snp is None or panel_snp.cross_module is None:
+                continue
+
+            target_module = panel_snp.cross_module["module"]
+            note = panel_snp.cross_module["note"]
+
+            # Build cross-module finding text
+            cross_text = (
+                f"{snp_result.gene} {snp_result.variant_name} ({snp_result.genotype}) — {note}"
+            )
+
+            # Deduplicate: only one cross-link per gene+target combination
+            dedup_key = (snp_result.gene, target_module)
+            if dedup_key in seen_keys:
+                continue
+
+            seen_keys.add(dedup_key)
+            cross_findings.append(
+                CrossModuleFinding(
+                    rsid=snp_result.rsid,
+                    gene=snp_result.gene,
+                    source_module=MODULE_NAME,
+                    target_module=target_module,
+                    finding_text=cross_text,
+                    evidence_level=snp_result.evidence_level,
+                    pmids=snp_result.pmids,
+                    detail={
+                        "genotype": snp_result.genotype,
+                        "source_pathway": pr.pathway_name,
+                        "target_module": target_module,
+                        "cross_module_note": note,
+                    },
+                )
+            )
+
+    return cross_findings
+
+
+def _find_panel_snp(panel: GeneHealthPanel, rsid: str) -> PanelSNP | None:
+    """Find a PanelSNP by rsid."""
+    for pathway in panel.pathways:
+        for snp in pathway.snps:
+            if snp.rsid == rsid:
+                return snp
+    return None
+
+
+# ── Panel coverage tracking ──────────────────────────────────────────────
+
+
+def _compute_panel_coverage(
+    panel: GeneHealthPanel,
+    genotypes: dict[str, str],
+) -> list[dict]:
+    """Compute panel coverage rows for the panel_coverage table.
+
+    Classifies each panel SNP as called/no_call/not_on_array.
+    """
+    rows: list[dict] = []
+    for pathway in panel.pathways:
+        for snp in pathway.snps:
+            raw_gt = genotypes.get(snp.rsid)
+            if raw_gt is None:
+                status = "not_on_array"
+            elif raw_gt.strip() in ("", "--", "II", "DD", "DI", "ID"):
+                status = "no_call"
+            else:
+                status = "called"
+
+            rows.append(
+                {
+                    "module": MODULE_NAME,
+                    "rsid": snp.rsid,
+                    "gene": snp.gene,
+                    "expected_trait": snp.variant_name,
+                    "coverage_status": status,
+                }
+            )
+    return rows
+
+
+# ── Main scoring function ────────────────────────────────────────────────
+
+
+def score_gene_health_pathways(
+    panel: GeneHealthPanel,
+    sample_engine: sa.Engine,
+    reference_engine: sa.Engine,
+) -> GeneHealthResult:
+    """Score all gene health pathways for a sample.
+
+    1. Fetches raw genotypes from the sample DB for all panel rsids.
+    2. Scores each SNP using the curated panel definitions.
+    3. Applies evidence-level gating.
+    4. Determines per-pathway level (highest category across SNPs).
+    5. Generates cross-module reference findings.
+    6. Looks up GWAS associations for matched rsids.
+    7. Computes panel coverage tracking.
+
+    Args:
+        panel: Loaded GeneHealthPanel.
+        sample_engine: SQLAlchemy engine for the sample database.
+        reference_engine: SQLAlchemy engine for reference.db.
+
+    Returns:
+        GeneHealthResult with all pathway results, cross-module findings,
+        and GWAS matches.
+    """
+    # Fetch all panel rsids from sample
+    all_rsids = panel.all_rsids()
+    genotypes = _fetch_genotypes(all_rsids, sample_engine)
+    logger.info(
+        "gene_health_genotypes_fetched",
+        panel_rsids=len(all_rsids),
+        found_in_sample=len(genotypes),
+    )
+
+    pathway_results: list[PathwayResult] = []
+
+    for pathway in panel.pathways:
+        snp_results: list[SNPResult] = []
+        for snp in pathway.snps:
+            gt = _normalize_genotype(genotypes.get(snp.rsid))
+            result = _score_snp(snp, gt)
+            snp_results.append(result)
+
+        level = _determine_pathway_level(snp_results)
+        pathway_results.append(
+            PathwayResult(
+                pathway_id=pathway.id,
+                pathway_name=pathway.name,
+                pathway_description=pathway.description,
+                level=level,
+                snp_results=snp_results,
+            )
+        )
+
+    # Cross-module reference findings
+    cross_module = _generate_cross_module_findings(
+        pathway_results,
+        panel,
+    )
+
+    # Identify GWAS-matched rsids for annotation_coverage bitmask
+    gwas_matched = _lookup_gwas_matches(
+        [r.rsid for pr in pathway_results for r in pr.called_snps],
+        reference_engine,
+    )
+
+    # Panel coverage tracking
+    coverage_rows = _compute_panel_coverage(panel, genotypes)
+
+    return GeneHealthResult(
+        pathway_results=pathway_results,
+        gwas_matched_rsids=gwas_matched,
+        cross_module_findings=cross_module,
+        panel_coverage_rows=coverage_rows,
+    )
+
+
+def _fetch_genotypes(
+    rsids: list[str],
+    sample_engine: sa.Engine,
+) -> dict[str, str]:
+    """Fetch raw genotypes from sample DB for the given rsids."""
+    if not rsids:
+        return {}
+
+    result: dict[str, str] = {}
+    with sample_engine.connect() as conn:
+        stmt = sa.select(
+            raw_variants.c.rsid,
+            raw_variants.c.genotype,
+        ).where(raw_variants.c.rsid.in_(rsids))
+
+        for row in conn.execute(stmt):
+            result[row.rsid] = row.genotype
+
+    return result
+
+
+def _lookup_gwas_matches(
+    rsids: list[str],
+    reference_engine: sa.Engine,
+) -> list[str]:
+    """Look up which rsids have GWAS Catalog associations."""
+    if not rsids:
+        return []
+
+    matched: list[str] = []
+    with reference_engine.connect() as conn:
+        stmt = (
+            sa.select(gwas_associations.c.rsid)
+            .where(gwas_associations.c.rsid.in_(rsids))
+            .distinct()
+        )
+        for row in conn.execute(stmt):
+            matched.append(row.rsid)
+
+    return matched
+
+
+# ── Findings storage ─────────────────────────────────────────────────────
+
+
+def store_gene_health_findings(
+    result: GeneHealthResult,
+    sample_engine: sa.Engine,
+    module_disclaimer: str | None = None,
+) -> int:
+    """Store gene health findings in the sample database.
+
+    Creates findings:
+      - Pathway summaries (one per pathway).
+      - Individual SNP findings for non-Standard called SNPs.
+      - Cross-module reference findings (APOE, Allergy, Methylation,
+        Nutrigenomics, Traits).
+
+    Also stores panel coverage tracking rows.
+
+    Args:
+        result: GeneHealthResult from score_gene_health_pathways.
+        sample_engine: SQLAlchemy engine for the sample database.
+        module_disclaimer: Optional disclaimer text from the panel.
+
+    Returns:
+        Number of findings inserted.
+    """
+    rows: list[dict] = []
+
+    for idx, pr in enumerate(result.pathway_results):
+        # Pathway-level summary finding
+        called_count = len(pr.called_snps)
+        total_count = len(pr.snp_results)
+        finding_text = (
+            f"{pr.pathway_name} — {pr.level} consideration"
+            if pr.level != STANDARD
+            else f"{pr.pathway_name} — Standard (no variants of concern)"
+        )
+
+        detail: dict = {
+            "pathway_id": pr.pathway_id,
+            "called_snps": called_count,
+            "total_snps": total_count,
+            "missing_snps": [s.rsid for s in pr.missing_snps],
+            "snp_details": [
+                {
+                    "rsid": s.rsid,
+                    "gene": s.gene,
+                    "variant_name": s.variant_name,
+                    "genotype": s.genotype,
+                    "category": s.category,
+                    "effect_summary": s.effect_summary,
+                    "evidence_level": s.evidence_level,
+                    "coverage_note": s.coverage_note,
+                }
+                for s in pr.called_snps
+            ],
+        }
+
+        # Include module disclaimer in first pathway summary for API retrieval
+        if idx == 0 and module_disclaimer:
+            detail["module_disclaimer"] = module_disclaimer
+
+        # Collect PMIDs from all called SNPs
+        all_pmids: list[str] = []
+        for s in pr.called_snps:
+            all_pmids.extend(s.pmids)
+        unique_pmids = list(dict.fromkeys(all_pmids))
+
+        # Pathway evidence level = max evidence among called SNPs
+        max_evidence = max(
+            (s.evidence_level for s in pr.called_snps),
+            default=1,
+        )
+
+        rows.append(
+            {
+                "module": MODULE_NAME,
+                "category": "pathway_summary",
+                "evidence_level": max_evidence,
+                "gene_symbol": None,
+                "rsid": None,
+                "finding_text": finding_text,
+                "pathway": pr.pathway_name,
+                "pathway_level": pr.level,
+                "pmid_citations": json.dumps(unique_pmids),
+                "detail_json": json.dumps(detail),
+            }
+        )
+
+        # Individual SNP findings for non-Standard results
+        for snp in pr.called_snps:
+            if snp.category == STANDARD:
+                continue
+
+            snp_text = f"{snp.gene} {snp.variant_name} ({snp.genotype}) — {snp.effect_summary}"
+
+            snp_detail: dict = {
+                "variant_name": snp.variant_name,
+                "genotype": snp.genotype,
+                "recommendation": snp.recommendation_text,
+            }
+            if snp.coverage_note:
+                snp_detail["coverage_note"] = snp.coverage_note
+
+            rows.append(
+                {
+                    "module": MODULE_NAME,
+                    "category": "snp_finding",
+                    "evidence_level": snp.evidence_level,
+                    "gene_symbol": snp.gene,
+                    "rsid": snp.rsid,
+                    "finding_text": snp_text,
+                    "pathway": pr.pathway_name,
+                    "pathway_level": snp.category,
+                    "pmid_citations": json.dumps(snp.pmids),
+                    "detail_json": json.dumps(snp_detail),
+                }
+            )
+
+    # Cross-module findings
+    for cross in result.cross_module_findings:
+        rows.append(
+            {
+                "module": MODULE_NAME,
+                "category": "cross_module",
+                "evidence_level": cross.evidence_level,
+                "gene_symbol": cross.gene,
+                "rsid": cross.rsid,
+                "finding_text": cross.finding_text,
+                "pathway": None,
+                "pathway_level": None,
+                "pmid_citations": json.dumps(cross.pmids),
+                "detail_json": json.dumps(cross.detail),
+            }
+        )
+
+    if not rows:
+        logger.info("no_gene_health_findings_to_store")
+        return 0
+
+    with sample_engine.begin() as conn:
+        # Clear previous gene_health findings
+        conn.execute(sa.delete(findings).where(findings.c.module == MODULE_NAME))
+        conn.execute(sa.insert(findings), rows)
+
+        # Store panel coverage tracking
+        if result.panel_coverage_rows:
+            conn.execute(sa.delete(panel_coverage).where(panel_coverage.c.module == MODULE_NAME))
+            conn.execute(sa.insert(panel_coverage), result.panel_coverage_rows)
+
+    logger.info("gene_health_findings_stored", count=len(rows))
+    return len(rows)
+
+
+# ── Annotation coverage bitmask ─────────────────────────────────────────
+
+_BITMASK_BATCH = 500  # Stay under SQLITE_MAX_VARIABLE_NUMBER
+
+
+def update_annotation_coverage_gwas(
+    result: GeneHealthResult,
+    sample_engine: sa.Engine,
+) -> int:
+    """OR bit 5 (GWAS Catalog, value 32) into annotation_coverage for GWAS-matched variants.
+
+    Args:
+        result: GeneHealthResult from :func:`score_gene_health_pathways`.
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Number of variants updated.
+    """
+    if not result.gwas_matched_rsids:
+        return 0
+
+    rsid_list = sorted(set(result.gwas_matched_rsids))
+    updated = 0
+
+    with sample_engine.begin() as conn:
+        for i in range(0, len(rsid_list), _BITMASK_BATCH):
+            batch = rsid_list[i : i + _BITMASK_BATCH]
+
+            stmt = (
+                annotated_variants.update()
+                .where(annotated_variants.c.rsid.in_(batch))
+                .values(
+                    annotation_coverage=sa.case(
+                        (
+                            annotated_variants.c.annotation_coverage.is_(None),
+                            GWAS_BIT,
+                        ),
+                        else_=annotated_variants.c.annotation_coverage.op("|")(GWAS_BIT),
+                    )
+                )
+            )
+            res = conn.execute(stmt)
+            updated += res.rowcount
+
+    logger.info(
+        "gene_health_gwas_annotation_coverage_updated",
+        gwas_bit=GWAS_BIT,
+        gwas_matched_rsids=len(rsid_list),
+        rows_updated=updated,
+    )
+    return updated
