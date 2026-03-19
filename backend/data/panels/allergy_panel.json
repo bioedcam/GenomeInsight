@@ -1,0 +1,490 @@
+{
+  "module": "allergy",
+  "version": "1.0.0",
+  "description": "Curated Gene Allergy & Immune Sensitivities SNP panel for GenomeInsight (P3-59). Covers 4 pathways (Atopic Conditions, Drug Hypersensitivity, Food Sensitivity, Histamine Metabolism) with 7 curated SNPs and 6 HLA proxy references. Includes IL13, ORMDL3, STAT6 for atopic triad; HLA-B*57:01 (abacavir), HLA-B*15:02 / HLA-A*31:01 (carbamazepine), HLA-B*58:01 (allopurinol) for drug reactions; HLA-DQ2/DQ8 celiac disease proxies; AOC1 and HNMT for histamine catabolism.",
+  "pathways": [
+    {
+      "id": "atopic_conditions",
+      "name": "Atopic Conditions",
+      "description": "Variants influencing susceptibility to the atopic triad (asthma, allergic rhinitis, eczema/atopic dermatitis) and IgE-mediated immune responses. These SNPs affect key interleukin signaling and epithelial barrier pathways.",
+      "snps": [
+        {
+          "rsid": "rs20541",
+          "gene": "IL13",
+          "variant_name": "R130Q",
+          "hgvs_protein": "p.Arg130Gln",
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No R130Q variant. Normal IL-13 signaling and IgE regulation."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R130Q variant. Modestly increased IL-13 activity associated with higher IgE levels and increased susceptibility to asthma and atopic dermatitis."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the R130Q variant. Modestly increased IL-13 activity associated with higher IgE levels and increased susceptibility to asthma and atopic dermatitis."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous R130Q. Enhanced IL-13 signaling drives increased IgE production and Th2-skewed immune responses. Significantly associated with asthma, atopic dermatitis, and elevated total IgE."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["12925570", "18403759", "21804549"],
+          "recommendation_text": "IL13 R130Q is a well-replicated GWAS hit for atopic conditions. Carriers may have elevated IgE levels and increased susceptibility to asthma and eczema. Allergen avoidance, environmental controls, and regular follow-up with an allergist are recommended for symptomatic individuals.",
+          "cross_module": {
+            "module": "skin",
+            "note": "IL13 R130Q contributes to atopic dermatitis risk. See Skin module for barrier-related findings."
+          }
+        },
+        {
+          "rsid": "rs8076131",
+          "gene": "ORMDL3",
+          "variant_name": "ORMDL3 intergenic",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "A",
+          "genotype_effects": {
+            "AA": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at ORMDL3 locus. Standard sphingolipid metabolism and airway inflammatory response."
+            },
+            "AG": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly increased ORMDL3 expression associated with altered sphingolipid metabolism and increased childhood asthma risk."
+            },
+            "GA": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly increased ORMDL3 expression associated with altered sphingolipid metabolism and increased childhood asthma risk."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous risk allele. Significantly increased ORMDL3 expression. Strong association with childhood-onset asthma, one of the most replicated asthma GWAS loci (17q21)."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["17611496", "20860503", "25635124"],
+          "recommendation_text": "ORMDL3/17q21 is the most robustly replicated childhood asthma susceptibility locus. Risk allele carriers may benefit from early monitoring for respiratory symptoms, environmental trigger avoidance, and discussion with a pediatric allergist if symptoms develop."
+        },
+        {
+          "rsid": "rs324011",
+          "gene": "STAT6",
+          "variant_name": "STAT6 intron 2",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No risk allele at STAT6 locus. Standard IL-4/IL-13 signal transduction and IgE class switching."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly enhanced STAT6 signaling. Associated with increased IgE levels and atopic dermatitis susceptibility."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of risk allele. Modestly enhanced STAT6 signaling. Associated with increased IgE levels and atopic dermatitis susceptibility."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous risk allele. Enhanced STAT6-mediated Th2 signaling. Significantly associated with elevated IgE, atopic dermatitis, and allergic rhinitis."
+            }
+          },
+          "evidence_level": 2,
+          "pmids": ["14608356", "18403759", "21804549"],
+          "recommendation_text": "STAT6 variants influence IL-4/IL-13 signaling and IgE class switching. Carriers may have elevated total IgE. Allergy testing and environmental controls are recommended if atopic symptoms are present."
+        }
+      ]
+    },
+    {
+      "id": "drug_hypersensitivity",
+      "name": "Drug Hypersensitivity",
+      "description": "HLA allele proxies associated with severe adverse drug reactions including Stevens-Johnson syndrome (SJS), toxic epidermal necrolysis (TEN), and drug reaction with eosinophilia and systemic symptoms (DRESS). These use tag SNPs from the hla_proxy_lookup table with ancestry-specific r² values.",
+      "snps": [
+        {
+          "rsid": "rs2395029",
+          "gene": "HLA-B",
+          "variant_name": "HLA-B*57:01 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "G",
+          "ref_allele": "T",
+          "genotype_effects": {
+            "TT": {
+              "category": "Standard",
+              "effect_summary": "No HLA-B*57:01 proxy allele detected. Low risk of abacavir hypersensitivity syndrome at this locus."
+            },
+            "TG": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*57:01 proxy allele. Associated with ~50% risk of abacavir hypersensitivity syndrome. Abacavir should not be prescribed without confirmatory HLA typing."
+            },
+            "GT": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*57:01 proxy allele. Associated with ~50% risk of abacavir hypersensitivity syndrome. Abacavir should not be prescribed without confirmatory HLA typing."
+            },
+            "GG": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-B*57:01 proxy. High probability of HLA-B*57:01 carrier status. Abacavir is contraindicated pending confirmatory HLA typing."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-B*57:01",
+            "r_squared_eur": 0.97,
+            "clinical_grade": true,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 4,
+          "pmids": ["18196153", "18192541", "22378157"],
+          "recommendation_text": "HLA-B*57:01 is the pharmacogenomic gold standard for abacavir hypersensitivity screening. This result is based on a proxy tag SNP (r²=0.97 in EUR). Confirmatory HLA typing is essential before clinical action. CPIC Level A recommendation: do not prescribe abacavir to HLA-B*57:01-positive patients.",
+          "cross_module": {
+            "module": "pharmacogenomics",
+            "note": "Abacavir/HLA-B*57:01 finding cross-links bi-directionally with the Pharmacogenomics module. See PGx for prescribing guidance."
+          }
+        },
+        {
+          "rsid": "rs144012689",
+          "gene": "HLA-B",
+          "variant_name": "HLA-B*15:02 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No HLA-B*15:02 proxy allele detected. Low risk of carbamazepine-induced SJS/TEN at this locus."
+            },
+            "CT": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*15:02 proxy allele. Associated with high risk of carbamazepine-induced Stevens-Johnson syndrome and toxic epidermal necrolysis, particularly in East/Southeast Asian populations."
+            },
+            "TC": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*15:02 proxy allele. Associated with high risk of carbamazepine-induced Stevens-Johnson syndrome and toxic epidermal necrolysis, particularly in East/Southeast Asian populations."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-B*15:02 proxy. High probability of HLA-B*15:02 carrier status. Carbamazepine and related aromatic anticonvulsants are contraindicated pending confirmatory HLA typing."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-B*15:02",
+            "r_squared_eas": 0.93,
+            "clinical_grade": true,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 4,
+          "pmids": ["21248726", "15057820", "22286173"],
+          "recommendation_text": "HLA-B*15:02 is strongly associated with carbamazepine-induced SJS/TEN, primarily in East/Southeast Asian populations. This proxy SNP has r²=0.93 in EAS. FDA black box warning and CPIC guideline mandate HLA-B*15:02 testing before carbamazepine use in at-risk populations. Confirmatory HLA typing required.",
+          "cross_module": {
+            "module": "pharmacogenomics",
+            "note": "Carbamazepine/HLA-B*15:02 cross-links with PGx module for prescribing guidance."
+          }
+        },
+        {
+          "rsid": "rs1061235",
+          "gene": "HLA-A",
+          "variant_name": "HLA-A*31:01 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "A",
+          "ref_allele": "G",
+          "genotype_effects": {
+            "GG": {
+              "category": "Standard",
+              "effect_summary": "No HLA-A*31:01 proxy allele detected. Low risk of carbamazepine DRESS/maculopapular exanthema at this locus."
+            },
+            "GA": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-A*31:01 proxy allele. Associated with increased risk of carbamazepine-induced DRESS syndrome and maculopapular exanthema across multiple ethnicities."
+            },
+            "AG": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-A*31:01 proxy allele. Associated with increased risk of carbamazepine-induced DRESS syndrome and maculopapular exanthema across multiple ethnicities."
+            },
+            "AA": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-A*31:01 proxy. High probability of HLA-A*31:01 carrier status. Carbamazepine should not be prescribed without confirmatory HLA typing."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-A*31:01",
+            "r_squared_eur": 0.88,
+            "clinical_grade": true,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 3,
+          "pmids": ["21428769", "24025145", "26808113"],
+          "recommendation_text": "HLA-A*31:01 is associated with carbamazepine hypersensitivity (DRESS and maculopapular exanthema) across multiple populations. Proxy r²=0.88 in EUR. CPIC recommends HLA-A*31:01 testing before carbamazepine initiation. Confirmatory HLA typing required.",
+          "cross_module": {
+            "module": "pharmacogenomics",
+            "note": "Carbamazepine/HLA-A*31:01 cross-links with PGx module for prescribing guidance."
+          }
+        },
+        {
+          "rsid": "rs9263726",
+          "gene": "HLA-B",
+          "variant_name": "HLA-B*58:01 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No HLA-B*58:01 proxy allele detected. Low risk of allopurinol hypersensitivity at this locus."
+            },
+            "CT": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*58:01 proxy allele. Associated with significantly increased risk of allopurinol-induced SJS/TEN and DRESS, especially in Southeast Asian and African populations."
+            },
+            "TC": {
+              "category": "Elevated",
+              "effect_summary": "Carrier of HLA-B*58:01 proxy allele. Associated with significantly increased risk of allopurinol-induced SJS/TEN and DRESS, especially in Southeast Asian and African populations."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-B*58:01 proxy. High probability of HLA-B*58:01 carrier status. Allopurinol is contraindicated pending confirmatory HLA typing."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-B*58:01",
+            "r_squared_eur": 0.91,
+            "clinical_grade": true,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 4,
+          "pmids": ["22286173", "22177658", "26092464"],
+          "recommendation_text": "HLA-B*58:01 is the primary genetic risk factor for allopurinol-induced severe cutaneous adverse reactions (SJS/TEN). CPIC and ACR recommend HLA-B*58:01 testing before allopurinol initiation in high-risk populations (Southeast Asian, African, Korean). Proxy r²=0.91 in EUR. Confirmatory HLA typing required.",
+          "cross_module": {
+            "module": "pharmacogenomics",
+            "note": "Allopurinol/HLA-B*58:01 cross-links with PGx module for prescribing guidance."
+          }
+        }
+      ]
+    },
+    {
+      "id": "food_sensitivity",
+      "name": "Food Sensitivity",
+      "description": "HLA allele proxies for celiac disease (gluten sensitivity). HLA-DQ2 and HLA-DQ8 are necessary but not sufficient for celiac disease development — approximately 30–40% of the general population carries DQ2/DQ8 but only ~1% develops celiac disease. Negative results have high negative predictive value (>99%).",
+      "snps": [
+        {
+          "rsid": "rs2187668",
+          "gene": "HLA-DQA1",
+          "variant_name": "HLA-DQ2.5 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No HLA-DQ2.5 proxy allele detected. Very low probability of celiac disease (negative predictive value >99%). Celiac disease is extremely unlikely without HLA-DQ2 or HLA-DQ8."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of HLA-DQ2.5 proxy. Genetic susceptibility to celiac disease is present. However, HLA-DQ2 is necessary but not sufficient — only ~3% of DQ2 carriers develop celiac disease. Serological testing (tTG-IgA) recommended if symptoms present."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of HLA-DQ2.5 proxy. Genetic susceptibility to celiac disease is present. However, HLA-DQ2 is necessary but not sufficient — only ~3% of DQ2 carriers develop celiac disease. Serological testing (tTG-IgA) recommended if symptoms present."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-DQ2.5 proxy. Higher genetic dosage of celiac risk allele. Approximately 5× higher celiac risk compared to heterozygous DQ2. Serological screening recommended even in asymptomatic individuals with family history."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-DQ2",
+            "r_squared_eur": 0.95,
+            "clinical_grade": false,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 3,
+          "pmids": ["18311140", "20190752", "22926369"],
+          "recommendation_text": "HLA-DQ2 is present in ~90–95% of celiac disease patients. This proxy (r²=0.95 in EUR) indicates genetic susceptibility but not diagnosis. Importantly, a negative result (no DQ2 or DQ8) has very high negative predictive value (>99%), effectively ruling out celiac disease. Symptomatic individuals should pursue serological testing (tTG-IgA) and consider gastroenterology referral.",
+          "cross_module": {
+            "module": "nutrigenomics",
+            "note": "Celiac-related HLA-DQ2 finding may affect dietary considerations. See Nutrigenomics for gluten-related nutrient interactions."
+          }
+        },
+        {
+          "rsid": "rs7775228",
+          "gene": "HLA-DQB1",
+          "variant_name": "HLA-DQ8 proxy",
+          "hgvs_protein": null,
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "No HLA-DQ8 proxy allele detected. In the absence of HLA-DQ2, celiac disease risk is very low (negative predictive value >99%)."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of HLA-DQ8 proxy. Genetic susceptibility to celiac disease is present. HLA-DQ8 accounts for ~5–10% of celiac cases (those without DQ2). Lower penetrance than DQ2. Serological testing recommended if symptoms present."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of HLA-DQ8 proxy. Genetic susceptibility to celiac disease is present. HLA-DQ8 accounts for ~5–10% of celiac cases (those without DQ2). Lower penetrance than DQ2. Serological testing recommended if symptoms present."
+            },
+            "TT": {
+              "category": "Elevated",
+              "effect_summary": "Homozygous HLA-DQ8 proxy. Elevated celiac risk allele dosage. Serological screening recommended, especially with family history or symptoms of gluten sensitivity."
+            }
+          },
+          "hla_proxy": {
+            "hla_allele": "HLA-DQ8",
+            "r_squared_eur": 0.89,
+            "clinical_grade": false,
+            "confirmatory_test_required": true
+          },
+          "evidence_level": 3,
+          "pmids": ["18311140", "20190752", "22926369"],
+          "recommendation_text": "HLA-DQ8 is present in ~5–10% of celiac disease patients who are DQ2-negative. Proxy r²=0.89 in EUR. Combined DQ2/DQ8 testing provides the highest negative predictive value for celiac disease exclusion. Symptomatic individuals should pursue serological confirmation.",
+          "cross_module": {
+            "module": "nutrigenomics",
+            "note": "Celiac-related HLA-DQ8 finding may affect dietary considerations. See Nutrigenomics for gluten-related nutrient interactions."
+          }
+        }
+      ]
+    },
+    {
+      "id": "histamine_metabolism",
+      "name": "Histamine Metabolism",
+      "description": "Variants affecting histamine catabolism enzymes (diamine oxidase and histamine N-methyltransferase). Reduced histamine clearance may contribute to histamine intolerance symptoms including headaches, flushing, gastrointestinal distress, and urticaria after histamine-rich foods or alcohol. Evidence is at the candidate gene level.",
+      "snps": [
+        {
+          "rsid": "rs10156191",
+          "gene": "AOC1",
+          "variant_name": "Thr16Met",
+          "hgvs_protein": "p.Thr16Met",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal diamine oxidase (DAO) activity. Standard histamine catabolism in the gut."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Thr16Met variant. Mildly reduced DAO activity. May have modestly decreased histamine clearance capacity after ingestion of histamine-rich foods."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Thr16Met variant. Mildly reduced DAO activity. May have modestly decreased histamine clearance capacity after ingestion of histamine-rich foods."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous Thr16Met. Reduced DAO enzyme activity. Associated with decreased histamine catabolism. May contribute to histamine intolerance symptoms (headaches, flushing, GI distress) after histamine-rich foods or alcohol. Evidence is preliminary."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["15046637", "17490952", "23886886"],
+          "recommendation_text": "AOC1 (DAO) Thr16Met affects diamine oxidase activity, the primary enzyme for gut histamine degradation. Individuals with reduced DAO may benefit from limiting histamine-rich foods (aged cheese, wine, fermented foods) if symptomatic. Evidence is at the candidate gene level — clinical significance requires further validation."
+        },
+        {
+          "rsid": "rs11558538",
+          "gene": "HNMT",
+          "variant_name": "Thr105Ile",
+          "hgvs_protein": "p.Thr105Ile",
+          "risk_allele": "T",
+          "ref_allele": "C",
+          "genotype_effects": {
+            "CC": {
+              "category": "Standard",
+              "effect_summary": "Normal histamine N-methyltransferase activity. Standard intracellular histamine inactivation."
+            },
+            "CT": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Thr105Ile variant. Mildly reduced HNMT activity. May contribute to slightly prolonged intracellular histamine signaling."
+            },
+            "TC": {
+              "category": "Moderate",
+              "effect_summary": "One copy of the Thr105Ile variant. Mildly reduced HNMT activity. May contribute to slightly prolonged intracellular histamine signaling."
+            },
+            "TT": {
+              "category": "Moderate",
+              "effect_summary": "Homozygous Thr105Ile. Reduced HNMT enzyme stability and activity. May contribute to histamine sensitivity and has been associated with asthma susceptibility in candidate gene studies. Evidence is preliminary."
+            }
+          },
+          "evidence_level": 1,
+          "pmids": ["11746697", "17490952", "23886886"],
+          "recommendation_text": "HNMT Thr105Ile affects intracellular histamine metabolism. The Ile105 variant has reduced enzyme stability. Combined with AOC1 variants, this may compound histamine clearance deficits. Evidence is at the candidate gene level. Symptomatic individuals may benefit from a low-histamine trial diet under medical supervision."
+        }
+      ]
+    }
+  ],
+  "special_calling": {
+    "HLA_proxy_calling": {
+      "description": "HLA allele predictions use tag SNPs from the hla_proxy_lookup table. Each proxy has an ancestry-specific linkage disequilibrium (LD) r² value indicating prediction accuracy. r² values vary by ancestry population — EUR values are typically highest for these proxies. All HLA proxy results require confirmatory high-resolution HLA typing before clinical action. Drug hypersensitivity HLA proxies are clinical-grade (r²>0.85 in target populations). Celiac DQ2/DQ8 proxies provide high negative predictive value but lower positive predictive value.",
+      "proxy_rsids": ["rs2395029", "rs144012689", "rs1061235", "rs9263726", "rs2187668", "rs7775228"],
+      "drug_hypersensitivity_proxies": {
+        "rs2395029": "HLA-B*57:01 (abacavir)",
+        "rs144012689": "HLA-B*15:02 (carbamazepine SJS/TEN)",
+        "rs1061235": "HLA-A*31:01 (carbamazepine DRESS)",
+        "rs9263726": "HLA-B*58:01 (allopurinol)"
+      },
+      "celiac_proxies": {
+        "rs2187668": "HLA-DQ2.5",
+        "rs7775228": "HLA-DQ8"
+      },
+      "confirmatory_test_required": true
+    },
+    "celiac_DQ2_DQ8_combined": {
+      "description": "Celiac disease risk assessment combines HLA-DQ2 (rs2187668) and HLA-DQ8 (rs7775228) results. DQ2 accounts for ~90–95% of celiac patients, DQ8 for ~5–10%. The key clinical utility is negative predictive value: absence of both DQ2 and DQ8 essentially rules out celiac disease (NPV >99%). Positive results indicate genetic susceptibility only — ~30–40% of the general population carries DQ2/DQ8 but only ~1% develops celiac disease.",
+      "rsids": ["rs2187668", "rs7775228"],
+      "combined_states": {
+        "neither": {
+          "label": "Low Celiac Risk",
+          "description": "Neither DQ2 nor DQ8 proxy detected. Celiac disease is extremely unlikely (NPV >99%). Gluten-related symptoms are unlikely to be celiac disease."
+        },
+        "dq2_only": {
+          "label": "Celiac Susceptibility (DQ2)",
+          "description": "HLA-DQ2 proxy detected. Genetic prerequisite for celiac disease is met. ~3% lifetime risk if heterozygous, ~5% if homozygous. Serological testing (tTG-IgA) recommended if symptoms present."
+        },
+        "dq8_only": {
+          "label": "Celiac Susceptibility (DQ8)",
+          "description": "HLA-DQ8 proxy detected. Lower celiac penetrance than DQ2. Accounts for ~5–10% of celiac cases. Serological testing recommended if symptoms present."
+        },
+        "both": {
+          "label": "Celiac Susceptibility (DQ2+DQ8)",
+          "description": "Both HLA-DQ2 and DQ8 proxies detected. Combined genetic susceptibility. Higher risk than single haplotype. Serological screening recommended even if asymptomatic, especially with family history."
+        }
+      }
+    },
+    "histamine_combined_assessment": {
+      "description": "Combined AOC1 (extracellular/gut DAO) and HNMT (intracellular) assessment. AOC1 rs10156191 affects gut histamine clearance; HNMT rs11558538 affects intracellular histamine inactivation. Compound reduction in both pathways may amplify histamine intolerance risk. Both are ★☆ evidence (candidate gene level) and should be visually de-emphasized relative to GWAS and clinical-grade findings.",
+      "rsids": ["rs10156191", "rs11558538"],
+      "de_emphasize_in_ui": true
+    }
+  },
+  "gwas_efo_terms": [
+    "allergy",
+    "allergic",
+    "asthma",
+    "atopic",
+    "ige",
+    "eosinophil",
+    "rhinitis",
+    "urticaria",
+    "anaphylaxis",
+    "drug hypersensitivity",
+    "food allergy",
+    "histamine",
+    "mast cell",
+    "celiac disease",
+    "inflammatory bowel",
+    "crohn",
+    "ulcerative colitis"
+  ],
+  "scoring_rules": {
+    "categories": ["Elevated", "Moderate", "Standard"],
+    "star_1_cap": "Moderate",
+    "elevated_requires_min_stars": 2,
+    "elevated_requires_genotype": "clinically_meaningful",
+    "pathway_level_determination": "highest_category_across_snps",
+    "hla_proxy_rule": "HLA proxy SNPs use genotype-based calling. Any carrier of risk allele → Elevated for drug hypersensitivity. Celiac proxies: heterozygous → Moderate, homozygous → Elevated. All require confirmatory HLA typing.",
+    "histamine_de_emphasis": "AOC1 and HNMT findings (★☆) should be visually de-emphasized in UI. Homozygous risk caps at Moderate per star_1_cap rule."
+  }
+}
