@@ -1,9 +1,9 @@
 /** Grid of analysis module cards for the dashboard (P1-20, wired P3-43a).
  *
- * Ten modules: Pharmacogenomics, Nutrigenomics, Cancer, Cardiovascular,
+ * Twelve modules: Pharmacogenomics, Nutrigenomics, Cancer, Cardiovascular,
  * APOE (gated), Carrier Status, Ancestry, Gene Fitness, Gene Sleep,
- * Gene Allergy. Cards show real finding counts, top finding text, and
- * evidence stars from the findings summary API.
+ * Gene Allergy, Traits & Personality, Gene Health. Cards show real finding
+ * counts, top finding text, and evidence stars from the findings summary API.
  */
 
 import {
@@ -18,6 +18,7 @@ import {
   Moon,
   Flower2,
   Fingerprint,
+  Activity,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ModuleCard from './ModuleCard'
@@ -113,6 +114,13 @@ const MODULE_CARDS: ModuleCardConfig[] = [
     label: 'Traits & Personality',
     icon: Fingerprint,
     description: 'PRS-based trait associations with evidence-gated personality findings.',
+  },
+  {
+    to: '/gene-health',
+    moduleKey: 'gene_health',
+    label: 'Gene Health',
+    icon: Activity,
+    description: 'Disease risk associations grouped by body system from ClinVar and GWAS data.',
   },
 ]
 
