@@ -41,8 +41,8 @@ EXPECTED_RSIDS = {
     "rs2572431",  # CTNNA2 openness
     "rs9611519",  # 5q14.3 agreeableness
     "rs2389621",  # KATNAL2 conscientiousness
-    "rs993137",   # CADM2 risk tolerance
-    "rs747302",   # DRD4 VNTR proxy
+    "rs993137",  # CADM2 risk tolerance
+    "rs747302",  # DRD4 VNTR proxy
 }
 
 EXPECTED_PATHWAYS = {
@@ -219,9 +219,7 @@ class TestGenotypeEffects:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 for gt, effect in snp["genotype_effects"].items():
-                    assert "effect_summary" in effect, (
-                        f"{snp['rsid']}:{gt} missing effect_summary"
-                    )
+                    assert "effect_summary" in effect, f"{snp['rsid']}:{gt} missing effect_summary"
                     assert len(effect["effect_summary"]) > 0
 
     def test_each_snp_has_standard_category(self, panel_data: dict) -> None:
@@ -229,9 +227,7 @@ class TestGenotypeEffects:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 categories = {e["category"] for e in snp["genotype_effects"].values()}
-                assert "Standard" in categories, (
-                    f"{snp['rsid']} has no Standard genotype category"
-                )
+                assert "Standard" in categories, f"{snp['rsid']} has no Standard genotype category"
 
     def test_no_elevated_on_star_1_snps(self, panel_data: dict) -> None:
         """★☆ evidence SNPs cannot have Elevated category (star_1_cap rule)."""
@@ -275,9 +271,15 @@ class TestPRSWeightSets:
 
     def test_weight_sets_have_required_fields(self, panel_data: dict) -> None:
         required = {
-            "name", "trait", "source_ancestry", "source_study",
-            "source_pmid", "sample_size", "reference_mean",
-            "reference_std", "weights",
+            "name",
+            "trait",
+            "source_ancestry",
+            "source_study",
+            "source_pmid",
+            "sample_size",
+            "reference_mean",
+            "reference_std",
+            "weights",
         }
         for ws in panel_data["prs_weight_sets"]:
             for field in required:
@@ -318,9 +320,7 @@ class TestPRSWeightSets:
     def test_no_duplicate_rsids_within_weight_set(self, panel_data: dict) -> None:
         for ws in panel_data["prs_weight_sets"]:
             rsids = [w["rsid"] for w in ws["weights"]]
-            assert len(rsids) == len(set(rsids)), (
-                f"Weight set '{ws['name']}' has duplicate rsids"
-            )
+            assert len(rsids) == len(set(rsids)), f"Weight set '{ws['name']}' has duplicate rsids"
 
 
 # ── Cognitive pathway PRS-primary tests ────────────────────────────────
@@ -412,8 +412,11 @@ class TestBigFivePersonality:
     """Validate Big Five personality dimension SNPs."""
 
     BIG_FIVE_DOMAINS = {
-        "neuroticism", "extraversion", "openness",
-        "agreeableness", "conscientiousness",
+        "neuroticism",
+        "extraversion",
+        "openness",
+        "agreeableness",
+        "conscientiousness",
     }
 
     def _get_personality_snps(self, panel_data: dict) -> list[dict]:
@@ -537,7 +540,6 @@ class TestCrossModuleLinks:
         assert adhd_links[0]["to_module"] == "gene_health"
 
 
-
 # ── GWAS EFO terms tests ────────────────────────────────────────────────
 
 
@@ -597,8 +599,8 @@ class TestPathwayAllocation:
     def test_behavioral_traits_snps(self, panel_data: dict) -> None:
         pw = self._get_pathway(panel_data, "behavioral_traits")
         rsids = {s["rsid"] for s in pw["snps"]}
-        assert "rs993137" in rsids   # CADM2 risk tolerance
-        assert "rs747302" in rsids   # DRD4 VNTR proxy
+        assert "rs993137" in rsids  # CADM2 risk tolerance
+        assert "rs747302" in rsids  # DRD4 VNTR proxy
 
 
 # ── Evidence cap enforcement tests ───────────────────────────────────
