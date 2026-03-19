@@ -389,7 +389,7 @@ def list_prs(
             PRSFinding(
                 trait=detail.get("trait", ""),
                 name=detail.get("name", ""),
-                percentile=detail.get("percentile") or pf["detail"].get("z_score"),
+                percentile=detail.get("percentile") or detail.get("z_score"),
                 z_score=detail.get("z_score"),
                 bootstrap_ci_lower=detail.get("bootstrap_ci_lower"),
                 bootstrap_ci_upper=detail.get("bootstrap_ci_upper"),
