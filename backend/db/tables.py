@@ -598,6 +598,22 @@ haplogroup_assignments = sa.Table(
     sa.Column("assigned_at", sa.DateTime, server_default=sa.func.now()),
 )
 
+# ── Panel Coverage Tracking (P3-58) ──────────────────────────────────
+
+panel_coverage = sa.Table(
+    "panel_coverage",
+    sample_metadata_obj,
+    sa.Column("module", sa.Text, nullable=False, primary_key=True),
+    sa.Column("rsid", sa.Text, nullable=False, primary_key=True),
+    sa.Column("gene", sa.Text),
+    sa.Column("expected_trait", sa.Text),
+    sa.Column(
+        "coverage_status",
+        sa.Text,
+        nullable=False,
+    ),  # 'called', 'no_call', 'not_on_array'
+)
+
 # ── Watched Variants (VUS tracking) ───────────────────────────────────
 
 watched_variants = sa.Table(
