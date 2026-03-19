@@ -482,6 +482,7 @@ def _generate_cross_module_findings(
       - VDR → Nutrigenomics module (vitamin D)
     """
     cross_findings: list[CrossModuleFinding] = []
+    seen_keys: set[tuple[str, str]] = set()
 
     for pr in pathway_results:
         for snp_result in pr.called_snps:
@@ -514,10 +515,10 @@ def _generate_cross_module_findings(
                 )
 
             # Deduplicate: only one cross-link per gene+target combination
-            existing_keys = {(c.gene, c.target_module) for c in cross_findings}
-            if (snp_result.gene, target_module) in existing_keys:
+            if (snp_result.gene, target_module) in seen_keys:
                 continue
 
+            seen_keys.add((snp_result.gene, target_module))
             cross_findings.append(
                 CrossModuleFinding(
                     rsid=snp_result.rsid,
@@ -830,9 +831,7 @@ def store_skin_findings(
 
     # FLG insufficient data caveat finding
     if result.flg_insufficient_data:
-        flg_config = None
-        if panel := _find_panel_snp_from_result(result, "rs61816761"):
-            flg_config = panel
+        flg_snp = _find_panel_snp_from_result(result, "rs61816761")
 
         caveat_text = (
             "FLG 2282del4 — Insufficient Data. "
@@ -852,7 +851,7 @@ def store_skin_findings(
                 "pathway": "Skin Barrier & Inflammation",
                 "pathway_level": None,
                 "pmid_citations": json.dumps(
-                    flg_config.pmids if flg_config else ["16550169", "17597076"]
+                    flg_snp.pmids if flg_snp else ["16550169", "17597076"]
                 ),
                 "detail_json": json.dumps(
                     {
