@@ -308,6 +308,26 @@ class TestSNPScoring:
         result = _score_snp(snp, "TT")
         assert result.category == MODERATE  # capped at Moderate by star-1
 
+    def test_gjb2_het_moderate(self, panel: GeneHealthPanel) -> None:
+        """GJB2 35delG het (G/delG) -> Moderate."""
+        snp = self._get_snp(panel, "rs80338939")
+        result = _score_snp(snp, "G/delG")
+        assert result.category == MODERATE
+        assert result.present_in_sample is True
+
+    def test_gjb2_hom_elevated(self, panel: GeneHealthPanel) -> None:
+        """GJB2 35delG hom (delG/delG) -> Elevated."""
+        snp = self._get_snp(panel, "rs80338939")
+        result = _score_snp(snp, "delG/delG")
+        assert result.category == ELEVATED
+
+    def test_gjb2_reversed_slash_genotype(self, panel: GeneHealthPanel) -> None:
+        """GJB2 reversed slash genotype (delG/G) -> matches G/delG -> Moderate."""
+        snp = self._get_snp(panel, "rs80338939")
+        result = _score_snp(snp, "delG/G")
+        assert result.category == MODERATE
+        assert result.present_in_sample is True
+
 
 # -- Pathway level determination tests ----------------------------------------
 

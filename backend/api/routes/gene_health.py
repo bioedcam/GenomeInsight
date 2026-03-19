@@ -341,7 +341,9 @@ def run_gene_health(
 
     panel = load_gene_health_panel()
     result = score_gene_health_pathways(panel, sample_engine, registry.reference_engine)
-    count = store_gene_health_findings(result, sample_engine)
+    count = store_gene_health_findings(
+        result, sample_engine, module_disclaimer=panel.module_disclaimer
+    )
 
     # Set annotation_coverage bitmask bit 5 for GWAS-matched variants
     gwas_updated = update_annotation_coverage_gwas(result, sample_engine)

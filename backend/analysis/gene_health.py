@@ -271,8 +271,14 @@ def _score_snp(snp: PanelSNP, genotype: str | None) -> SNPResult:
     # Look up genotype effect from panel definition
     effect = snp.genotype_effects.get(genotype)
     if effect is None:
-        # Try reversed genotype (e.g. "CT" → "TC")
-        reversed_gt = genotype[::-1] if len(genotype) == 2 else genotype
+        # Try reversed genotype: "CT" → "TC", or "delG/G" → "G/delG"
+        if "/" in genotype:
+            parts = genotype.split("/", 1)
+            reversed_gt = f"{parts[1]}/{parts[0]}"
+        elif len(genotype) == 2:
+            reversed_gt = genotype[::-1]
+        else:
+            reversed_gt = genotype
         effect = snp.genotype_effects.get(reversed_gt)
 
     if effect is None:
@@ -433,7 +439,7 @@ def _compute_panel_coverage(
             raw_gt = genotypes.get(snp.rsid)
             if raw_gt is None:
                 status = "not_on_array"
-            elif raw_gt.strip() in ("", "--"):
+            elif raw_gt.strip() in ("", "--", "II", "DD", "DI", "ID"):
                 status = "no_call"
             else:
                 status = "called"
@@ -577,6 +583,7 @@ def _lookup_gwas_matches(
 def store_gene_health_findings(
     result: GeneHealthResult,
     sample_engine: sa.Engine,
+    module_disclaimer: str | None = None,
 ) -> int:
     """Store gene health findings in the sample database.
 
@@ -591,13 +598,14 @@ def store_gene_health_findings(
     Args:
         result: GeneHealthResult from score_gene_health_pathways.
         sample_engine: SQLAlchemy engine for the sample database.
+        module_disclaimer: Optional disclaimer text from the panel.
 
     Returns:
         Number of findings inserted.
     """
     rows: list[dict] = []
 
-    for pr in result.pathway_results:
+    for idx, pr in enumerate(result.pathway_results):
         # Pathway-level summary finding
         called_count = len(pr.called_snps)
         total_count = len(pr.snp_results)
@@ -607,7 +615,7 @@ def store_gene_health_findings(
             else f"{pr.pathway_name} — Standard (no variants of concern)"
         )
 
-        detail = {
+        detail: dict = {
             "pathway_id": pr.pathway_id,
             "called_snps": called_count,
             "total_snps": total_count,
@@ -626,6 +634,10 @@ def store_gene_health_findings(
                 for s in pr.called_snps
             ],
         }
+
+        # Include module disclaimer in first pathway summary for API retrieval
+        if idx == 0 and module_disclaimer:
+            detail["module_disclaimer"] = module_disclaimer
 
         # Collect PMIDs from all called SNPs
         all_pmids: list[str] = []
