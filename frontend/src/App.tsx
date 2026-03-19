@@ -13,6 +13,7 @@ import AncestryView from '@/pages/AncestryView'
 import FitnessView from '@/pages/FitnessView'
 import SleepView from '@/pages/SleepView'
 import MethylationView from '@/pages/MethylationView'
+import SkinView from '@/pages/SkinView'
 import RareVariantsView from '@/pages/RareVariantsView'
 import GenomeBrowser from '@/pages/GenomeBrowser'
 import ReportBuilder from '@/pages/ReportBuilder'
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/fitness" element={<FitnessView />} />
         <Route path="/sleep" element={<SleepView />} />
         <Route path="/methylation" element={<MethylationView />} />
+        <Route path="/skin" element={<SkinView />} />
         <Route path="/rare-variants" element={<RareVariantsView />} />
         <Route path="/genome-browser" element={<GenomeBrowser />} />
         <Route path="/reports" element={<ReportBuilder />} />

@@ -38,6 +38,7 @@ from backend.api.routes.pharma import router as pharma_router
 from backend.api.routes.rare_variants import router as rare_variants_router
 from backend.api.routes.samples import router as samples_router
 from backend.api.routes.setup import router as setup_router
+from backend.api.routes.skin import router as skin_router
 from backend.api.routes.sleep import router as sleep_router
 from backend.api.routes.variant_detail import router as variant_detail_router
 from backend.api.routes.variants import router as variants_router
@@ -128,8 +129,9 @@ def create_app() -> FastAPI:
     api_router.include_router(pharma_router)
     api_router.include_router(rare_variants_router)
     api_router.include_router(samples_router)
-    api_router.include_router(sleep_router)
     api_router.include_router(setup_router)
+    api_router.include_router(skin_router)
+    api_router.include_router(sleep_router)
     api_router.include_router(variants_router)
     api_router.include_router(variant_detail_router)
     app.include_router(api_router)
