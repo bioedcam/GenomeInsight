@@ -396,9 +396,9 @@ export default function AllergyView() {
                     Drug Hypersensitivity Alerts
                   </h2>
                   <div className="space-y-3">
-                    {drugAlerts.map((item) => (
+                    {drugAlerts.map((item, idx) => (
                       <DrugHypersensitivityAlert
-                        key={`${item.rsid}-${item.target_module}`}
+                        key={`${item.rsid ?? item.gene}-${item.target_module}-${idx}`}
                         item={item}
                         sampleId={sampleId}
                       />
@@ -449,9 +449,9 @@ export default function AllergyView() {
                 <section className="mt-6" aria-label="Cross-module findings">
                   <h2 className="text-lg font-semibold mb-3">Related Findings in Other Modules</h2>
                   <div className="space-y-3">
-                    {otherCrossModule.map((item) => (
+                    {otherCrossModule.map((item, idx) => (
                       <CrossModuleCard
-                        key={`${item.rsid}-${item.source_module}-${item.target_module}`}
+                        key={`${item.rsid ?? item.gene}-${item.source_module}-${item.target_module}-${idx}`}
                         item={item}
                         sampleId={sampleId}
                       />
