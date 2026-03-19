@@ -1,9 +1,9 @@
 /** Grid of analysis module cards for the dashboard (P1-20, wired P3-43a).
  *
- * Nine modules: Pharmacogenomics, Nutrigenomics, Cancer, Cardiovascular,
- * APOE (gated), Carrier Status, Ancestry, Gene Fitness, Gene Sleep.
- * Cards show real finding counts, top finding text, and evidence stars
- * from the findings summary API.
+ * Ten modules: Pharmacogenomics, Nutrigenomics, Cancer, Cardiovascular,
+ * APOE (gated), Carrier Status, Ancestry, Gene Fitness, Gene Sleep,
+ * Gene Allergy. Cards show real finding counts, top finding text, and
+ * evidence stars from the findings summary API.
  */
 
 import {
@@ -16,6 +16,7 @@ import {
   Globe,
   Dumbbell,
   Moon,
+  Flower2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ModuleCard from './ModuleCard'
@@ -97,6 +98,13 @@ const MODULE_CARDS: ModuleCardConfig[] = [
     label: 'Gene Sleep',
     icon: Moon,
     description: 'Sleep quality, circadian rhythm, and caffeine metabolism.',
+  },
+  {
+    to: '/allergy',
+    moduleKey: 'allergy',
+    label: 'Gene Allergy',
+    icon: Flower2,
+    description: 'Atopic conditions, drug hypersensitivity, food sensitivities, and histamine metabolism.',
   },
 ]
 
