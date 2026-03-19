@@ -96,7 +96,7 @@ function SNPRow({ snp, sampleId }: { snp: SNPDetail; sampleId: number }) {
               to={`${MODULE_ROUTES[snp.cross_module.to_module]}?sample_id=${sampleId}`}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              View in {snp.cross_module.to_module.replace("_", " ")}
+              View in {snp.cross_module.to_module.replaceAll("_", " ")}
               <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>
           ) : (

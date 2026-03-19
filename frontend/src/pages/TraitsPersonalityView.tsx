@@ -21,14 +21,13 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
-import { useTraitsPathways, useTraitsPRS, useTraitsDisclaimer } from "@/api/traits"
+import { useTraitsPathways, useTraitsPRS, useTraitsDisclaimer, useTraitsPathwayDetail } from "@/api/traits"
 import type { CrossModuleItem } from "@/types/traits"
 import PathwayCard from "@/components/traits/PathwayCard"
 import PathwayDetailPanel from "@/components/traits/PathwayDetailPanel"
 import TraitsPRSGaugeCard from "@/components/traits/TraitsPRSGaugeCard"
 import BigFiveRadarChart from "@/components/traits/BigFiveRadarChart"
 import EvidenceStars from "@/components/ui/EvidenceStars"
-import { useTraitsPathwayDetail } from "@/api/traits"
 
 /** Map target module to route path for cross-module links. */
 const MODULE_ROUTES: Record<string, string> = {
@@ -47,7 +46,7 @@ function CrossModuleCard({
   sampleId: number
 }) {
   const targetRoute = MODULE_ROUTES[item.to_module]
-  const moduleName = item.to_module.replace("_", " ")
+  const moduleName = item.to_module.replaceAll("_", " ")
 
   return (
     <div className="rounded-lg border bg-card p-4">
