@@ -160,50 +160,35 @@ class TestSNPFields:
                 assert isinstance(snp["pmids"], list)
                 assert len(snp["pmids"]) > 0, f"{snp['rsid']} has no PMIDs"
                 for pmid in snp["pmids"]:
-                    assert pmid.isdigit(), (
-                        f"{snp['rsid']} has non-numeric PMID: {pmid}"
-                    )
+                    assert pmid.isdigit(), f"{snp['rsid']} has non-numeric PMID: {pmid}"
 
 
 # ── Genotype effects validation ─────────────────────────────────────────
 
 
 class TestGenotypeEffects:
-    def test_genotype_effects_have_valid_categories(
-        self, panel_data: dict
-    ) -> None:
+    def test_genotype_effects_have_valid_categories(self, panel_data: dict) -> None:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 for gt, effect in snp["genotype_effects"].items():
-                    assert "category" in effect, (
-                        f"{snp['rsid']}:{gt} missing category"
-                    )
+                    assert "category" in effect, f"{snp['rsid']}:{gt} missing category"
                     assert effect["category"] in VALID_CATEGORIES, (
-                        f"{snp['rsid']}:{gt} invalid category: "
-                        f"{effect['category']}"
+                        f"{snp['rsid']}:{gt} invalid category: {effect['category']}"
                     )
 
-    def test_genotype_effects_have_effect_summary(
-        self, panel_data: dict
-    ) -> None:
+    def test_genotype_effects_have_effect_summary(self, panel_data: dict) -> None:
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
                 for gt, effect in snp["genotype_effects"].items():
-                    assert "effect_summary" in effect, (
-                        f"{snp['rsid']}:{gt} missing effect_summary"
-                    )
+                    assert "effect_summary" in effect, f"{snp['rsid']}:{gt} missing effect_summary"
                     assert len(effect["effect_summary"]) > 0
 
     def test_each_snp_has_standard_category(self, panel_data: dict) -> None:
         """Every SNP must have at least one Standard genotype."""
         for pathway in panel_data["pathways"]:
             for snp in pathway["snps"]:
-                categories = {
-                    e["category"] for e in snp["genotype_effects"].values()
-                }
-                assert "Standard" in categories, (
-                    f"{snp['rsid']} has no Standard genotype category"
-                )
+                categories = {e["category"] for e in snp["genotype_effects"].values()}
+                assert "Standard" in categories, f"{snp['rsid']} has no Standard genotype category"
 
 
 # ── MC1R multi-allele calling tests ─────────────────────────────────────
@@ -231,9 +216,7 @@ class TestMC1RMultiAllele:
     def test_mc1r_allele_class_annotations(self, panel_data: dict) -> None:
         """R alleles: R151C, R160W, D294H. r allele: R163Q."""
         for snp in self._get_mc1r_snps(panel_data):
-            assert "mc1r_allele_class" in snp, (
-                f"{snp['rsid']} missing mc1r_allele_class"
-            )
+            assert "mc1r_allele_class" in snp, f"{snp['rsid']} missing mc1r_allele_class"
             if snp["rsid"] in self.R_ALLELES:
                 assert snp["mc1r_allele_class"] == "R"
             elif snp["rsid"] in self.r_ALLELES:
@@ -243,9 +226,7 @@ class TestMC1RMultiAllele:
         """Strong R alleles (R151C, R160W, D294H) are well-replicated."""
         for snp in self._get_mc1r_snps(panel_data):
             if snp["rsid"] in self.R_ALLELES:
-                assert snp["evidence_level"] == 3, (
-                    f"{snp['rsid']} should have evidence_level 3"
-                )
+                assert snp["evidence_level"] == 3, f"{snp['rsid']} should have evidence_level 3"
 
     def test_mc1r_r163q_evidence_level_2(self, panel_data: dict) -> None:
         """Mild r allele (R163Q) has lower evidence."""
@@ -253,9 +234,7 @@ class TestMC1RMultiAllele:
             if snp["rsid"] == "rs885479":
                 assert snp["evidence_level"] == 2
 
-    def test_mc1r_r_alleles_have_elevated_homozygous(
-        self, panel_data: dict
-    ) -> None:
+    def test_mc1r_r_alleles_have_elevated_homozygous(self, panel_data: dict) -> None:
         """Strong R alleles homozygous → Elevated."""
         for snp in self._get_mc1r_snps(panel_data):
             if snp["rsid"] in self.R_ALLELES:
@@ -283,9 +262,7 @@ class TestMC1RMultiAllele:
         sc = panel_data["special_calling"]["MC1R_multi_allele"]
         assert set(sc["rsids"]) == self.MC1R_RSIDS
 
-    def test_mc1r_allele_class_map_in_special_calling(
-        self, panel_data: dict
-    ) -> None:
+    def test_mc1r_allele_class_map_in_special_calling(self, panel_data: dict) -> None:
         sc = panel_data["special_calling"]["MC1R_multi_allele"]
         assert "allele_classes" in sc
         for rsid in self.R_ALLELES:
@@ -303,9 +280,7 @@ class TestMC1RMultiAllele:
         """MC1R R alleles should cross-link to Cancer module (melanoma)."""
         for snp in self._get_mc1r_snps(panel_data):
             if snp["rsid"] in self.R_ALLELES:
-                assert "cross_module" in snp, (
-                    f"{snp['rsid']} missing cancer cross_module"
-                )
+                assert "cross_module" in snp, f"{snp['rsid']} missing cancer cross_module"
                 assert snp["cross_module"]["module"] == "cancer"
                 assert "melanoma" in snp["cross_module"]["note"].lower()
 
@@ -389,14 +364,10 @@ class TestVDRCrossModule:
 
     def test_vdr_nutrigenomics_cross_link(self, panel_data: dict) -> None:
         for snp in self._get_vdr_snps(panel_data):
-            assert "cross_module" in snp, (
-                f"{snp['rsid']} missing nutrigenomics cross_module"
-            )
+            assert "cross_module" in snp, f"{snp['rsid']} missing nutrigenomics cross_module"
             assert snp["cross_module"]["module"] == "nutrigenomics"
 
-    def test_vdr_in_skin_micronutrients_pathway(
-        self, panel_data: dict
-    ) -> None:
+    def test_vdr_in_skin_micronutrients_pathway(self, panel_data: dict) -> None:
         for pathway in panel_data["pathways"]:
             if pathway["id"] == "skin_micronutrients":
                 rsids = {s["rsid"] for s in pathway["snps"]}
@@ -421,10 +392,7 @@ class TestScoringRules:
 
     def test_pathway_level_determination(self, panel_data: dict) -> None:
         rules = panel_data["scoring_rules"]
-        assert (
-            rules["pathway_level_determination"]
-            == "highest_category_across_snps"
-        )
+        assert rules["pathway_level_determination"] == "highest_category_across_snps"
 
     def test_valid_categories_listed(self, panel_data: dict) -> None:
         cats = panel_data["scoring_rules"]["categories"]
