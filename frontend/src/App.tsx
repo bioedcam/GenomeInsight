@@ -15,6 +15,7 @@ import SleepView from '@/pages/SleepView'
 import MethylationView from '@/pages/MethylationView'
 import SkinView from '@/pages/SkinView'
 import AllergyView from '@/pages/AllergyView'
+import TraitsPersonalityView from '@/pages/TraitsPersonalityView'
 import RareVariantsView from '@/pages/RareVariantsView'
 import GenomeBrowser from '@/pages/GenomeBrowser'
 import ReportBuilder from '@/pages/ReportBuilder'
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/methylation" element={<MethylationView />} />
         <Route path="/skin" element={<SkinView />} />
         <Route path="/allergy" element={<AllergyView />} />
+        <Route path="/traits" element={<TraitsPersonalityView />} />
         <Route path="/rare-variants" element={<RareVariantsView />} />
         <Route path="/genome-browser" element={<GenomeBrowser />} />
         <Route path="/reports" element={<ReportBuilder />} />

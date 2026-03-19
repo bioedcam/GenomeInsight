@@ -17,6 +17,7 @@ import {
   Dumbbell,
   Moon,
   Flower2,
+  Fingerprint,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ModuleCard from './ModuleCard'
@@ -105,6 +106,13 @@ const MODULE_CARDS: ModuleCardConfig[] = [
     label: 'Gene Allergy',
     icon: Flower2,
     description: 'Atopic conditions, drug hypersensitivity, food sensitivities, and histamine metabolism.',
+  },
+  {
+    to: '/traits',
+    moduleKey: 'traits',
+    label: 'Traits & Personality',
+    icon: Fingerprint,
+    description: 'PRS-based trait associations with evidence-gated personality findings.',
   },
 ]
 
