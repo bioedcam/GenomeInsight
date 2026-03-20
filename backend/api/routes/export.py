@@ -199,8 +199,8 @@ def _stream_csv(rows: list[dict[str, Any]], delimiter: str = ","):
     yield buf.getvalue()
 
     for row in rows:
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=delimiter)
+        buf.seek(0)
+        buf.truncate()
         writer.writerow(row)
         yield buf.getvalue()
 
@@ -227,10 +227,47 @@ def _stream_csv_from_columns(
     yield buf.getvalue()
 
     for row in rows:
-        buf = io.StringIO()
-        writer = csv.writer(buf, delimiter=delimiter)
+        buf.seek(0)
+        buf.truncate()
         writer.writerow(row)
         yield buf.getvalue()
+
+
+def _stream_csv_iter(rows_iter, delimiter: str = ","):
+    """Yield CSV/TSV from an iterator of dicts, streaming row by row."""
+    buf = io.StringIO()
+    first = True
+    fieldnames = None
+    writer = None
+    for row in rows_iter:
+        if first:
+            fieldnames = list(row.keys())
+            writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=delimiter)
+            writer.writeheader()
+            yield buf.getvalue()
+            first = False
+        buf.seek(0)
+        buf.truncate()
+        writer.writerow(row)
+        yield buf.getvalue()
+    if first:
+        # No rows — yield header only
+        fieldnames = [col.name for col in annotated_variants.columns]
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=delimiter)
+        writer.writeheader()
+        yield buf.getvalue()
+
+
+def _stream_json_iter(rows_iter):
+    """Yield JSON array from an iterator of dicts."""
+    yield "["
+    first = True
+    for row in rows_iter:
+        if not first:
+            yield ","
+        yield json.dumps(row, default=str)
+        first = False
+    yield "]"
 
 
 def _stream_json_from_columns(columns: list[str], rows: list[list[Any]]):
@@ -274,17 +311,15 @@ def export_query(body: ExportQueryRequest) -> StreamingResponse:
     chrom_expr = _chrom_order_expr()
     query = query.order_by(chrom_expr.asc(), annotated_variants.c.pos.asc())
 
-    with sample_engine.connect() as conn:
-        rows_raw = conn.execute(query).fetchall()
-
-    rows = [_row_to_dict(r) for r in rows_raw]
-
     ext = body.format
     filename = _make_filename(ext)
     content_type = _CONTENT_TYPES[ext]
 
     if ext == "vcf":
-        # Extract (rsid, chrom, pos, genotype) tuples for VCF export
+        # VCF export needs all rows in memory (export_vcf_from_rows sorts).
+        with sample_engine.connect() as conn:
+            rows_raw = conn.execute(query).fetchall()
+        rows = [_row_to_dict(r) for r in rows_raw]
         variants = [(r["rsid"], r["chrom"], r["pos"], r.get("genotype") or "") for r in rows]
         vcf_content = export_vcf_from_rows(variants)
         return StreamingResponse(
@@ -292,17 +327,28 @@ def export_query(body: ExportQueryRequest) -> StreamingResponse:
             media_type=content_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
-    elif ext == "json":
+
+    # CSV/TSV/JSON — stream from cursor in batches to avoid OOM.
+    def _generate_rows():
+        with sample_engine.connect() as conn:
+            result = conn.execute(query)
+            while True:
+                batch = result.fetchmany(5000)
+                if not batch:
+                    break
+                for r in batch:
+                    yield _row_to_dict(r)
+
+    if ext == "json":
         return StreamingResponse(
-            _stream_json(rows),
+            _stream_json_iter(_generate_rows()),
             media_type=content_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     else:
-        # CSV or TSV
         delimiter = "\t" if ext == "tsv" else ","
         return StreamingResponse(
-            _stream_csv(rows, delimiter=delimiter),
+            _stream_csv_iter(_generate_rows(), delimiter=delimiter),
             media_type=content_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )

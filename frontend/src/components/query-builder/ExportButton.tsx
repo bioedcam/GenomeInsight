@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react"
 import { Download, Loader2 } from "lucide-react"
 
 interface ExportButtonProps {
-  formats: string[]
+  formats: readonly string[]
   onExport: (format: string) => void
   disabled?: boolean
   isPending?: boolean
@@ -29,7 +29,7 @@ export default function ExportButton({
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
+  // Close on outside click or Escape key
   useEffect(() => {
     if (!open) return
     function handleClick(e: MouseEvent) {
@@ -37,8 +37,15 @@ export default function ExportButton({
         setOpen(false)
       }
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false)
+    }
     document.addEventListener("mousedown", handleClick)
-    return () => document.removeEventListener("mousedown", handleClick)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleClick)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
   }, [open])
 
   return (

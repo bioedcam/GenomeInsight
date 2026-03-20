@@ -34,7 +34,7 @@ const DISPLAY_COLUMNS: Array<{
   { key: "revel", label: "REVEL", align: "right", format: (v) => (v != null ? String(v) : "—") },
 ]
 
-const QUERY_EXPORT_FORMATS = ["vcf", "tsv", "json", "csv"]
+const QUERY_EXPORT_FORMATS = ["vcf", "tsv", "json", "csv"] as const
 
 interface QueryResultsTableProps {
   pages: QueryResultPage[]

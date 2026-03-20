@@ -200,7 +200,7 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
 
 // ── Results display ──────────────────────────────────────────────────
 
-const SQL_EXPORT_FORMATS = ["tsv", "json", "csv"]
+const SQL_EXPORT_FORMATS = ["tsv", "json", "csv"] as const
 
 function SqlResultsDisplay({
   result,
