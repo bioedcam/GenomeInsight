@@ -18,6 +18,7 @@ import {
   Activity,
   Globe,
   Dna,
+  SlidersHorizontal,
   FileText,
   Settings,
   SearchCheck,
@@ -47,6 +48,7 @@ const navItems = [
   { to: '/ancestry', icon: Globe, label: 'Ancestry' },
   { to: '/rare-variants', icon: SearchCheck, label: 'Rare Variants' },
   { to: '/genome-browser', icon: Dna, label: 'Genome Browser' },
+  { to: '/query-builder', icon: SlidersHorizontal, label: 'Query Builder' },
   { to: '/reports', icon: FileText, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]

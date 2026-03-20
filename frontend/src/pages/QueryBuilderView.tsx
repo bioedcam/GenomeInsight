@@ -1,0 +1,248 @@
+/** Query builder page (P4-02).
+ *
+ * Layout:
+ * - Page header with icon
+ * - QueryBuilder panel (react-querybuilder with annotation fields)
+ * - Action bar (Run query, Clear)
+ * - Saved queries panel (save/load named queries)
+ * - Results table with pagination
+ */
+
+import { useCallback, useState } from "react"
+import { useSearchParams } from "react-router-dom"
+import { type RuleGroupType } from "react-querybuilder"
+import { Filter, Play, Loader2, AlertCircle, RotateCcw } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { parseSampleId } from "@/lib/format"
+import { useQueryFields, useRunQuery } from "@/api/query-builder"
+import type { QueryResultPage, RuleGroupModel, SavedQuery } from "@/types/query-builder"
+import QueryBuilderPanel from "@/components/query-builder/QueryBuilderPanel"
+import QueryResultsTable from "@/components/query-builder/QueryResultsTable"
+import SavedQueriesPanel from "@/components/query-builder/SavedQueriesPanel"
+
+const DEFAULT_QUERY: RuleGroupType = {
+  combinator: "and",
+  rules: [],
+}
+
+export default function QueryBuilderView() {
+  const [searchParams] = useSearchParams()
+  const sampleId = parseSampleId(searchParams.get("sample_id"))
+
+  const [query, setQuery] = useState<RuleGroupType>(DEFAULT_QUERY)
+  const [resultPages, setResultPages] = useState<QueryResultPage[]>([])
+  const [hasExecuted, setHasExecuted] = useState(false)
+
+  const fieldsQuery = useQueryFields()
+  const runQuery = useRunQuery()
+
+  const handleLoadSaved = useCallback((saved: SavedQuery) => {
+    setQuery(saved.filter as unknown as RuleGroupType)
+    setResultPages([])
+    setHasExecuted(false)
+  }, [])
+
+  // No sample selected
+  if (sampleId == null) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Query Builder</h1>
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <Filter className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            Select a sample to build queries against annotated variants.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleRun = () => {
+    if (!sampleId) return
+    const filter = query as unknown as RuleGroupModel
+    runQuery.mutate(
+      { sampleId, filter },
+      {
+        onSuccess: (data) => {
+          setResultPages([data])
+          setHasExecuted(true)
+        },
+      },
+    )
+  }
+
+  const handleLoadMore = () => {
+    if (!sampleId || resultPages.length === 0) return
+    const lastPage = resultPages[resultPages.length - 1]
+    if (!lastPage.has_more || !lastPage.next_cursor_chrom || lastPage.next_cursor_pos == null) return
+
+    const filter = query as unknown as RuleGroupModel
+    fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sample_id: sampleId,
+        filter,
+        cursor_chrom: lastPage.next_cursor_chrom,
+        cursor_pos: lastPage.next_cursor_pos,
+        limit: 50,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Query failed: ${res.status}`)
+        return res.json()
+      })
+      .then((data: QueryResultPage) => {
+        setResultPages((prev) => [...prev, data])
+      })
+      .catch(() => {
+        // Error handled silently; user can retry
+      })
+  }
+
+  const handleClear = () => {
+    setQuery(DEFAULT_QUERY)
+    setResultPages([])
+    setHasExecuted(false)
+  }
+
+  const hasRules = query.rules.length > 0
+  const totalMatching = resultPages.length > 0 ? (resultPages[0].total_matching ?? null) : null
+  const hasMore = resultPages.length > 0 && resultPages[resultPages.length - 1].has_more
+
+  return (
+    <div className="p-6">
+      {/* Page header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            "bg-primary/10 text-primary",
+          )}
+        >
+          <Filter className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Query Builder</h1>
+          <p className="text-sm text-muted-foreground">
+            Build custom filters against annotated variants with AND/OR nested logic
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* Main content */}
+        <div className="space-y-4">
+          {/* Query builder */}
+          {fieldsQuery.isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {fieldsQuery.isError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-destructive">Failed to load field metadata</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {fieldsQuery.error instanceof Error ? fieldsQuery.error.message : "Unknown error"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {fieldsQuery.data && (
+            <section aria-label="Query builder">
+              <QueryBuilderPanel
+                fields={fieldsQuery.data.fields}
+                operators={fieldsQuery.data.operators}
+                query={query}
+                onQueryChange={setQuery}
+              />
+            </section>
+          )}
+
+          {/* Action bar */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRun}
+              disabled={!hasRules || runQuery.isPending}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="run-query-btn"
+            >
+              {runQuery.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              Run Query
+            </button>
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={!hasRules && !hasExecuted}
+              className="inline-flex items-center gap-2 rounded-md border border-input px-4 py-2 text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="clear-query-btn"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Clear
+            </button>
+          </div>
+
+          {/* Error */}
+          {runQuery.isError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-destructive">Query failed</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {runQuery.error instanceof Error ? runQuery.error.message : "An unexpected error occurred."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {hasExecuted && resultPages.length > 0 && (
+            <section aria-label="Query results">
+              <QueryResultsTable
+                pages={resultPages}
+                totalMatching={totalMatching}
+                hasMore={hasMore}
+                isFetchingMore={false}
+                onLoadMore={handleLoadMore}
+              />
+            </section>
+          )}
+
+          {/* Empty state after executing */}
+          {hasExecuted && resultPages.length > 0 && resultPages[0].items.length === 0 && (
+            <div className="rounded-lg border bg-card p-8 text-center">
+              <Filter className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">
+                No variants match your query criteria.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Try adjusting your filters or using broader criteria.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar: Saved queries */}
+        <aside className="space-y-4">
+          <SavedQueriesPanel
+            currentFilter={query as unknown as RuleGroupModel}
+            onLoad={handleLoadSaved}
+          />
+        </aside>
+      </div>
+    </div>
+  )
+}
