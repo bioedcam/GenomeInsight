@@ -16,6 +16,7 @@ import logging
 import re
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
@@ -145,8 +146,8 @@ class QueryMetaResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _get_sample_engine(sample_id: int) -> sa.Engine:
-    """Resolve sample_id to a per-sample DB engine."""
+def _resolve_sample_db_path(sample_id: int) -> Path:
+    """Resolve sample_id to the absolute Path for the sample DB file."""
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
         row = conn.execute(
@@ -161,6 +162,13 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
             status_code=404,
             detail=f"Sample database file not found for sample {sample_id}.",
         )
+    return sample_db_path
+
+
+def _get_sample_engine(sample_id: int) -> sa.Engine:
+    """Resolve sample_id to a per-sample DB engine."""
+    sample_db_path = _resolve_sample_db_path(sample_id)
+    registry = get_registry()
     return registry.get_sample_engine(sample_db_path)
 
 
@@ -383,21 +391,7 @@ def _validate_read_only(sql: str) -> None:
 
 def _get_sample_db_path(sample_id: int) -> str:
     """Resolve sample_id → absolute path string for the sample DB file."""
-    registry = get_registry()
-    with registry.reference_engine.connect() as conn:
-        row = conn.execute(
-            sa.select(samples.c.db_path).where(samples.c.id == sample_id)
-        ).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
-
-    sample_db_path = registry.settings.data_dir / row.db_path
-    if not sample_db_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sample database file not found for sample {sample_id}.",
-        )
-    return str(sample_db_path)
+    return str(_resolve_sample_db_path(sample_id))
 
 
 @router.post("/sql")
@@ -412,6 +406,13 @@ def execute_sql(body: SqlRequest) -> SqlResult:
 
     db_path = _get_sample_db_path(body.sample_id)
 
+    # Deadline for query timeout enforcement.
+    deadline = time.monotonic() + SQL_CONSOLE_TIMEOUT
+
+    def _progress_handler() -> int:
+        """Return non-zero to abort if timeout exceeded."""
+        return 1 if time.monotonic() >= deadline else 0
+
     # Open a dedicated read-only connection via SQLite URI mode.
     # Using creator= so sqlite3 handles the URI directly.
     ro_engine = sa.create_engine(
@@ -422,26 +423,38 @@ def execute_sql(body: SqlRequest) -> SqlResult:
     try:
         t0 = time.monotonic()
         with ro_engine.connect() as conn:
-            result = conn.execute(sa.text(body.sql))
+            # Enforce timeout: SQLite calls the handler every ~10 000
+            # virtual-machine instructions; non-zero return aborts.
+            raw_conn = conn.connection.dbapi_connection
+            raw_conn.set_progress_handler(_progress_handler, 10_000)
+            try:
+                result = conn.execute(sa.text(body.sql))
 
-            # Determine columns from cursor description.
-            if result.returns_rows:
-                columns = [
-                    SqlResultColumn(name=col[0], type=None)
-                    for col in result.cursor.description
-                ]
-                rows_raw = result.fetchmany(body.limit + 1)
-                truncated = len(rows_raw) > body.limit
-                rows = [list(r) for r in rows_raw[: body.limit]]
-            else:
-                columns = []
-                rows = []
-                truncated = False
+                # Determine columns from cursor description.
+                if result.returns_rows:
+                    columns = [
+                        SqlResultColumn(name=col[0], type=None)
+                        for col in result.cursor.description
+                    ]
+                    rows_raw = result.fetchmany(body.limit + 1)
+                    truncated = len(rows_raw) > body.limit
+                    rows = [list(r) for r in rows_raw[: body.limit]]
+                else:
+                    columns = []
+                    rows = []
+                    truncated = False
+            finally:
+                raw_conn.set_progress_handler(None, 0)
 
         elapsed_ms = (time.monotonic() - t0) * 1000
     except sa.exc.OperationalError as exc:
-        # Surface SQLite errors (syntax, read-only violations, etc.)
+        # Surface SQLite errors (syntax, read-only violations, timeout).
         msg = str(exc.orig) if exc.orig else str(exc)
+        if "interrupted" in msg.lower():
+            raise HTTPException(
+                status_code=408,
+                detail=f"Query timed out after {SQL_CONSOLE_TIMEOUT} seconds.",
+            ) from exc
         raise HTTPException(status_code=422, detail=f"SQL error: {msg}") from exc
     finally:
         ro_engine.dispose()
