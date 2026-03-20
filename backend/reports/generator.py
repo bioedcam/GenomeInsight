@@ -19,19 +19,19 @@ Usage::
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
+import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from backend.db.connection import get_registry
 from backend.db.tables import findings, samples
 from backend.reports.module_disclaimers import MODULE_DISCLAIMERS, MODULE_DISPLAY_NAMES
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────
 
@@ -159,6 +159,15 @@ def _read_svg_content(sample_dir: Path, svg_path: str | None) -> str | None:
     if not svg_path:
         return None
     svg_file = sample_dir / svg_path
+    # Prevent path traversal attacks
+    try:
+        svg_file = svg_file.resolve()
+        sample_dir_resolved = sample_dir.resolve()
+        if not svg_file.is_relative_to(sample_dir_resolved):
+            logger.warning("SVG path traversal attempt blocked: %s", svg_path)
+            return None
+    except (ValueError, OSError):
+        return None
     if not svg_file.exists():
         logger.warning("SVG file not found: %s", svg_file)
         return None
@@ -166,8 +175,9 @@ def _read_svg_content(sample_dir: Path, svg_path: str | None) -> str | None:
         content = svg_file.read_text(encoding="utf-8")
         # Strip XML declaration for inline embedding
         if content.startswith("<?xml"):
-            newline_idx = content.index("?>")
-            content = content[newline_idx + 2 :].lstrip()
+            end_idx = content.find("?>")
+            if end_idx != -1:
+                content = content[end_idx + 2 :].lstrip()
         return content
     except Exception:
         logger.exception("Failed to read SVG: %s", svg_file)

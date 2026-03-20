@@ -265,6 +265,11 @@ class TestSvgReading:
         assert _read_svg_content(tmp_path, None) is None
         assert _read_svg_content(tmp_path, "") is None
 
+    def test_blocks_path_traversal(self, sample_with_findings: tuple) -> None:
+        _, _, sample_dir = sample_with_findings
+        assert _read_svg_content(sample_dir, "../../etc/passwd") is None
+        assert _read_svg_content(sample_dir, "../../../etc/shadow") is None
+
 
 # ── Unit tests: section grouping ──────────────────────────────────
 
@@ -557,3 +562,11 @@ class TestReportAPI:
 
         assert resp.status_code == 503
         assert "Playwright" in resp.json()["detail"]
+
+    def test_empty_modules_list_rejected(self, report_client: TestClient) -> None:
+        """Empty modules list should return 422 (use null for all)."""
+        resp = report_client.post(
+            "/api/reports/preview",
+            json={"sample_id": 1, "modules": []},
+        )
+        assert resp.status_code == 422

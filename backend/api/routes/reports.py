@@ -10,7 +10,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +33,12 @@ class ReportRequest(BaseModel):
         description="Report title",
     )
 
-
-class ReportStatusResponse(BaseModel):
-    """Response confirming report generation."""
-
-    success: bool
-    pdf_size_bytes: int
-    modules_included: list[str]
+    @field_validator("modules")
+    @classmethod
+    def modules_non_empty(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None and len(v) == 0:
+            raise ValueError("modules list cannot be empty; use null for all modules")
+        return v
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────

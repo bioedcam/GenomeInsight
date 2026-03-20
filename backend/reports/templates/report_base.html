@@ -293,7 +293,7 @@
     <div class="finding-text">{{ finding.finding_text }}</div>
 
     {% if finding.svg_content %}
-    <div class="finding-svg">{{ finding.svg_content }}</div>
+    <div class="finding-svg">{{ finding.svg_content | safe }}</div>
     {% endif %}
 
     <div class="finding-meta">
