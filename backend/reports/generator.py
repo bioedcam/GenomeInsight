@@ -261,10 +261,7 @@ def render_report_html(
 
     total_findings = sum(s["finding_count"] for s in sections)
     high_evidence_count = sum(
-        1
-        for s in sections
-        for f in s["findings"]
-        if (f.get("evidence_level") or 0) >= 3
+        1 for s in sections for f in s["findings"] if (f.get("evidence_level") or 0) >= 3
     )
 
     template = _jinja_env.get_template("report_base.html")

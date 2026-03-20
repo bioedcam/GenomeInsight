@@ -402,9 +402,7 @@ class TestHtmlRendering:
         sample_with_findings: tuple,
     ) -> None:
         """T4-08: Excluded modules don't appear."""
-        html = _render_html_helper(
-            tmp_data_dir, sample_with_findings, modules=["cancer"]
-        )
+        html = _render_html_helper(tmp_data_dir, sample_with_findings, modules=["cancer"])
 
         assert "Cancer Predisposition" in html
         assert "BRCA1" in html
@@ -417,9 +415,7 @@ class TestHtmlRendering:
         tmp_data_dir: Path,
         sample_with_findings: tuple,
     ) -> None:
-        html = _render_html_helper(
-            tmp_data_dir, sample_with_findings, modules=["cancer"]
-        )
+        html = _render_html_helper(tmp_data_dir, sample_with_findings, modules=["cancer"])
 
         # Evidence stars are rendered as ★ characters
         assert "star-filled" in html
@@ -442,9 +438,7 @@ class TestClinicalTemplates:
         assert '"Inter"' in html
         assert "font-feature-settings" in html
 
-    def test_summary_bar_rendered(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_summary_bar_rendered(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
         """Template renders summary statistics bar."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "summary-bar" in html
@@ -452,9 +446,7 @@ class TestClinicalTemplates:
         assert "Findings" in html
         assert "High Evidence" in html
 
-    def test_table_of_contents(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_table_of_contents(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
         """Template renders table of contents when multiple modules."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "toc" in html
@@ -501,9 +493,7 @@ class TestClinicalTemplates:
         assert "@media print" in html
         assert "print-color-adjust: exact" in html
 
-    def test_module_disclaimer_icon(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_module_disclaimer_icon(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
         """Module disclaimers include warning icon."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "disclaimer-icon" in html
@@ -524,9 +514,7 @@ class TestClinicalTemplates:
         assert "global-disclaimer" in html
         assert "Important Disclaimer" in html
 
-    def test_meta_labels_styled(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_meta_labels_styled(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
         """Finding metadata uses labeled styling."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "meta-label" in html
@@ -539,9 +527,7 @@ class TestClinicalTemplates:
         macros_path = TEMPLATES_DIR / "_macros.html"
         assert macros_path.exists(), "_macros.html template not found"
 
-    def test_gene_symbol_italic(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_gene_symbol_italic(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
         """Gene symbols rendered in italic (clinical convention)."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "font-style: italic" in html
