@@ -162,10 +162,7 @@ class TestValidateReadOnly:
         _validate_read_only("EXPLAIN QUERY PLAN SELECT * FROM annotated_variants")
 
     def test_with_cte_allowed(self) -> None:
-        _validate_read_only(
-            "WITH cte AS (SELECT rsid FROM annotated_variants) "
-            "SELECT * FROM cte"
-        )
+        _validate_read_only("WITH cte AS (SELECT rsid FROM annotated_variants) SELECT * FROM cte")
 
     def test_insert_rejected(self) -> None:
         from fastapi import HTTPException
@@ -618,9 +615,7 @@ class TestSqlConsoleReadOnlyEngine:
         """Even with app-level check bypassed, read-only engine blocks writes."""
         tc, sid = client
         # Patch _validate_read_only to be a no-op
-        with patch(
-            "backend.api.routes.query_builder._validate_read_only", return_value=None
-        ):
+        with patch("backend.api.routes.query_builder._validate_read_only", return_value=None):
             resp = tc.post(
                 "/api/query/sql",
                 json={
