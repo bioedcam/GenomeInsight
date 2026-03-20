@@ -104,17 +104,25 @@ test.describe('P3-68: Module pages verification', () => {
         await page.goto(mod.path)
         await page.waitForLoadState('networkidle')
 
-        // Tab through the page and verify focus moves
+        // Tab through the page and verify focus lands on interactive element
         await page.keyboard.press('Tab')
-        const firstFocused = await page.evaluate(() => document.activeElement?.tagName)
-        expect(firstFocused).toBeTruthy()
+        const firstFocused = await page.evaluate(() => {
+          const el = document.activeElement
+          return el
+            ? { tag: el.tagName, isInteractive: el.matches('a, button, input, select, textarea, [tabindex]') }
+            : null
+        })
+        expect(firstFocused?.isInteractive).toBe(true)
 
         // Should not get stuck — pressing Tab again should move focus
         await page.keyboard.press('Tab')
-        const secondFocused = await page.evaluate(
-          () => document.activeElement?.tagName + '.' + document.activeElement?.className,
-        )
-        expect(secondFocused).toBeTruthy()
+        const secondFocused = await page.evaluate(() => {
+          const el = document.activeElement
+          return el
+            ? { tag: el.tagName, isInteractive: el.matches('a, button, input, select, textarea, [tabindex]') }
+            : null
+        })
+        expect(secondFocused?.isInteractive).toBe(true)
       })
 
       test('passes axe-core WCAG 2.1 AA accessibility check', async ({ page }) => {
