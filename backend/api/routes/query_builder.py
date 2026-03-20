@@ -1,14 +1,22 @@
-"""Query builder API endpoints (P4-01).
+"""Query builder API endpoints (P4-01) and raw SQL console (P4-03).
 
 POST /api/query — Execute a react-querybuilder RuleGroupType filter tree
 against the per-sample annotated_variants table.  The filter JSON is
 translated server-side to SQLAlchemy Core expressions via the recursive
 translator — values are always bound parameters, never interpolated.
+
+POST /api/query/sql — Execute user-provided SQL against a read-only
+SQLite connection to the per-sample database.  Full schema access — user
+owns all the data, no restrictions beyond read-only.
 """
 
 from __future__ import annotations
 
 import logging
+import re
+import sqlite3
+import time
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
@@ -138,8 +146,8 @@ class QueryMetaResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _get_sample_engine(sample_id: int) -> sa.Engine:
-    """Resolve sample_id to a per-sample DB engine."""
+def _resolve_sample_db_path(sample_id: int) -> Path:
+    """Resolve sample_id to the absolute Path for the sample DB file."""
     registry = get_registry()
     with registry.reference_engine.connect() as conn:
         row = conn.execute(
@@ -154,6 +162,13 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
             status_code=404,
             detail=f"Sample database file not found for sample {sample_id}.",
         )
+    return sample_db_path
+
+
+def _get_sample_engine(sample_id: int) -> sa.Engine:
+    """Resolve sample_id to a per-sample DB engine."""
+    sample_db_path = _resolve_sample_db_path(sample_id)
+    registry = get_registry()
     return registry.get_sample_engine(sample_db_path)
 
 
@@ -305,4 +320,149 @@ def execute_query(body: QueryRequest) -> QueryResultPage:
         next_cursor_pos=next_pos,
         has_more=has_more,
         limit=body.limit,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Raw SQL Console (P4-03)
+# ══════════════════════════════════════════════════════════════════════
+
+# Regex pattern matching SQL statements that modify data or schema.
+# Anchored to word boundaries so they don't match inside identifiers.
+_WRITE_PATTERN = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|TRUNCATE|REINDEX"
+    r"|ATTACH|DETACH|VACUUM|PRAGMA\s+\w+\s*=)"
+    r"\b",
+    re.IGNORECASE,
+)
+
+# Maximum rows the SQL console will return per query.
+SQL_CONSOLE_MAX_ROWS = 1000
+
+# Maximum query execution time in seconds.
+SQL_CONSOLE_TIMEOUT = 30
+
+
+class SqlRequest(BaseModel):
+    """POST /api/query/sql request body."""
+
+    sample_id: int
+    sql: str = Field(..., min_length=1, max_length=10_000)
+    limit: int = Field(default=500, ge=1, le=SQL_CONSOLE_MAX_ROWS)
+
+
+class SqlResultColumn(BaseModel):
+    """Column metadata for SQL console results."""
+
+    name: str
+    type: str | None = None
+
+
+class SqlResult(BaseModel):
+    """Response for POST /api/query/sql."""
+
+    columns: list[SqlResultColumn]
+    rows: list[list[Any]]
+    row_count: int
+    truncated: bool
+    execution_time_ms: float
+
+
+def _validate_read_only(sql: str) -> None:
+    """Raise HTTPException if the SQL contains write operations.
+
+    Defence-in-depth: the SQLite connection is also opened in read-only
+    mode, so even if this check is bypassed the DB engine will reject
+    writes.  This application-level check provides a friendlier error.
+    """
+    stripped = sql.strip().rstrip(";").strip()
+    if not stripped:
+        raise HTTPException(status_code=422, detail="Empty SQL statement.")
+
+    if _WRITE_PATTERN.search(stripped):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Write operations are not allowed in the SQL console. "
+                "Only SELECT and read-only statements are permitted."
+            ),
+        )
+
+
+def _get_sample_db_path(sample_id: int) -> str:
+    """Resolve sample_id → absolute path string for the sample DB file."""
+    return str(_resolve_sample_db_path(sample_id))
+
+
+@router.post("/sql")
+def execute_sql(body: SqlRequest) -> SqlResult:
+    """Execute raw SQL against a read-only SQLite connection.
+
+    The user owns all the data — full schema access is granted.
+    Only read operations (SELECT, PRAGMA reads, etc.) are allowed.
+    The connection is opened in SQLite read-only mode as defence-in-depth.
+    """
+    _validate_read_only(body.sql)
+
+    db_path = _get_sample_db_path(body.sample_id)
+
+    # Deadline for query timeout enforcement.
+    deadline = time.monotonic() + SQL_CONSOLE_TIMEOUT
+
+    def _progress_handler() -> int:
+        """Return non-zero to abort if timeout exceeded."""
+        return 1 if time.monotonic() >= deadline else 0
+
+    # Open a dedicated read-only connection via SQLite URI mode.
+    # Using creator= so sqlite3 handles the URI directly.
+    ro_engine = sa.create_engine(
+        "sqlite://",
+        creator=lambda: sqlite3.connect(f"file:{db_path}?mode=ro", uri=True),
+    )
+
+    try:
+        t0 = time.monotonic()
+        with ro_engine.connect() as conn:
+            # Enforce timeout: SQLite calls the handler every ~10 000
+            # virtual-machine instructions; non-zero return aborts.
+            raw_conn = conn.connection.dbapi_connection
+            raw_conn.set_progress_handler(_progress_handler, 10_000)
+            try:
+                result = conn.execute(sa.text(body.sql))
+
+                # Determine columns from cursor description.
+                if result.returns_rows:
+                    columns = [
+                        SqlResultColumn(name=col[0], type=None)
+                        for col in result.cursor.description
+                    ]
+                    rows_raw = result.fetchmany(body.limit + 1)
+                    truncated = len(rows_raw) > body.limit
+                    rows = [list(r) for r in rows_raw[: body.limit]]
+                else:
+                    columns = []
+                    rows = []
+                    truncated = False
+            finally:
+                raw_conn.set_progress_handler(None, 0)
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+    except sa.exc.OperationalError as exc:
+        # Surface SQLite errors (syntax, read-only violations, timeout).
+        msg = str(exc.orig) if exc.orig else str(exc)
+        if "interrupted" in msg.lower():
+            raise HTTPException(
+                status_code=408,
+                detail=f"Query timed out after {SQL_CONSOLE_TIMEOUT} seconds.",
+            ) from exc
+        raise HTTPException(status_code=422, detail=f"SQL error: {msg}") from exc
+    finally:
+        ro_engine.dispose()
+
+    return SqlResult(
+        columns=columns,
+        rows=rows,
+        row_count=len(rows),
+        truncated=truncated,
+        execution_time_ms=round(elapsed_ms, 2),
     )
