@@ -145,6 +145,7 @@ export default function QueryBuilderView() {
           type="button"
           role="tab"
           aria-selected={activeTab === "visual"}
+          id="tab-visual"
           aria-controls="panel-visual"
           onClick={() => setActiveTab("visual")}
           className={cn(
@@ -162,6 +163,7 @@ export default function QueryBuilderView() {
           type="button"
           role="tab"
           aria-selected={activeTab === "sql"}
+          id="tab-sql"
           aria-controls="panel-sql"
           onClick={() => setActiveTab("sql")}
           className={cn(

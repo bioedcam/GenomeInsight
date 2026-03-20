@@ -9,7 +9,7 @@
  * - Ctrl/Cmd+Enter to run
  */
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Editor, { type OnMount } from "@monaco-editor/react"
 import {
   Play,
@@ -51,6 +51,12 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
     )
   }, [sampleId, sql, executeSql])
 
+  // Keep a stable ref to the latest handleRun to avoid stale closure in Monaco action.
+  const handleRunRef = useRef(handleRun)
+  useEffect(() => {
+    handleRunRef.current = handleRun
+  }, [handleRun])
+
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
 
@@ -59,7 +65,7 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
       id: "run-sql",
       label: "Run SQL",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: () => handleRun(),
+      run: () => handleRunRef.current(),
     })
   }
 
@@ -130,7 +136,7 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
             Run SQL
           </button>
           <span className="text-xs text-muted-foreground">
-            {navigator.platform?.includes("Mac") ? "⌘" : "Ctrl"}+Enter to run
+            {/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? "\u2318" : "Ctrl"}+Enter to run
           </span>
         </div>
 

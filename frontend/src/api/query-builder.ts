@@ -226,12 +226,14 @@ export function useSchemaInfo(sampleId: number | null) {
       // Step 2: Get columns for each table
       const tables: SchemaTable[] = []
       for (const tableName of tableNames) {
+        // Escape double quotes in table name to prevent SQL injection
+        const safeName = tableName.replace(/"/g, '""')
         const colRes = await fetch("/api/query/sql", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sample_id: sampleId!,
-            sql: `PRAGMA table_info("${tableName}")`,
+            sql: `PRAGMA table_info("${safeName}")`,
             limit: 200,
           }),
         })
