@@ -40,6 +40,7 @@ from backend.api.routes.nutrigenomics import router as nutrigenomics_router
 from backend.api.routes.pharma import router as pharma_router
 from backend.api.routes.query_builder import router as query_builder_router
 from backend.api.routes.rare_variants import router as rare_variants_router
+from backend.api.routes.reports import router as reports_router
 from backend.api.routes.samples import router as samples_router
 from backend.api.routes.saved_queries import router as saved_queries_router
 from backend.api.routes.setup import router as setup_router
@@ -138,6 +139,7 @@ def create_app() -> FastAPI:
     api_router.include_router(pharma_router)
     api_router.include_router(query_builder_router)
     api_router.include_router(rare_variants_router)
+    api_router.include_router(reports_router)
     api_router.include_router(saved_queries_router)
     api_router.include_router(samples_router)
     api_router.include_router(setup_router)

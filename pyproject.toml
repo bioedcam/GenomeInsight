@@ -28,6 +28,8 @@ dependencies = [
     "biopython",
     "numpy",
     "plotly",
+    "jinja2",
+    "playwright",
 ]
 
 [project.optional-dependencies]
