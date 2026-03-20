@@ -85,8 +85,8 @@ def _coerce_numeric(value: Any, field: str) -> int | float:
         return value
     if isinstance(value, str):
         try:
-            # Try int first, then float
-            if "." in value:
+            # Try int first, then float (handles scientific notation)
+            if "." in value or "e" in value.lower():
                 return float(value)
             return int(value)
         except ValueError:
@@ -155,7 +155,7 @@ def _translate_rule(rule: dict[str, Any]) -> sa.ColumnElement:
     if operator == "null":
         return col.is_(None)
     if operator == "notNull":
-        return col.isnot(None)
+        return col.is_not(None)
 
     # ── Type validation for value-bearing operators ───────────────
     if operator == "between":
@@ -220,7 +220,7 @@ def _translate_rule(rule: dict[str, Any]) -> sa.ColumnElement:
 def _count_rules(node: dict[str, Any]) -> int:
     """Recursively count the total number of rules in the tree."""
     if "rules" not in node:
-        return 1
+        return 1 if "field" in node else 0
     total = 0
     for child in node.get("rules", []):
         if isinstance(child, dict):

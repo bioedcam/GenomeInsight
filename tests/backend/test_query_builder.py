@@ -339,6 +339,15 @@ class TestTranslatorTypeSafety:
         expr = translate(tree)
         assert expr is not None
 
+    def test_scientific_notation_coerced(self) -> None:
+        """Scientific notation like '1e-5' is common for allele frequencies."""
+        tree = {
+            "combinator": "and",
+            "rules": [{"field": "gnomad_af_global", "operator": "<", "value": "1e-5"}],
+        }
+        expr = translate(tree)
+        assert expr is not None
+
     def test_integer_string_coerced(self) -> None:
         tree = {
             "combinator": "and",
@@ -933,6 +942,9 @@ class TestQueryEndpoint:
         rsids1 = {i["rsid"] for i in data["items"]}
         rsids2 = {i["rsid"] for i in data2["items"]}
         assert rsids1.isdisjoint(rsids2)
+        # Total only returned on first page
+        assert data["total_matching"] == 5
+        assert data2["total_matching"] is None
 
     def test_between_filter(self, client) -> None:
         tc, sid = client

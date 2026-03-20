@@ -289,10 +289,14 @@ def execute_query(body: QueryRequest) -> QueryResultPage:
         next_chrom = last.chrom
         next_pos = last.pos
 
-    # ── Count total matching (background-safe, separate query) ────
-    count_query = sa.select(sa.func.count()).select_from(annotated_variants).where(where_clause)
-    with sample_engine.connect() as conn:
-        total = conn.execute(count_query).scalar() or 0
+    # ── Count total matching (first page only for performance) ────
+    total: int | None = None
+    if body.cursor_chrom is None and body.cursor_pos is None:
+        count_query = (
+            sa.select(sa.func.count()).select_from(annotated_variants).where(where_clause)
+        )
+        with sample_engine.connect() as conn:
+            total = conn.execute(count_query).scalar() or 0
 
     return QueryResultPage(
         items=items,
