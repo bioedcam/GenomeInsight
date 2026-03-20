@@ -8,7 +8,11 @@ import sqlalchemy as sa
 from alembic.config import Config
 
 from alembic import command
-from backend.db.sample_schema import create_sample_tables
+from backend.db.sample_schema import (
+    SAMPLE_SCHEMA_VERSION,
+    create_sample_tables,
+    ensure_sample_schema_current,
+)
 
 
 def _run_alembic_upgrade(db_path: Path) -> None:
@@ -235,6 +239,8 @@ class TestSampleSchema:
             "prs_score",
             "pathway",
             "svg_path",
+            "related_module",
+            "related_finding_id",
         ]:
             assert col in cols, f"Missing column: {col}"
 
@@ -267,3 +273,127 @@ class TestSampleSchema:
         create_sample_tables(engine)  # Should not raise
         tables = _get_tables(db_path)
         assert "raw_variants" in tables
+
+    def test_findings_has_related_module_index(self, tmp_path):
+        db_path = tmp_path / "sample_001.db"
+        self._create_sample_db(db_path)
+        indexes = _get_indexes(db_path)
+        assert "idx_findings_related_module" in indexes
+
+
+# ── Schema Migration Tests ─────────────────────────────────────────
+
+
+class TestSchemaMigration:
+    """Test that ensure_sample_schema_current() upgrades older DBs."""
+
+    def _create_v3_sample_db(self, db_path: Path) -> sa.Engine:
+        """Create a sample DB that simulates a v3 schema (without cross-link columns)."""
+        engine = sa.create_engine(f"sqlite:///{db_path}")
+        with engine.connect() as conn:
+            conn.execute(sa.text("PRAGMA journal_mode=WAL"))
+            # Create a minimal findings table without the new columns
+            conn.execute(
+                sa.text(
+                    """CREATE TABLE findings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        module TEXT NOT NULL,
+                        category TEXT,
+                        evidence_level INTEGER,
+                        gene_symbol TEXT,
+                        rsid TEXT,
+                        finding_text TEXT NOT NULL,
+                        phenotype TEXT,
+                        conditions TEXT,
+                        zygosity TEXT,
+                        clinvar_significance TEXT,
+                        diplotype TEXT,
+                        metabolizer_status TEXT,
+                        drug TEXT,
+                        haplogroup TEXT,
+                        prs_score REAL,
+                        prs_percentile REAL,
+                        pathway TEXT,
+                        pathway_level TEXT,
+                        svg_path TEXT,
+                        pmid_citations TEXT,
+                        detail_json TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )"""
+                )
+            )
+            conn.execute(sa.text("PRAGMA user_version = 3"))
+            conn.commit()
+        return engine
+
+    def test_upgrade_adds_cross_link_columns(self, tmp_path):
+        """v3 → v4 adds related_module and related_finding_id columns."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v3_sample_db(db_path)
+
+        # Verify columns are missing before upgrade
+        cols_before = _get_columns(db_path, "findings")
+        assert "related_module" not in cols_before
+        assert "related_finding_id" not in cols_before
+
+        # Run migration
+        updated = ensure_sample_schema_current(engine)
+        assert updated is True
+
+        # Verify columns exist after upgrade
+        cols_after = _get_columns(db_path, "findings")
+        assert "related_module" in cols_after
+        assert "related_finding_id" in cols_after
+
+    def test_upgrade_creates_related_module_index(self, tmp_path):
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v3_sample_db(db_path)
+        ensure_sample_schema_current(engine)
+        indexes = _get_indexes(db_path)
+        assert "idx_findings_related_module" in indexes
+
+    def test_upgrade_stamps_v4(self, tmp_path):
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v3_sample_db(db_path)
+        ensure_sample_schema_current(engine)
+        conn = sqlite3.connect(str(db_path))
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.close()
+        assert version == SAMPLE_SCHEMA_VERSION
+
+    def test_upgrade_preserves_existing_data(self, tmp_path):
+        """Existing findings are preserved during column addition."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v3_sample_db(db_path)
+
+        # Insert a finding before upgrade
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO findings (module, finding_text, evidence_level) "
+                    "VALUES ('cancer', 'BRCA1 Pathogenic', 4)"
+                )
+            )
+
+        ensure_sample_schema_current(engine)
+
+        # Verify data preserved with new columns defaulting to NULL
+        with engine.connect() as conn:
+            row = conn.execute(sa.text("SELECT * FROM findings WHERE id = 1")).fetchone()
+            assert row is not None
+            # Access by column index — related_module and related_finding_id
+            # should be NULL
+            col_names = _get_columns(db_path, "findings")
+            rm_idx = col_names.index("related_module")
+            rf_idx = col_names.index("related_finding_id")
+            assert row[rm_idx] is None
+            assert row[rf_idx] is None
+
+    def test_upgrade_idempotent(self, tmp_path):
+        """Running ensure_sample_schema_current twice is safe."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v3_sample_db(db_path)
+        ensure_sample_schema_current(engine)
+        # Second call should detect version is current and return False
+        updated = ensure_sample_schema_current(engine)
+        assert updated is False

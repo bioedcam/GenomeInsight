@@ -498,11 +498,14 @@ findings = sa.Table(
     sa.Column("svg_path", sa.Text),
     sa.Column("pmid_citations", sa.Text),  # JSON array of PubMed IDs
     sa.Column("detail_json", sa.Text),  # arbitrary module-specific data (JSON)
+    sa.Column("related_module", sa.Text),  # cross-module link target module name
+    sa.Column("related_finding_id", sa.Integer),  # cross-module link target finding ID
     sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
 )
 
 sa.Index("idx_findings_module", findings.c.module)
 sa.Index("idx_findings_evidence", findings.c.evidence_level)
+sa.Index("idx_findings_related_module", findings.c.related_module)
 
 # ── QC Metrics ─────────────────────────────────────────────────────────
 

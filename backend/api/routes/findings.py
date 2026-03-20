@@ -58,6 +58,8 @@ class FindingResponse(BaseModel):
     svg_path: str | None = None
     pmid_citations: list[str] = []
     detail: dict | None = None
+    related_module: str | None = None
+    related_finding_id: int | None = None
     created_at: str | None = None
 
 
@@ -147,6 +149,8 @@ def _row_to_response(row: sa.Row) -> FindingResponse:
         svg_path=row.svg_path,
         pmid_citations=pmids,
         detail=detail,
+        related_module=row.related_module,
+        related_finding_id=row.related_finding_id,
         created_at=created,
     )
 
