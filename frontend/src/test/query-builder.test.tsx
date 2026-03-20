@@ -343,7 +343,7 @@ describe("SavedQueriesPanel", () => {
     }
 
     let callCount = 0
-    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+    mockFetch.mockImplementation((_url: string, opts?: RequestInit) => {
       if (opts?.method === "PUT") {
         return Promise.resolve({
           ok: true,
@@ -428,7 +428,7 @@ describe("SavedQueriesPanel", () => {
 
     vi.stubGlobal("confirm", vi.fn(() => true))
 
-    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+    mockFetch.mockImplementation((_url: string, opts?: RequestInit) => {
       if (opts?.method === "PUT") {
         return Promise.resolve({
           ok: true,
