@@ -23,8 +23,9 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useExecuteSql, useSchemaInfo } from "@/api/query-builder"
-import type { SqlResult, SchemaTable } from "@/types/query-builder"
+import { useExecuteSql, useExportSql, useSchemaInfo } from "@/api/query-builder"
+import type { SqlResult, SqlExportFormat, SchemaTable } from "@/types/query-builder"
+import ExportButton from "@/components/query-builder/ExportButton"
 
 const DEFAULT_SQL = "SELECT * FROM annotated_variants LIMIT 10;"
 
@@ -38,7 +39,21 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
 
   const executeSql = useExecuteSql()
+  const exportSql = useExportSql()
   const schema = useSchemaInfo(sampleId)
+
+  const handleExport = useCallback(
+    (format: string) => {
+      const text = editorRef.current?.getValue() ?? sql
+      if (!text.trim()) return
+      exportSql.mutate({
+        sampleId,
+        sql: text.trim(),
+        format: format as SqlExportFormat,
+      })
+    },
+    [sampleId, sql, exportSql],
+  )
 
   const handleRun = useCallback(() => {
     const text = editorRef.current?.getValue() ?? sql
@@ -162,7 +177,11 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
 
         {/* Results */}
         {result && !executeSql.isError && (
-          <SqlResultsDisplay result={result} />
+          <SqlResultsDisplay
+            result={result}
+            onExport={handleExport}
+            isExporting={exportSql.isPending}
+          />
         )}
       </div>
 
@@ -181,7 +200,17 @@ export default function SqlConsole({ sampleId }: SqlConsoleProps) {
 
 // ── Results display ──────────────────────────────────────────────────
 
-function SqlResultsDisplay({ result }: { result: SqlResult }) {
+const SQL_EXPORT_FORMATS = ["tsv", "json", "csv"]
+
+function SqlResultsDisplay({
+  result,
+  onExport,
+  isExporting,
+}: {
+  result: SqlResult
+  onExport?: (format: string) => void
+  isExporting?: boolean
+}) {
   if (result.columns.length === 0 && result.row_count === 0) {
     return (
       <div className="rounded-lg border bg-card p-6 text-center" data-testid="sql-empty-result">
@@ -208,9 +237,19 @@ function SqlResultsDisplay({ result }: { result: SqlResult }) {
             </span>
           )}
         </p>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Clock className="h-3 w-3" />
-          {result.execution_time_ms.toFixed(1)} ms
+        <div className="flex items-center gap-3">
+          {onExport && (
+            <ExportButton
+              formats={SQL_EXPORT_FORMATS}
+              onExport={onExport}
+              disabled={result.row_count === 0}
+              isPending={isExporting}
+            />
+          )}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            {result.execution_time_ms.toFixed(1)} ms
+          </div>
         </div>
       </div>
 

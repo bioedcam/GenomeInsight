@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tansta
 import type {
   QueryMetaResponse,
   QueryResultPage,
+  QueryExportFormat,
+  SqlExportFormat,
   RuleGroupModel,
   SavedQuery,
   SavedQueryListResponse,
@@ -250,5 +252,77 @@ export function useSchemaInfo(sampleId: number | null) {
     },
     enabled: sampleId != null,
     staleTime: 1000 * 60 * 60, // 1 hour
+  })
+}
+
+// ── Export (P4-05) ───────────────────────────────────────────────────
+
+/** Trigger a browser download from a fetch response blob. */
+function triggerDownload(blob: Blob, disposition: string, fallbackName: string) {
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
+  const filename = filenameMatch?.[1] || fallbackName
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+/** Export query builder results as a downloadable file. */
+export function useExportQuery() {
+  return useMutation({
+    mutationFn: async ({
+      sampleId,
+      filter,
+      format,
+    }: {
+      sampleId: number
+      filter: RuleGroupModel
+      format: QueryExportFormat
+    }) => {
+      const res = await fetch("/api/export/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sample_id: sampleId, filter, format }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.detail || `Export failed: ${res.status}`)
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get("content-disposition") || ""
+      triggerDownload(blob, disposition, `export.${format}`)
+    },
+  })
+}
+
+/** Export SQL console results as a downloadable file. */
+export function useExportSql() {
+  return useMutation({
+    mutationFn: async ({
+      sampleId,
+      sql,
+      format,
+    }: {
+      sampleId: number
+      sql: string
+      format: SqlExportFormat
+    }) => {
+      const res = await fetch("/api/export/sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sample_id: sampleId, sql, format }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.detail || `Export failed: ${res.status}`)
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get("content-disposition") || ""
+      triggerDownload(blob, disposition, `export.${format}`)
+    },
   })
 }

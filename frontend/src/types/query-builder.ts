@@ -100,6 +100,28 @@ export interface SavedQueryListResponse {
   queries: SavedQuery[]
 }
 
+// ── Export types (P4-05) ─────────────────────────────────────────────
+
+/** Supported export formats for query builder results. */
+export type QueryExportFormat = "vcf" | "tsv" | "json" | "csv"
+
+/** Supported export formats for SQL console results (no VCF). */
+export type SqlExportFormat = "tsv" | "json" | "csv"
+
+/** POST /api/export/query request body. */
+export interface ExportQueryRequest {
+  sample_id: number
+  filter: RuleGroupModel
+  format: QueryExportFormat
+}
+
+/** POST /api/export/sql request body. */
+export interface ExportSqlRequest {
+  sample_id: number
+  sql: string
+  format: SqlExportFormat
+}
+
 // ── SQL Console types (P4-04) ────────────────────────────────────────
 
 /** POST /api/query/sql request body. */

@@ -13,8 +13,8 @@ import { type RuleGroupType } from "react-querybuilder"
 import { Filter, Play, Loader2, AlertCircle, RotateCcw, Terminal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
-import { useQueryFields, useRunQuery } from "@/api/query-builder"
-import type { QueryResultPage, RuleGroupModel, SavedQuery } from "@/types/query-builder"
+import { useQueryFields, useRunQuery, useExportQuery } from "@/api/query-builder"
+import type { QueryResultPage, QueryExportFormat, RuleGroupModel, SavedQuery } from "@/types/query-builder"
 import QueryBuilderPanel from "@/components/query-builder/QueryBuilderPanel"
 import QueryResultsTable from "@/components/query-builder/QueryResultsTable"
 import SavedQueriesPanel from "@/components/query-builder/SavedQueriesPanel"
@@ -39,6 +39,20 @@ export default function QueryBuilderView() {
 
   const fieldsQuery = useQueryFields()
   const runQuery = useRunQuery()
+  const exportQuery = useExportQuery()
+
+  const handleExport = useCallback(
+    (format: string) => {
+      if (!sampleId) return
+      const filter = query as unknown as RuleGroupModel
+      exportQuery.mutate({
+        sampleId,
+        filter,
+        format: format as QueryExportFormat,
+      })
+    },
+    [sampleId, query, exportQuery],
+  )
 
   const handleLoadSaved = useCallback((saved: SavedQuery) => {
     setQuery(saved.filter as unknown as RuleGroupType)
@@ -268,6 +282,8 @@ export default function QueryBuilderView() {
                     hasMore={hasMore}
                     isFetchingMore={false}
                     onLoadMore={handleLoadMore}
+                    onExport={handleExport}
+                    isExporting={exportQuery.isPending}
                   />
                 </section>
               )}
