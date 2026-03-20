@@ -1,4 +1,4 @@
-"""Tests for saved queries CRUD API (P4-02)."""
+"""Tests for saved queries CRUD API (P4-06)."""
 
 from __future__ import annotations
 

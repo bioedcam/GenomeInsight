@@ -306,4 +306,189 @@ describe("SavedQueriesPanel", () => {
     await user.click(screen.getByTestId("load-query-btn"))
     expect(onLoad).toHaveBeenCalledWith(savedQuery)
   })
+
+  it("shows rename editor when rename button clicked", async () => {
+    const savedQuery = {
+      name: "Renamable",
+      filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ queries: [savedQuery] }),
+      text: () => Promise.resolve(""),
+    })
+
+    render(<SavedQueriesPanel currentFilter={filterWithRules} onLoad={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Renamable")).toBeInTheDocument()
+    })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("rename-query-btn"))
+
+    expect(screen.getByTestId("rename-editor")).toBeInTheDocument()
+    const input = screen.getByTestId("rename-input") as HTMLInputElement
+    expect(input.value).toBe("Renamable")
+  })
+
+  it("submits rename via confirm button", async () => {
+    const savedQuery = {
+      name: "OldName",
+      filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
+    }
+
+    let callCount = 0
+    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+      if (opts?.method === "PUT") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              ...savedQuery,
+              name: "NewName",
+              updated_at: "2026-03-20T00:00:00Z",
+            }),
+          text: () => Promise.resolve(""),
+        })
+      }
+      // GET requests for saved queries
+      callCount++
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ queries: callCount <= 1 ? [savedQuery] : [] }),
+        text: () => Promise.resolve(""),
+      })
+    })
+
+    render(<SavedQueriesPanel currentFilter={filterWithRules} onLoad={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("OldName")).toBeInTheDocument()
+    })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("rename-query-btn"))
+
+    const input = screen.getByTestId("rename-input")
+    await user.clear(input)
+    await user.type(input, "NewName")
+    await user.click(screen.getByTestId("confirm-rename-btn"))
+
+    // Verify PUT was called with the new name
+    await waitFor(() => {
+      const putCall = mockFetch.mock.calls.find(
+        (c: unknown[]) => (c[1] as RequestInit | undefined)?.method === "PUT",
+      )
+      expect(putCall).toBeDefined()
+      const body = JSON.parse((putCall![1] as RequestInit).body as string)
+      expect(body.new_name).toBe("NewName")
+    })
+  })
+
+  it("cancels rename via cancel button", async () => {
+    const savedQuery = {
+      name: "KeepName",
+      filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ queries: [savedQuery] }),
+      text: () => Promise.resolve(""),
+    })
+
+    render(<SavedQueriesPanel currentFilter={filterWithRules} onLoad={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("KeepName")).toBeInTheDocument()
+    })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("rename-query-btn"))
+    expect(screen.getByTestId("rename-editor")).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("cancel-rename-btn"))
+    expect(screen.queryByTestId("rename-editor")).not.toBeInTheDocument()
+    expect(screen.getByText("KeepName")).toBeInTheDocument()
+  })
+
+  it("calls overwrite with current filter on confirm", async () => {
+    const savedQuery = {
+      name: "Overwritable",
+      filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
+    }
+
+    window.confirm = vi.fn(() => true)
+
+    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+      if (opts?.method === "PUT") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              ...savedQuery,
+              filter: filterWithRules,
+              updated_at: "2026-03-20T00:00:00Z",
+            }),
+          text: () => Promise.resolve(""),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ queries: [savedQuery] }),
+        text: () => Promise.resolve(""),
+      })
+    })
+
+    render(<SavedQueriesPanel currentFilter={filterWithRules} onLoad={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Overwritable")).toBeInTheDocument()
+    })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("overwrite-query-btn"))
+
+    await waitFor(() => {
+      const putCall = mockFetch.mock.calls.find(
+        (c: unknown[]) => (c[1] as RequestInit | undefined)?.method === "PUT",
+      )
+      expect(putCall).toBeDefined()
+      const body = JSON.parse((putCall![1] as RequestInit).body as string)
+      expect(body.filter).toEqual(filterWithRules)
+    })
+  })
+
+  it("shows rename, overwrite, and delete action buttons on hover", async () => {
+    const savedQuery = {
+      name: "ActionButtons",
+      filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ queries: [savedQuery] }),
+      text: () => Promise.resolve(""),
+    })
+
+    render(<SavedQueriesPanel currentFilter={filterWithRules} onLoad={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("ActionButtons")).toBeInTheDocument()
+    })
+
+    // All three action buttons should be in the DOM
+    expect(screen.getByTestId("rename-query-btn")).toBeInTheDocument()
+    expect(screen.getByTestId("overwrite-query-btn")).toBeInTheDocument()
+    expect(screen.getByTestId("delete-query-btn")).toBeInTheDocument()
+  })
 })
