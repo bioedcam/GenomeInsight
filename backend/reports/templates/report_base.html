@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<style>
+  /* ── Base typography ─────────────────────────────────── */
+  @page {
+    size: A4;
+    margin: 20mm 18mm 25mm 18mm;
+    @bottom-center {
+      content: counter(page) " of " counter(pages);
+      font-size: 9px;
+      color: #64748B;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #1E293B;
+    background: #FFFFFF;
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  .report-header {
+    text-align: center;
+    padding-bottom: 16px;
+    border-bottom: 3px solid #0D9488;
+    margin-bottom: 20px;
+  }
+
+  .report-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0D9488;
+    margin-bottom: 4px;
+    letter-spacing: -0.3px;
+  }
+
+  .report-header .subtitle {
+    font-size: 13px;
+    color: #64748B;
+    font-weight: 400;
+  }
+
+  .report-header .meta {
+    font-size: 10px;
+    color: #94A3B8;
+    margin-top: 6px;
+  }
+
+  /* ── Module section ──────────────────────────────────── */
+  .module-section {
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+  }
+
+  .module-header {
+    background: #F0FDFA;
+    border-left: 4px solid #0D9488;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+  }
+
+  .module-header h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0F766E;
+    margin: 0;
+  }
+
+  .module-header .module-summary {
+    font-size: 10px;
+    color: #64748B;
+    margin-top: 2px;
+  }
+
+  /* ── Disclaimer block ────────────────────────────────── */
+  .disclaimer {
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    font-size: 9px;
+    color: #92400E;
+    line-height: 1.4;
+    page-break-inside: avoid;
+  }
+
+  .disclaimer strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+  }
+
+  /* ── Finding card ────────────────────────────────────── */
+  .finding-card {
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    page-break-inside: avoid;
+  }
+
+  .finding-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .finding-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1E293B;
+  }
+
+  .finding-gene {
+    font-size: 11px;
+    font-weight: 600;
+    color: #0D9488;
+    margin-right: 6px;
+  }
+
+  .finding-rsid {
+    font-size: 10px;
+    color: #64748B;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  .finding-text {
+    font-size: 11px;
+    color: #334155;
+    margin-bottom: 6px;
+  }
+
+  .finding-meta {
+    font-size: 9px;
+    color: #64748B;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .finding-meta span {
+    white-space: nowrap;
+  }
+
+  /* ── Evidence stars ──────────────────────────────────── */
+  .evidence-stars {
+    display: inline-flex;
+    gap: 2px;
+    vertical-align: middle;
+  }
+
+  .star-filled {
+    color: #F59E0B;
+    font-size: 13px;
+  }
+
+  .star-empty {
+    color: #E2E8F0;
+    font-size: 13px;
+  }
+
+  /* ── SVG container ───────────────────────────────────── */
+  .finding-svg {
+    margin: 8px 0;
+    text-align: center;
+  }
+
+  .finding-svg svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* ── PMID citations ──────────────────────────────────── */
+  .pmid-list {
+    font-size: 9px;
+    color: #64748B;
+    margin-top: 4px;
+  }
+
+  .pmid-list a {
+    color: #0D9488;
+    text-decoration: none;
+  }
+
+  /* ── Badge styles ────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-pathogenic { background: #FEE2E2; color: #991B1B; }
+  .badge-likely-pathogenic { background: #FEF3C7; color: #92400E; }
+  .badge-vus { background: #E0E7FF; color: #3730A3; }
+  .badge-benign { background: #D1FAE5; color: #065F46; }
+
+  .badge-elevated { background: #FEE2E2; color: #991B1B; }
+  .badge-moderate { background: #FEF3C7; color: #92400E; }
+  .badge-standard { background: #D1FAE5; color: #065F46; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  .report-footer {
+    margin-top: 30px;
+    padding-top: 12px;
+    border-top: 1px solid #E2E8F0;
+    font-size: 9px;
+    color: #94A3B8;
+    text-align: center;
+    page-break-inside: avoid;
+  }
+
+  .report-footer .disclaimer-footer {
+    font-size: 8px;
+    color: #94A3B8;
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+
+  /* ── Print overrides ─────────────────────────────────── */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .module-section { page-break-inside: avoid; }
+    .finding-card { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Report Header -->
+<div class="report-header">
+  <h1>{{ title }}</h1>
+  <div class="subtitle">{{ sample_name }}</div>
+  <div class="meta">Generated {{ generated_at }} &bull; GenomeInsight v{{ version }}</div>
+</div>
+
+<!-- Global disclaimer -->
+<div class="disclaimer">
+  <strong>Important Disclaimer</strong>
+  This report is generated by GenomeInsight for educational and research purposes only.
+  It is NOT a medical device and has NOT been reviewed or approved by the FDA or any
+  regulatory authority. Consult a qualified healthcare provider or certified genetic
+  counselor before making any medical decisions based on genetic information.
+</div>
+
+<!-- Module sections -->
+{% for section in sections %}
+<div class="module-section">
+  <div class="module-header">
+    <h2>{{ section.display_name }}</h2>
+    <div class="module-summary">{{ section.finding_count }} finding{{ "s" if section.finding_count != 1 else "" }}</div>
+  </div>
+
+  {% if section.disclaimer %}
+  <div class="disclaimer">
+    <strong>{{ section.disclaimer_title }}</strong>
+    {{ section.disclaimer }}
+  </div>
+  {% endif %}
+
+  {% for finding in section.findings %}
+  <div class="finding-card">
+    <div class="finding-card-header">
+      <div>
+        {% if finding.gene_symbol %}<span class="finding-gene">{{ finding.gene_symbol }}</span>{% endif %}
+        {% if finding.rsid %}<span class="finding-rsid">{{ finding.rsid }}</span>{% endif %}
+      </div>
+      <div class="evidence-stars">
+        {% for i in range(4) %}
+          {% if i < (finding.evidence_level or 0) %}
+            <span class="star-filled">&#9733;</span>
+          {% else %}
+            <span class="star-empty">&#9733;</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="finding-text">{{ finding.finding_text }}</div>
+
+    {% if finding.svg_content %}
+    <div class="finding-svg">{{ finding.svg_content | safe }}</div>
+    {% endif %}
+
+    <div class="finding-meta">
+      {% if finding.clinvar_significance %}
+        <span>ClinVar: <span class="badge badge-{{ finding.clinvar_significance | lower | replace(' ', '-') | replace('/', '-') }}">{{ finding.clinvar_significance }}</span></span>
+      {% endif %}
+      {% if finding.zygosity %}
+        <span>Zygosity: {{ finding.zygosity }}</span>
+      {% endif %}
+      {% if finding.diplotype %}
+        <span>Diplotype: {{ finding.diplotype }}</span>
+      {% endif %}
+      {% if finding.metabolizer_status %}
+        <span>Status: {{ finding.metabolizer_status }}</span>
+      {% endif %}
+      {% if finding.drug %}
+        <span>Drug: {{ finding.drug }}</span>
+      {% endif %}
+      {% if finding.pathway %}
+        <span>Pathway: {{ finding.pathway }}</span>
+      {% endif %}
+      {% if finding.pathway_level %}
+        <span class="badge badge-{{ finding.pathway_level | lower }}">{{ finding.pathway_level }}</span>
+      {% endif %}
+      {% if finding.haplogroup %}
+        <span>Haplogroup: {{ finding.haplogroup }}</span>
+      {% endif %}
+      {% if finding.prs_percentile is not none %}
+        <span>PRS Percentile: {{ "%.1f" | format(finding.prs_percentile) }}%</span>
+      {% endif %}
+    </div>
+
+    {% if finding.pmid_citations %}
+    <div class="pmid-list">
+      References:
+      {% for pmid in finding.pmid_citations %}
+        <a href="https://pubmed.ncbi.nlm.nih.gov/{{ pmid }}/">PMID:{{ pmid }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<!-- Footer -->
+<div class="report-footer">
+  GenomeInsight &mdash; Personal Genomics Analysis Platform
+  <div class="disclaimer-footer">
+    This report is for educational and research purposes only. Not a substitute for
+    professional medical advice. Genetic variant classifications may change as scientific
+    understanding evolves. Consumer genotyping chips test only a subset of variants.
+  </div>
+</div>
+
+</body>
+</html>
