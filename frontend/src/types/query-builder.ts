@@ -99,3 +99,39 @@ export interface SavedQuery {
 export interface SavedQueryListResponse {
   queries: SavedQuery[]
 }
+
+// ── SQL Console types (P4-04) ────────────────────────────────────────
+
+/** POST /api/query/sql request body. */
+export interface SqlRequest {
+  sample_id: number
+  sql: string
+  limit?: number
+}
+
+/** Column metadata returned from SQL console. */
+export interface SqlResultColumn {
+  name: string
+  type: string | null
+}
+
+/** Response for POST /api/query/sql. */
+export interface SqlResult {
+  columns: SqlResultColumn[]
+  rows: unknown[][]
+  row_count: number
+  truncated: boolean
+  execution_time_ms: number
+}
+
+/** A table in the schema sidebar. */
+export interface SchemaTable {
+  name: string
+  columns: SchemaColumn[]
+}
+
+/** A column in a schema table. */
+export interface SchemaColumn {
+  name: string
+  type: string
+}

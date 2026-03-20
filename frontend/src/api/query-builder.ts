@@ -1,4 +1,4 @@
-/** React Query hooks for the query builder API (P4-02). */
+/** React Query hooks for the query builder API (P4-02) and SQL console (P4-04). */
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
 import type {
@@ -7,6 +7,9 @@ import type {
   RuleGroupModel,
   SavedQuery,
   SavedQueryListResponse,
+  SqlResult,
+  SchemaTable,
+  SchemaColumn,
 } from "@/types/query-builder"
 
 // ── Field metadata ──────────────────────────────────────────────────
@@ -169,5 +172,83 @@ export function useDeleteSavedQuery() {
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["saved-queries"] }),
+  })
+}
+
+// ── SQL Console (P4-04) ─────────────────────────────────────────────
+
+/** Execute raw SQL against a read-only SQLite connection. */
+export function useExecuteSql() {
+  return useMutation({
+    mutationFn: async ({
+      sampleId,
+      sql,
+      limit,
+    }: {
+      sampleId: number
+      sql: string
+      limit?: number
+    }): Promise<SqlResult> => {
+      const res = await fetch("/api/query/sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sample_id: sampleId, sql, limit }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        const detail = data?.detail || `SQL execution failed: ${res.status}`
+        throw new Error(detail)
+      }
+      return res.json()
+    },
+  })
+}
+
+/** Fetch schema (tables + columns) for a sample database. */
+export function useSchemaInfo(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["sql-schema", sampleId],
+    queryFn: async (): Promise<SchemaTable[]> => {
+      // Step 1: Get table names
+      const tablesRes = await fetch("/api/query/sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_id: sampleId!,
+          sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+          limit: 100,
+        }),
+      })
+      if (!tablesRes.ok) throw new Error("Failed to fetch schema")
+      const tablesData: SqlResult = await tablesRes.json()
+      const tableNames = tablesData.rows.map((r) => String(r[0]))
+
+      // Step 2: Get columns for each table
+      const tables: SchemaTable[] = []
+      for (const tableName of tableNames) {
+        // Escape double quotes in table name to prevent SQL injection
+        const safeName = tableName.replace(/"/g, '""')
+        const colRes = await fetch("/api/query/sql", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sample_id: sampleId!,
+            sql: `PRAGMA table_info("${safeName}")`,
+            limit: 200,
+          }),
+        })
+        if (!colRes.ok) continue
+        const colData: SqlResult = await colRes.json()
+        const columns: SchemaColumn[] = colData.rows.map((r) => ({
+          name: String(r[1]),
+          type: String(r[2] || ""),
+        }))
+        tables.push({ name: tableName, columns })
+      }
+
+      return tables
+    },
+    enabled: sampleId != null,
+    staleTime: 1000 * 60 * 60, // 1 hour
   })
 }
