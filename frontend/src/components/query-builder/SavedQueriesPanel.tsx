@@ -25,6 +25,7 @@ export default function SavedQueriesPanel({
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
+  const [overwriteError, setOverwriteError] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
   const savedQueries = useSavedQueries()
@@ -83,7 +84,14 @@ export default function SavedQueriesPanel({
 
   const handleOverwrite = (name: string) => {
     if (!window.confirm(`Overwrite "${name}" with the current filter?`)) return
-    updateQuery.mutate({ name, filter: currentFilter })
+    setOverwriteError(null)
+    updateQuery.mutate(
+      { name, filter: currentFilter },
+      {
+        onSuccess: () => setOverwriteError(null),
+        onError: (err) => setOverwriteError(err instanceof Error ? err.message : "Overwrite failed"),
+      },
+    )
   }
 
   const hasRules = currentFilter.rules && currentFilter.rules.length > 0
@@ -258,7 +266,7 @@ export default function SavedQueriesPanel({
                           e.stopPropagation()
                           handleOverwrite(q.name)
                         }}
-                        disabled={!hasRules}
+                        disabled={!hasRules || updateQuery.isPending}
                         className="rounded-md p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         aria-label={`Overwrite query "${q.name}" with current filter`}
                         title="Overwrite with current filter"
@@ -299,6 +307,13 @@ export default function SavedQueriesPanel({
           </ul>
         )}
       </div>
+
+      {/* Overwrite error feedback */}
+      {overwriteError && (
+        <div className="px-4 py-2 border-t border-border">
+          <p className="text-xs text-destructive" data-testid="overwrite-error">{overwriteError}</p>
+        </div>
+      )}
     </div>
   )
 }

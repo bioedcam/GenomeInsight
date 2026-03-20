@@ -426,7 +426,7 @@ describe("SavedQueriesPanel", () => {
       updated_at: "2026-03-01T00:00:00Z",
     }
 
-    window.confirm = vi.fn(() => true)
+    vi.stubGlobal("confirm", vi.fn(() => true))
 
     mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
       if (opts?.method === "PUT") {
@@ -467,7 +467,7 @@ describe("SavedQueriesPanel", () => {
     })
   })
 
-  it("shows rename, overwrite, and delete action buttons on hover", async () => {
+  it("renders rename, overwrite, and delete action buttons for saved queries", async () => {
     const savedQuery = {
       name: "ActionButtons",
       filter: { combinator: "and", rules: [{ field: "chrom", operator: "=", value: "1" }] },
