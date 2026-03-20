@@ -77,6 +77,7 @@ export default function PathwayCard({ pathway, onClick, selected }: PathwayCardP
       tabIndex={0}
       role="button"
       aria-label={`${pathway.pathway_name} — ${config.label}`}
+      aria-pressed={!!selected}
       data-selected={selected || undefined}
     >
       {/* Header: pathway name + level badge */}
