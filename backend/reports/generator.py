@@ -259,6 +259,14 @@ def render_report_html(
     finding_rows = _load_findings(engine, modules)
     sections = _group_findings_into_sections(finding_rows, sample_dir, modules)
 
+    total_findings = sum(s["finding_count"] for s in sections)
+    high_evidence_count = sum(
+        1
+        for s in sections
+        for f in s["findings"]
+        if (f.get("evidence_level") or 0) >= 3
+    )
+
     template = _jinja_env.get_template("report_base.html")
     html = template.render(
         title=title,
@@ -266,6 +274,8 @@ def render_report_html(
         generated_at=datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC"),
         version=VERSION,
         sections=sections,
+        total_findings=total_findings,
+        high_evidence_count=high_evidence_count,
     )
     return html
 

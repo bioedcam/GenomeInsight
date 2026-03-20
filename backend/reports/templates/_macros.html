@@ -1,0 +1,137 @@
+{#- Reusable Jinja2 macros for report templates (P4-08). -#}
+
+{#- Evidence stars: renders filled/empty stars with print-safe CSS.
+    level: integer 0-4
+    show_label: if true, renders "n/4" text alongside stars
+-#}
+{% macro evidence_stars(level, show_label=false) %}
+{%- set lvl = level if level is not none else 0 -%}
+<span class="evidence-stars" aria-label="{{ lvl }} out of 4 stars evidence level">
+  {%- for i in range(4) -%}
+    {%- if i < lvl -%}
+      <span class="star star-filled" aria-hidden="true">&#9733;</span>
+    {%- else -%}
+      <span class="star star-empty" aria-hidden="true">&#9733;</span>
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if show_label %} <span class="star-label">({{ lvl }}/4)</span>{% endif -%}
+</span>
+{%- endmacro %}
+
+{#- ClinVar significance badge -#}
+{% macro clinvar_badge(significance) %}
+{%- if significance -%}
+<span class="badge badge-clinvar badge-{{ significance | lower | replace(' ', '-') | replace('/', '-') }}">{{ significance }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{#- Pathway level badge -#}
+{% macro pathway_badge(level) %}
+{%- if level -%}
+<span class="badge badge-pathway badge-{{ level | lower }}">{{ level }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{#- Finding card: renders a single finding with all metadata.
+    finding: dict with all finding fields
+    show_svg: whether to render embedded SVG
+-#}
+{% macro finding_card(finding, show_svg=true) %}
+<div class="finding-card finding-card--level-{{ finding.evidence_level or 0 }}">
+  <div class="finding-card-header">
+    <div class="finding-card-identity">
+      {% if finding.gene_symbol %}<span class="finding-gene">{{ finding.gene_symbol }}</span>{% endif %}
+      {% if finding.rsid %}<span class="finding-rsid">{{ finding.rsid }}</span>{% endif %}
+    </div>
+    <div class="finding-card-evidence">
+      {{ evidence_stars(finding.evidence_level, show_label=true) }}
+    </div>
+  </div>
+
+  <div class="finding-text">{{ finding.finding_text }}</div>
+
+  {% if show_svg and finding.svg_content %}
+  <div class="finding-svg">{{ finding.svg_content | safe }}</div>
+  {% endif %}
+
+  {%- set has_meta = finding.clinvar_significance or finding.zygosity or finding.diplotype or finding.metabolizer_status or finding.drug or finding.pathway or finding.pathway_level or finding.haplogroup or finding.prs_percentile is not none -%}
+  {% if has_meta %}
+  <div class="finding-meta">
+    {% if finding.clinvar_significance %}
+      <span class="meta-item">ClinVar: {{ clinvar_badge(finding.clinvar_significance) }}</span>
+    {% endif %}
+    {% if finding.zygosity %}
+      <span class="meta-item"><span class="meta-label">Zygosity:</span> {{ finding.zygosity }}</span>
+    {% endif %}
+    {% if finding.diplotype %}
+      <span class="meta-item"><span class="meta-label">Diplotype:</span> {{ finding.diplotype }}</span>
+    {% endif %}
+    {% if finding.metabolizer_status %}
+      <span class="meta-item"><span class="meta-label">Status:</span> {{ finding.metabolizer_status }}</span>
+    {% endif %}
+    {% if finding.drug %}
+      <span class="meta-item"><span class="meta-label">Drug:</span> {{ finding.drug }}</span>
+    {% endif %}
+    {% if finding.pathway %}
+      <span class="meta-item"><span class="meta-label">Pathway:</span> {{ finding.pathway }}</span>
+    {% endif %}
+    {% if finding.pathway_level %}
+      <span class="meta-item">{{ pathway_badge(finding.pathway_level) }}</span>
+    {% endif %}
+    {% if finding.haplogroup %}
+      <span class="meta-item"><span class="meta-label">Haplogroup:</span> {{ finding.haplogroup }}</span>
+    {% endif %}
+    {% if finding.prs_percentile is not none %}
+      <span class="meta-item"><span class="meta-label">PRS Percentile:</span> {{ "%.1f" | format(finding.prs_percentile) }}%</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if finding.pmid_citations %}
+  <div class="pmid-list">
+    <span class="meta-label">References:</span>
+    {% for pmid in finding.pmid_citations %}
+      <a href="https://pubmed.ncbi.nlm.nih.gov/{{ pmid }}/" class="pmid-link">PMID:{{ pmid }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{#- Module section: renders a full module block with header, disclaimer, findings -#}
+{% macro module_section(section, section_number) %}
+<div class="module-section" id="module-{{ section.module }}">
+  <div class="module-header">
+    <div class="module-header-content">
+      <h2 class="module-title">
+        <span class="module-number">{{ section_number }}.</span>
+        {{ section.display_name }}
+      </h2>
+      <span class="module-count">{{ section.finding_count }} finding{{ "s" if section.finding_count != 1 else "" }}</span>
+    </div>
+  </div>
+
+  {% if section.disclaimer %}
+  <div class="module-disclaimer">
+    <div class="disclaimer-icon">&#9888;</div>
+    <div class="disclaimer-body">
+      <strong>{{ section.disclaimer_title }}</strong>
+      <p>{{ section.disclaimer }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% for finding in section.findings %}
+    {{ finding_card(finding) }}
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{#- Table of contents entry -#}
+{% macro toc_entry(section, section_number) %}
+<div class="toc-entry">
+  <span class="toc-number">{{ section_number }}.</span>
+  <a href="#module-{{ section.module }}" class="toc-link">{{ section.display_name }}</a>
+  <span class="toc-count">({{ section.finding_count }})</span>
+</div>
+{%- endmacro %}
