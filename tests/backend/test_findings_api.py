@@ -106,6 +106,15 @@ def findings_client(
             "gene_symbol": "CFTR",
             "finding_text": "CFTR carrier",
         },
+        {
+            "module": "gene_health",
+            "category": "disease_risk",
+            "evidence_level": 3,
+            "gene_symbol": "APOE",
+            "finding_text": "Alzheimer's disease risk (APOE ε4)",
+            "related_module": "apoe",
+            "related_finding_id": 1,
+        },
     ]
     with sample_engine.begin() as conn:
         for f in seed_findings:
@@ -137,7 +146,7 @@ class TestListFindings:
         resp = findings_client.get("/api/analysis/findings?sample_id=1")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 5
+        assert len(data) == 6
 
     def test_sorted_by_evidence_level_desc(self, findings_client):
         resp = findings_client.get("/api/analysis/findings?sample_id=1")
@@ -154,7 +163,7 @@ class TestListFindings:
     def test_filter_by_min_stars(self, findings_client):
         resp = findings_client.get("/api/analysis/findings?sample_id=1&min_stars=3")
         data = resp.json()
-        assert len(data) == 3
+        assert len(data) == 4
         for f in data:
             assert f["evidence_level"] >= 3
 
@@ -178,6 +187,19 @@ class TestListFindings:
         data = resp.json()
         assert data[0]["detail"]["syndromes"] == ["HBOC"]
 
+    def test_finding_has_cross_module_link(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&module=gene_health")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["related_module"] == "apoe"
+        assert data[0]["related_finding_id"] == 1
+
+    def test_finding_without_cross_link_has_null_fields(self, findings_client):
+        resp = findings_client.get("/api/analysis/findings?sample_id=1&module=cancer")
+        data = resp.json()
+        assert data[0]["related_module"] is None
+        assert data[0]["related_finding_id"] is None
+
 
 # ── Summary tests ───────────────────────────────────────────────────
 
@@ -187,7 +209,7 @@ class TestFindingsSummary:
         resp = findings_client.get("/api/analysis/findings/summary?sample_id=1")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_findings"] == 5
+        assert data["total_findings"] == 6
         modules = {m["module"] for m in data["modules"]}
         assert "cancer" in modules
         assert "pharmacogenomics" in modules

@@ -20,8 +20,8 @@ from backend.db.tables import PREDEFINED_TAGS, sample_metadata_obj
 
 logger = structlog.get_logger(__name__)
 
-# Current schema version. Bump when new tables are added to sample_metadata_obj.
-SAMPLE_SCHEMA_VERSION = 3
+# Current schema version. Bump when new tables/columns are added to sample_metadata_obj.
+SAMPLE_SCHEMA_VERSION = 4
 
 
 def create_sample_tables(engine: sa.Engine) -> None:
@@ -94,8 +94,53 @@ def ensure_sample_schema_current(engine: sa.Engine) -> bool:
             to_version=SAMPLE_SCHEMA_VERSION,
         )
 
+    # Add missing columns to existing tables (v3 → v4: findings cross-link columns)
+    columns_added = _add_missing_columns(engine, current_version)
+
     _stamp_schema_version(engine, SAMPLE_SCHEMA_VERSION)
-    return bool(added)
+    return bool(added) or columns_added
+
+
+def _add_missing_columns(engine: sa.Engine, from_version: int) -> bool:
+    """Add columns introduced after the initial table creation.
+
+    Uses ALTER TABLE ADD COLUMN which is safe on SQLite (no-op if column
+    already exists is handled by checking existing columns first).
+
+    Returns True if any columns were added.
+    """
+    added = False
+
+    if from_version < 4:
+        # P3-67: Add cross-module link columns to findings table
+        inspector = sa.inspect(engine)
+        if "findings" in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns("findings")}
+            with engine.begin() as conn:
+                if "related_module" not in existing_cols:
+                    conn.execute(sa.text("ALTER TABLE findings ADD COLUMN related_module TEXT"))
+                    added = True
+                if "related_finding_id" not in existing_cols:
+                    conn.execute(
+                        sa.text("ALTER TABLE findings ADD COLUMN related_finding_id INTEGER")
+                    )
+                    added = True
+            if added:
+                # Create index on related_module for cross-module queries
+                with engine.begin() as conn:
+                    conn.execute(
+                        sa.text(
+                            "CREATE INDEX IF NOT EXISTS idx_findings_related_module "
+                            "ON findings (related_module)"
+                        )
+                    )
+                logger.info(
+                    "findings_columns_added",
+                    columns=["related_module", "related_finding_id"],
+                    from_version=from_version,
+                )
+
+    return added
 
 
 def _get_schema_version(engine: sa.Engine) -> int:
