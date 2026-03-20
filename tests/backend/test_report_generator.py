@@ -340,6 +340,34 @@ class TestSectionGrouping:
         assert cancer_section["finding_count"] == 2
 
 
+# ── Shared HTML render helper ─────────────────────────────────────
+
+
+def _render_html_helper(
+    tmp_data_dir: Path,
+    sample_with_findings: tuple,
+    modules: list[str] | None = None,
+) -> str:
+    """Render report HTML with patched registry and settings."""
+    ref_engine, sample_engine, _ = sample_with_findings
+    settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+    ref_engine.dispose()
+    sample_engine.dispose()
+
+    with (
+        patch("backend.reports.generator.get_registry") as mock_reg,
+        patch("backend.db.connection.get_settings", return_value=settings),
+    ):
+        reset_registry()
+        from backend.db.connection import get_registry as real_get_reg
+
+        mock_reg.return_value = real_get_reg()
+        html = render_report_html(sample_id=1, modules=modules)
+        reset_registry()
+
+    return html
+
+
 # ── Unit tests: HTML rendering ────────────────────────────────────
 
 
@@ -350,23 +378,7 @@ class TestHtmlRendering:
         sample_with_findings: tuple,
     ) -> None:
         """T4-07: Report renders with all modules, disclaimers, PMIDs."""
-        ref_engine, sample_engine, _ = sample_with_findings
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        ref_engine.dispose()
-        sample_engine.dispose()
-
-        with (
-            patch("backend.reports.generator.get_registry") as mock_reg,
-            patch("backend.db.connection.get_settings", return_value=settings),
-        ):
-            reset_registry()
-            from backend.db.connection import get_registry as real_get_reg
-
-            mock_reg.return_value = real_get_reg()
-
-            html = render_report_html(sample_id=1)
-
-            reset_registry()
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
 
         assert "GenomeInsight Genomic Report" in html
         assert "Test Patient" in html
@@ -390,23 +402,9 @@ class TestHtmlRendering:
         sample_with_findings: tuple,
     ) -> None:
         """T4-08: Excluded modules don't appear."""
-        ref_engine, sample_engine, _ = sample_with_findings
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        ref_engine.dispose()
-        sample_engine.dispose()
-
-        with (
-            patch("backend.reports.generator.get_registry") as mock_reg,
-            patch("backend.db.connection.get_settings", return_value=settings),
-        ):
-            reset_registry()
-            from backend.db.connection import get_registry as real_get_reg
-
-            mock_reg.return_value = real_get_reg()
-
-            html = render_report_html(sample_id=1, modules=["cancer"])
-
-            reset_registry()
+        html = _render_html_helper(
+            tmp_data_dir, sample_with_findings, modules=["cancer"]
+        )
 
         assert "Cancer Predisposition" in html
         assert "BRCA1" in html
@@ -419,23 +417,9 @@ class TestHtmlRendering:
         tmp_data_dir: Path,
         sample_with_findings: tuple,
     ) -> None:
-        ref_engine, sample_engine, _ = sample_with_findings
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        ref_engine.dispose()
-        sample_engine.dispose()
-
-        with (
-            patch("backend.reports.generator.get_registry") as mock_reg,
-            patch("backend.db.connection.get_settings", return_value=settings),
-        ):
-            reset_registry()
-            from backend.db.connection import get_registry as real_get_reg
-
-            mock_reg.return_value = real_get_reg()
-
-            html = render_report_html(sample_id=1, modules=["cancer"])
-
-            reset_registry()
+        html = _render_html_helper(
+            tmp_data_dir, sample_with_findings, modules=["cancer"]
+        )
 
         # Evidence stars are rendered as ★ characters
         assert "star-filled" in html
@@ -450,32 +434,11 @@ class TestClinicalTemplates:
     section headers, finding cards, EvidenceStars print CSS,
     per-module disclaimer blocks."""
 
-    def _render_all(
-        self,
-        tmp_data_dir: Path,
-        sample_with_findings: tuple,
-    ) -> str:
-        ref_engine, sample_engine, _ = sample_with_findings
-        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        ref_engine.dispose()
-        sample_engine.dispose()
-        with (
-            patch("backend.reports.generator.get_registry") as mock_reg,
-            patch("backend.db.connection.get_settings", return_value=settings),
-        ):
-            reset_registry()
-            from backend.db.connection import get_registry as real_get_reg
-
-            mock_reg.return_value = real_get_reg()
-            html = render_report_html(sample_id=1)
-            reset_registry()
-        return html
-
     def test_clinical_typography_font_stack(
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Template uses clinical font stack."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert '"Inter"' in html
         assert "font-feature-settings" in html
 
@@ -483,7 +446,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Template renders summary statistics bar."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "summary-bar" in html
         assert "Modules" in html
         assert "Findings" in html
@@ -493,7 +456,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Template renders table of contents when multiple modules."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "toc" in html
         assert "Contents" in html
         assert "toc-entry" in html
@@ -502,7 +465,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Module headers include section numbers."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "module-number" in html
         assert "module-title" in html
 
@@ -510,7 +473,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Finding cards have evidence-level color-coded left borders."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "finding-card--level-4" in html
         assert "finding-card--level-2" in html
 
@@ -518,7 +481,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Evidence stars include numeric label (n/4)."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "star-label" in html
         assert "/4)" in html
 
@@ -526,7 +489,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Evidence stars have ARIA labels for accessibility."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "aria-label" in html
         assert "out of 4 stars" in html
 
@@ -534,7 +497,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Print CSS forces evidence star colors."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "@media print" in html
         assert "print-color-adjust: exact" in html
 
@@ -542,7 +505,7 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Module disclaimers include warning icon."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "disclaimer-icon" in html
         assert "disclaimer-body" in html
 
@@ -550,14 +513,14 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Module headers display finding count badge."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "module-count" in html
 
     def test_global_disclaimer_styled(
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Global disclaimer uses distinct styling from module disclaimers."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "global-disclaimer" in html
         assert "Important Disclaimer" in html
 
@@ -565,21 +528,22 @@ class TestClinicalTemplates:
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Finding metadata uses labeled styling."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "meta-label" in html
         assert "meta-item" in html
 
     def test_macros_template_exists(self) -> None:
         """_macros.html template file exists."""
-        templates = Path(__file__).parent.parent.parent / "backend"
-        macros_path = templates / "reports" / "templates" / "_macros.html"
+        from backend.reports.generator import TEMPLATES_DIR
+
+        macros_path = TEMPLATES_DIR / "_macros.html"
         assert macros_path.exists(), "_macros.html template not found"
 
     def test_gene_symbol_italic(
         self, tmp_data_dir: Path, sample_with_findings: tuple
     ) -> None:
         """Gene symbols rendered in italic (clinical convention)."""
-        html = self._render_all(tmp_data_dir, sample_with_findings)
+        html = _render_html_helper(tmp_data_dir, sample_with_findings)
         assert "font-style: italic" in html
 
 
