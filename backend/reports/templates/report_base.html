@@ -4,176 +4,327 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ title }}</title>
+{% from "_macros.html" import evidence_stars, clinvar_badge, pathway_badge, finding_card, module_section, toc_entry %}
 <style>
-  /* ── Base typography ─────────────────────────────────── */
+  /* ── Page layout ──────────────────────────────────────── */
   @page {
     size: A4;
     margin: 20mm 18mm 25mm 18mm;
     @bottom-center {
       content: counter(page) " of " counter(pages);
-      font-size: 9px;
-      color: #64748B;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8pt;
+      color: #94A3B8;
     }
   }
 
+  /* ── Clinical typography ──────────────────────────────── */
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 "Helvetica Neue", Arial, sans-serif;
-    font-size: 11px;
-    line-height: 1.5;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.55;
     color: #1E293B;
     background: #FFFFFF;
+    font-feature-settings: "liga" 1, "calt" 1, "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* ── Header ──────────────────────────────────────────── */
+  h1, h2, h3, h4 {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+  }
+
+  /* ── Report header ────────────────────────────────────── */
   .report-header {
     text-align: center;
-    padding-bottom: 16px;
-    border-bottom: 3px solid #0D9488;
-    margin-bottom: 20px;
+    padding: 0 0 14px 0;
+    border-bottom: 2.5px solid #0D9488;
+    margin-bottom: 18px;
   }
 
   .report-header h1 {
-    font-size: 22px;
+    font-size: 20pt;
     font-weight: 700;
     color: #0D9488;
-    margin-bottom: 4px;
-    letter-spacing: -0.3px;
+    margin-bottom: 3px;
+    letter-spacing: -0.4px;
   }
 
   .report-header .subtitle {
-    font-size: 13px;
-    color: #64748B;
-    font-weight: 400;
+    font-size: 12pt;
+    color: #475569;
+    font-weight: 500;
   }
 
   .report-header .meta {
-    font-size: 10px;
+    font-size: 8pt;
     color: #94A3B8;
     margin-top: 6px;
+    letter-spacing: 0.2px;
   }
 
-  /* ── Module section ──────────────────────────────────── */
+  .report-header .meta span {
+    margin: 0 4px;
+  }
+
+  /* ── Global disclaimer ────────────────────────────────── */
+  .global-disclaimer {
+    background: #FFF7ED;
+    border: 1px solid #FDBA74;
+    border-left: 4px solid #F97316;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 18px;
+    font-size: 8.5pt;
+    color: #9A3412;
+    line-height: 1.45;
+    page-break-inside: avoid;
+  }
+
+  .global-disclaimer strong {
+    display: block;
+    font-size: 9.5pt;
+    margin-bottom: 3px;
+    color: #7C2D12;
+  }
+
+  /* ── Table of contents ────────────────────────────────── */
+  .toc {
+    margin-bottom: 20px;
+    padding: 12px 14px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    page-break-inside: avoid;
+  }
+
+  .toc-title {
+    font-size: 10pt;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  .toc-entry {
+    font-size: 9pt;
+    line-height: 1.7;
+    color: #475569;
+  }
+
+  .toc-number {
+    display: inline-block;
+    width: 18px;
+    color: #94A3B8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .toc-link {
+    color: #0D9488;
+    text-decoration: none;
+  }
+
+  .toc-count {
+    color: #94A3B8;
+    font-size: 8pt;
+    margin-left: 3px;
+  }
+
+  /* ── Module section ───────────────────────────────────── */
   .module-section {
-    margin-bottom: 24px;
+    margin-bottom: 22px;
     page-break-inside: avoid;
   }
 
   .module-header {
-    background: #F0FDFA;
+    background: linear-gradient(135deg, #F0FDFA 0%, #ECFDF5 100%);
     border-left: 4px solid #0D9488;
-    padding: 8px 12px;
-    margin-bottom: 12px;
+    border-bottom: 1px solid #CCFBF1;
+    padding: 8px 14px;
+    margin-bottom: 10px;
   }
 
-  .module-header h2 {
-    font-size: 15px;
+  .module-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .module-title {
+    font-size: 13pt;
     font-weight: 600;
     color: #0F766E;
     margin: 0;
   }
 
-  .module-header .module-summary {
-    font-size: 10px;
-    color: #64748B;
-    margin-top: 2px;
+  .module-number {
+    color: #99F6E4;
+    font-weight: 700;
+    margin-right: 4px;
   }
 
-  /* ── Disclaimer block ────────────────────────────────── */
-  .disclaimer {
+  .module-count {
+    font-size: 8pt;
+    color: #5EEAD4;
+    background: #0F766E;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ── Module disclaimer ────────────────────────────────── */
+  .module-disclaimer {
+    display: flex;
+    gap: 8px;
     background: #FFFBEB;
     border: 1px solid #FDE68A;
     border-radius: 4px;
     padding: 8px 10px;
-    margin-bottom: 12px;
-    font-size: 9px;
+    margin-bottom: 10px;
+    font-size: 8pt;
     color: #92400E;
     line-height: 1.4;
     page-break-inside: avoid;
   }
 
-  .disclaimer strong {
-    display: block;
-    margin-bottom: 3px;
-    font-size: 10px;
+  .disclaimer-icon {
+    font-size: 12pt;
+    line-height: 1;
+    flex-shrink: 0;
+    color: #D97706;
   }
 
-  /* ── Finding card ────────────────────────────────────── */
+  .disclaimer-body strong {
+    display: block;
+    font-size: 8.5pt;
+    margin-bottom: 2px;
+    color: #78350F;
+  }
+
+  .disclaimer-body p {
+    margin: 0;
+  }
+
+  /* ── Finding card ─────────────────────────────────────── */
   .finding-card {
     border: 1px solid #E2E8F0;
     border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 8px;
     page-break-inside: avoid;
+    border-left: 3px solid #CBD5E1;
+    background: #FFFFFF;
   }
+
+  /* Evidence-level color coding on left border */
+  .finding-card--level-4 { border-left-color: #DC2626; }
+  .finding-card--level-3 { border-left-color: #F59E0B; }
+  .finding-card--level-2 { border-left-color: #3B82F6; }
+  .finding-card--level-1 { border-left-color: #94A3B8; }
+  .finding-card--level-0 { border-left-color: #E2E8F0; }
 
   .finding-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
   }
 
-  .finding-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #1E293B;
+  .finding-card-identity {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .finding-card-evidence {
+    flex-shrink: 0;
   }
 
   .finding-gene {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10.5pt;
+    font-weight: 700;
     color: #0D9488;
-    margin-right: 6px;
+    font-style: italic;
   }
 
   .finding-rsid {
-    font-size: 10px;
+    font-size: 8.5pt;
     color: #64748B;
-    font-family: "SF Mono", "Fira Code", monospace;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono",
+                 Menlo, Consolas, monospace;
   }
 
   .finding-text {
-    font-size: 11px;
+    font-size: 9.5pt;
     color: #334155;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
+    line-height: 1.5;
   }
 
+  /* ── Finding metadata ─────────────────────────────────── */
   .finding-meta {
-    font-size: 9px;
+    font-size: 8pt;
     color: #64748B;
     display: flex;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
+    padding-top: 5px;
+    border-top: 1px solid #F1F5F9;
+    margin-top: 5px;
   }
 
-  .finding-meta span {
+  .meta-item {
     white-space: nowrap;
   }
 
-  /* ── Evidence stars ──────────────────────────────────── */
+  .meta-label {
+    font-weight: 600;
+    color: #475569;
+  }
+
+  /* ── Evidence stars ───────────────────────────────────── */
   .evidence-stars {
     display: inline-flex;
-    gap: 2px;
+    align-items: center;
+    gap: 1px;
     vertical-align: middle;
+  }
+
+  .star {
+    font-size: 11pt;
+    line-height: 1;
   }
 
   .star-filled {
     color: #F59E0B;
-    font-size: 13px;
   }
 
   .star-empty {
     color: #E2E8F0;
-    font-size: 13px;
   }
 
-  /* ── SVG container ───────────────────────────────────── */
+  .star-label {
+    font-size: 7pt;
+    color: #94A3B8;
+    margin-left: 3px;
+    font-weight: 500;
+  }
+
+  /* ── SVG container ────────────────────────────────────── */
   .finding-svg {
-    margin: 8px 0;
+    margin: 6px 0;
     text-align: center;
+    padding: 4px;
+    background: #F8FAFC;
+    border-radius: 4px;
   }
 
   .finding-svg svg {
@@ -181,61 +332,176 @@
     height: auto;
   }
 
-  /* ── PMID citations ──────────────────────────────────── */
+  /* ── PMID citations ───────────────────────────────────── */
   .pmid-list {
-    font-size: 9px;
+    font-size: 7.5pt;
     color: #64748B;
     margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid #F1F5F9;
   }
 
-  .pmid-list a {
+  .pmid-link {
     color: #0D9488;
     text-decoration: none;
   }
 
-  /* ── Badge styles ────────────────────────────────────── */
+  .pmid-link:hover {
+    text-decoration: underline;
+  }
+
+  /* ── Badge styles ─────────────────────────────────────── */
   .badge {
     display: inline-block;
-    font-size: 9px;
+    font-size: 7.5pt;
     font-weight: 600;
     padding: 1px 6px;
     border-radius: 3px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    vertical-align: middle;
   }
 
-  .badge-pathogenic { background: #FEE2E2; color: #991B1B; }
-  .badge-likely-pathogenic { background: #FEF3C7; color: #92400E; }
-  .badge-vus { background: #E0E7FF; color: #3730A3; }
-  .badge-benign { background: #D1FAE5; color: #065F46; }
+  /* ClinVar badges */
+  .badge-pathogenic        { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+  .badge-likely-pathogenic  { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+  .badge-vus               { background: #E0E7FF; color: #3730A3; border: 1px solid #C7D2FE; }
+  .badge-likely-benign      { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+  .badge-benign            { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
 
-  .badge-elevated { background: #FEE2E2; color: #991B1B; }
-  .badge-moderate { background: #FEF3C7; color: #92400E; }
-  .badge-standard { background: #D1FAE5; color: #065F46; }
+  /* Pathway level badges */
+  .badge-elevated  { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+  .badge-moderate  { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+  .badge-standard  { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
 
-  /* ── Footer ──────────────────────────────────────────── */
+  /* ── Summary statistics bar ───────────────────────────── */
+  .summary-bar {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 18px;
+    padding: 10px 14px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    page-break-inside: avoid;
+  }
+
+  .summary-stat {
+    text-align: center;
+  }
+
+  .summary-stat-value {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #0D9488;
+    display: block;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summary-stat-label {
+    font-size: 7.5pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  /* ── Footer ───────────────────────────────────────────── */
   .report-footer {
-    margin-top: 30px;
-    padding-top: 12px;
+    margin-top: 28px;
+    padding-top: 10px;
     border-top: 1px solid #E2E8F0;
-    font-size: 9px;
+    font-size: 8pt;
     color: #94A3B8;
     text-align: center;
     page-break-inside: avoid;
   }
 
-  .report-footer .disclaimer-footer {
-    font-size: 8px;
-    color: #94A3B8;
-    margin-top: 6px;
-    line-height: 1.4;
+  .report-footer .footer-brand {
+    font-weight: 600;
+    color: #64748B;
+    margin-bottom: 4px;
   }
 
-  /* ── Print overrides ─────────────────────────────────── */
+  .report-footer .disclaimer-footer {
+    font-size: 7pt;
+    color: #94A3B8;
+    line-height: 1.4;
+    max-width: 480px;
+    margin: 4px auto 0;
+  }
+
+  /* ── Print overrides ──────────────────────────────────── */
   @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .module-section { page-break-inside: avoid; }
-    .finding-card { page-break-inside: avoid; }
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      color-adjust: exact;
+    }
+
+    /* Force evidence star colors in print */
+    .star-filled {
+      color: #F59E0B !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .star-empty {
+      color: #E2E8F0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Force badge colors in print */
+    .badge {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Force finding card left borders in print */
+    .finding-card {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Force module header background in print */
+    .module-header {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Page break management */
+    .module-section {
+      page-break-inside: avoid;
+    }
+
+    .finding-card {
+      page-break-inside: avoid;
+    }
+
+    .global-disclaimer {
+      page-break-inside: avoid;
+    }
+
+    .module-disclaimer {
+      page-break-inside: avoid;
+    }
+
+    /* Allow page breaks between module sections */
+    .module-section + .module-section {
+      page-break-before: auto;
+    }
+
+    /* Suppress link URLs in print */
+    a[href]::after {
+      content: none !important;
+    }
+
+    /* Ensure SVGs print with color */
+    .finding-svg svg {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
 </style>
 </head>
@@ -245,11 +511,15 @@
 <div class="report-header">
   <h1>{{ title }}</h1>
   <div class="subtitle">{{ sample_name }}</div>
-  <div class="meta">Generated {{ generated_at }} &bull; GenomeInsight v{{ version }}</div>
+  <div class="meta">
+    <span>Generated {{ generated_at }}</span>
+    <span>&bull;</span>
+    <span>GenomeInsight v{{ version }}</span>
+  </div>
 </div>
 
 <!-- Global disclaimer -->
-<div class="disclaimer">
+<div class="global-disclaimer">
   <strong>Important Disclaimer</strong>
   This report is generated by GenomeInsight for educational and research purposes only.
   It is NOT a medical device and has NOT been reviewed or approved by the FDA or any
@@ -257,91 +527,42 @@
   counselor before making any medical decisions based on genetic information.
 </div>
 
-<!-- Module sections -->
-{% for section in sections %}
-<div class="module-section">
-  <div class="module-header">
-    <h2>{{ section.display_name }}</h2>
-    <div class="module-summary">{{ section.finding_count }} finding{{ "s" if section.finding_count != 1 else "" }}</div>
+<!-- Summary statistics -->
+{% if sections %}
+<div class="summary-bar">
+  <div class="summary-stat">
+    <span class="summary-stat-value">{{ sections | length }}</span>
+    <span class="summary-stat-label">Modules</span>
   </div>
-
-  {% if section.disclaimer %}
-  <div class="disclaimer">
-    <strong>{{ section.disclaimer_title }}</strong>
-    {{ section.disclaimer }}
+  <div class="summary-stat">
+    <span class="summary-stat-value">{{ total_findings }}</span>
+    <span class="summary-stat-label">Findings</span>
   </div>
-  {% endif %}
-
-  {% for finding in section.findings %}
-  <div class="finding-card">
-    <div class="finding-card-header">
-      <div>
-        {% if finding.gene_symbol %}<span class="finding-gene">{{ finding.gene_symbol }}</span>{% endif %}
-        {% if finding.rsid %}<span class="finding-rsid">{{ finding.rsid }}</span>{% endif %}
-      </div>
-      <div class="evidence-stars">
-        {% for i in range(4) %}
-          {% if i < (finding.evidence_level or 0) %}
-            <span class="star-filled">&#9733;</span>
-          {% else %}
-            <span class="star-empty">&#9733;</span>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="finding-text">{{ finding.finding_text }}</div>
-
-    {% if finding.svg_content %}
-    <div class="finding-svg">{{ finding.svg_content | safe }}</div>
-    {% endif %}
-
-    <div class="finding-meta">
-      {% if finding.clinvar_significance %}
-        <span>ClinVar: <span class="badge badge-{{ finding.clinvar_significance | lower | replace(' ', '-') | replace('/', '-') }}">{{ finding.clinvar_significance }}</span></span>
-      {% endif %}
-      {% if finding.zygosity %}
-        <span>Zygosity: {{ finding.zygosity }}</span>
-      {% endif %}
-      {% if finding.diplotype %}
-        <span>Diplotype: {{ finding.diplotype }}</span>
-      {% endif %}
-      {% if finding.metabolizer_status %}
-        <span>Status: {{ finding.metabolizer_status }}</span>
-      {% endif %}
-      {% if finding.drug %}
-        <span>Drug: {{ finding.drug }}</span>
-      {% endif %}
-      {% if finding.pathway %}
-        <span>Pathway: {{ finding.pathway }}</span>
-      {% endif %}
-      {% if finding.pathway_level %}
-        <span class="badge badge-{{ finding.pathway_level | lower }}">{{ finding.pathway_level }}</span>
-      {% endif %}
-      {% if finding.haplogroup %}
-        <span>Haplogroup: {{ finding.haplogroup }}</span>
-      {% endif %}
-      {% if finding.prs_percentile is not none %}
-        <span>PRS Percentile: {{ "%.1f" | format(finding.prs_percentile) }}%</span>
-      {% endif %}
-    </div>
-
-    {% if finding.pmid_citations %}
-    <div class="pmid-list">
-      References:
-      {% for pmid in finding.pmid_citations %}
-        <a href="https://pubmed.ncbi.nlm.nih.gov/{{ pmid }}/">PMID:{{ pmid }}</a>{% if not loop.last %}, {% endif %}
-      {% endfor %}
-    </div>
-    {% endif %}
+  <div class="summary-stat">
+    <span class="summary-stat-value">{{ high_evidence_count }}</span>
+    <span class="summary-stat-label">High Evidence</span>
   </div>
+</div>
+
+<!-- Table of contents -->
+{% if sections | length > 1 %}
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  {% for section in sections %}
+    {{ toc_entry(section, loop.index) }}
   {% endfor %}
 </div>
+{% endif %}
+{% endif %}
+
+<!-- Module sections -->
+{% for section in sections %}
+  {{ module_section(section, loop.index) }}
 {% endfor %}
 
 <!-- Footer -->
 <div class="report-footer">
-  GenomeInsight &mdash; Personal Genomics Analysis Platform
+  <div class="footer-brand">GenomeInsight &mdash; Personal Genomics Analysis Platform</div>
   <div class="disclaimer-footer">
     This report is for educational and research purposes only. Not a substitute for
     professional medical advice. Genetic variant classifications may change as scientific

@@ -1,9 +1,11 @@
-"""Tests for PDF report generator (P4-07).
+"""Tests for PDF report generator and HTML templates (P4-07 + P4-08).
 
 Covers:
 - T4-07: PDF report generates with all selected modules, disclaimers, PMIDs
 - T4-08: Report respects module selection (excluded modules don't appear)
 - T4-09: Findings sorted by evidence level (4-star first) within each section
+- P4-08: Clinical typography, section headers, finding cards, EvidenceStars
+         in print CSS, per-module disclaimer blocks, summary bar, TOC
 - HTML rendering (no Playwright needed for these tests)
 - Module disclaimer inclusion
 - SVG embedding from disk
@@ -438,6 +440,147 @@ class TestHtmlRendering:
         # Evidence stars are rendered as ★ characters
         assert "star-filled" in html
         assert "star-empty" in html
+
+
+# ── P4-08 tests: clinical templates ──────────────────────────────
+
+
+class TestClinicalTemplates:
+    """P4-08: Report HTML templates with clinical typography,
+    section headers, finding cards, EvidenceStars print CSS,
+    per-module disclaimer blocks."""
+
+    def _render_all(
+        self,
+        tmp_data_dir: Path,
+        sample_with_findings: tuple,
+    ) -> str:
+        ref_engine, sample_engine, _ = sample_with_findings
+        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+        ref_engine.dispose()
+        sample_engine.dispose()
+        with (
+            patch("backend.reports.generator.get_registry") as mock_reg,
+            patch("backend.db.connection.get_settings", return_value=settings),
+        ):
+            reset_registry()
+            from backend.db.connection import get_registry as real_get_reg
+
+            mock_reg.return_value = real_get_reg()
+            html = render_report_html(sample_id=1)
+            reset_registry()
+        return html
+
+    def test_clinical_typography_font_stack(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Template uses clinical font stack."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert '"Inter"' in html
+        assert "font-feature-settings" in html
+
+    def test_summary_bar_rendered(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Template renders summary statistics bar."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "summary-bar" in html
+        assert "Modules" in html
+        assert "Findings" in html
+        assert "High Evidence" in html
+
+    def test_table_of_contents(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Template renders table of contents when multiple modules."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "toc" in html
+        assert "Contents" in html
+        assert "toc-entry" in html
+
+    def test_numbered_section_headers(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Module headers include section numbers."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "module-number" in html
+        assert "module-title" in html
+
+    def test_finding_card_evidence_level_border(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Finding cards have evidence-level color-coded left borders."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "finding-card--level-4" in html
+        assert "finding-card--level-2" in html
+
+    def test_evidence_stars_with_label(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Evidence stars include numeric label (n/4)."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "star-label" in html
+        assert "/4)" in html
+
+    def test_evidence_stars_aria_label(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Evidence stars have ARIA labels for accessibility."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "aria-label" in html
+        assert "out of 4 stars" in html
+
+    def test_print_css_evidence_stars(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Print CSS forces evidence star colors."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "@media print" in html
+        assert "print-color-adjust: exact" in html
+
+    def test_module_disclaimer_icon(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Module disclaimers include warning icon."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "disclaimer-icon" in html
+        assert "disclaimer-body" in html
+
+    def test_finding_count_badge_in_header(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Module headers display finding count badge."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "module-count" in html
+
+    def test_global_disclaimer_styled(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Global disclaimer uses distinct styling from module disclaimers."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "global-disclaimer" in html
+        assert "Important Disclaimer" in html
+
+    def test_meta_labels_styled(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Finding metadata uses labeled styling."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "meta-label" in html
+        assert "meta-item" in html
+
+    def test_macros_template_exists(self) -> None:
+        """_macros.html template file exists."""
+        templates = Path(__file__).parent.parent.parent / "backend"
+        macros_path = templates / "reports" / "templates" / "_macros.html"
+        assert macros_path.exists(), "_macros.html template not found"
+
+    def test_gene_symbol_italic(
+        self, tmp_data_dir: Path, sample_with_findings: tuple
+    ) -> None:
+        """Gene symbols rendered in italic (clinical convention)."""
+        html = self._render_all(tmp_data_dir, sample_with_findings)
+        assert "font-style: italic" in html
 
 
 # ── Unit tests: module disclaimers ────────────────────────────────
