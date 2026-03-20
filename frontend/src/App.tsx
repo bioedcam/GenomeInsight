@@ -19,6 +19,7 @@ import TraitsPersonalityView from '@/pages/TraitsPersonalityView'
 import GeneHealthView from '@/pages/GeneHealthView'
 import RareVariantsView from '@/pages/RareVariantsView'
 import GenomeBrowser from '@/pages/GenomeBrowser'
+import QueryBuilderView from '@/pages/QueryBuilderView'
 import ReportBuilder from '@/pages/ReportBuilder'
 import FindingsExplorer from '@/pages/FindingsExplorer'
 import GeneDetailPage from '@/pages/GeneDetailPage'
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/gene-health" element={<GeneHealthView />} />
         <Route path="/rare-variants" element={<RareVariantsView />} />
         <Route path="/genome-browser" element={<GenomeBrowser />} />
+        <Route path="/query-builder" element={<QueryBuilderView />} />
         <Route path="/reports" element={<ReportBuilder />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
