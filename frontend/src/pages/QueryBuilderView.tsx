@@ -32,6 +32,7 @@ export default function QueryBuilderView() {
   const [query, setQuery] = useState<RuleGroupType>(DEFAULT_QUERY)
   const [resultPages, setResultPages] = useState<QueryResultPage[]>([])
   const [hasExecuted, setHasExecuted] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
 
   const fieldsQuery = useQueryFields()
   const runQuery = useRunQuery()
@@ -75,6 +76,7 @@ export default function QueryBuilderView() {
     if (!sampleId || resultPages.length === 0) return
     const lastPage = resultPages[resultPages.length - 1]
     if (!lastPage.has_more || !lastPage.next_cursor_chrom || lastPage.next_cursor_pos == null) return
+    setLoadMoreError(null)
 
     const filter = query as unknown as RuleGroupModel
     fetch("/api/query", {
@@ -95,8 +97,8 @@ export default function QueryBuilderView() {
       .then((data: QueryResultPage) => {
         setResultPages((prev) => [...prev, data])
       })
-      .catch(() => {
-        // Error handled silently; user can retry
+      .catch((err) => {
+        setLoadMoreError(err instanceof Error ? err.message : "Failed to load more results")
       })
   }
 
@@ -158,7 +160,6 @@ export default function QueryBuilderView() {
             <section aria-label="Query builder">
               <QueryBuilderPanel
                 fields={fieldsQuery.data.fields}
-                operators={fieldsQuery.data.operators}
                 query={query}
                 onQueryChange={setQuery}
               />
@@ -209,7 +210,7 @@ export default function QueryBuilderView() {
           )}
 
           {/* Results */}
-          {hasExecuted && resultPages.length > 0 && (
+          {hasExecuted && resultPages.length > 0 && resultPages[0].items.length > 0 && (
             <section aria-label="Query results">
               <QueryResultsTable
                 pages={resultPages}
@@ -219,6 +220,19 @@ export default function QueryBuilderView() {
                 onLoadMore={handleLoadMore}
               />
             </section>
+          )}
+
+          {/* Load more error */}
+          {loadMoreError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-destructive">Failed to load more results</p>
+                  <p className="text-sm text-muted-foreground mt-1">{loadMoreError}</p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Empty state after executing */}

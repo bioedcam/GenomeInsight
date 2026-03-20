@@ -134,6 +134,12 @@ class TestUpdateSavedQuery:
         resp = sq_client.put("/api/saved-queries/A", json={"new_name": "B"})
         assert resp.status_code == 409
 
+    def test_rejects_blank_new_name(self, sq_client: TestClient) -> None:
+        filt = {"combinator": "and", "rules": []}
+        sq_client.post("/api/saved-queries", json={"name": "Original", "filter": filt})
+        resp = sq_client.put("/api/saved-queries/Original", json={"new_name": "   "})
+        assert resp.status_code == 400
+
     def test_rejects_nonexistent(self, sq_client: TestClient) -> None:
         resp = sq_client.put(
             "/api/saved-queries/NoSuch",

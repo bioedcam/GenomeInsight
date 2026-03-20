@@ -93,6 +93,26 @@ beforeEach(() => {
   vi.stubGlobal("fetch", mockFetch)
 })
 
+function setupDefaultMocks() {
+  mockFetch.mockImplementation((url: string) => {
+    if (url.includes("/api/query/fields")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(MOCK_FIELDS),
+        text: () => Promise.resolve(""),
+      })
+    }
+    if (url.includes("/api/saved-queries")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ queries: [] }),
+        text: () => Promise.resolve(""),
+      })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  })
+}
+
 describe("QueryBuilderView", () => {
   it("shows empty state when no sample selected", () => {
     renderWithRoute(<QueryBuilderView />)
@@ -100,24 +120,7 @@ describe("QueryBuilderView", () => {
   })
 
   it("loads and renders query builder when sample selected", async () => {
-    mockFetch.mockImplementation((url: string) => {
-      if (url.includes("/api/query/fields")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(MOCK_FIELDS),
-          text: () => Promise.resolve(""),
-        })
-      }
-      if (url.includes("/api/saved-queries")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ queries: [] }),
-          text: () => Promise.resolve(""),
-        })
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-    })
-
+    setupDefaultMocks()
     renderWithRoute(<QueryBuilderView />, "/query-builder?sample_id=1")
 
     await waitFor(() => {
@@ -128,24 +131,7 @@ describe("QueryBuilderView", () => {
   })
 
   it("disables Run button when no rules", async () => {
-    mockFetch.mockImplementation((url: string) => {
-      if (url.includes("/api/query/fields")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(MOCK_FIELDS),
-          text: () => Promise.resolve(""),
-        })
-      }
-      if (url.includes("/api/saved-queries")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ queries: [] }),
-          text: () => Promise.resolve(""),
-        })
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-    })
-
+    setupDefaultMocks()
     renderWithRoute(<QueryBuilderView />, "/query-builder?sample_id=1")
 
     await waitFor(() => {

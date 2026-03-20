@@ -145,6 +145,8 @@ def update_saved_query(name: str, body: UpdateSavedQueryRequest) -> SavedQueryIt
         raise HTTPException(status_code=404, detail=f"Saved query '{name}' not found.")
 
     existing = queries[name]
+    if body.new_name is not None and not body.new_name.strip():
+        raise HTTPException(status_code=400, detail="New name cannot be blank.")
     new_name = (body.new_name.strip() if body.new_name else None) or name
     new_filter = body.filter if body.filter is not None else existing["filter"]
 

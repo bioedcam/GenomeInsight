@@ -40,6 +40,7 @@ export default function SavedQueriesPanel({
   }
 
   const handleDelete = (name: string) => {
+    if (!window.confirm(`Delete query "${name}"?`)) return
     deleteQuery.mutate(name)
   }
 
@@ -149,12 +150,17 @@ export default function SavedQueriesPanel({
                   data-testid="load-query-btn"
                 >
                   <p className="text-sm font-medium truncate">{q.name}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Clock className="h-3 w-3" />
-                    {new Date(q.updated_at).toLocaleDateString()}
-                    <span className="mx-1">·</span>
-                    {countRules(q.filter)} rule{countRules(q.filter) !== 1 ? "s" : ""}
-                  </p>
+                  {(() => {
+                    const ruleCount = countRules(q.filter)
+                    return (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Clock className="h-3 w-3" />
+                        {new Date(q.updated_at).toLocaleDateString()}
+                        <span className="mx-1">·</span>
+                        {ruleCount} rule{ruleCount !== 1 ? "s" : ""}
+                      </p>
+                    )
+                  })()}
                 </button>
                 <button
                   type="button"

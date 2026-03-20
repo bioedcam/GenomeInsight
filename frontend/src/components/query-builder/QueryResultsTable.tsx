@@ -106,9 +106,14 @@ export default function QueryResultsTable({
                         {col.key === "clinvar_significance" && raw ? (
                           <ClinvarBadge value={String(raw)} />
                         ) : col.key === "clinvar_review_stars" && raw != null ? (
-                          <span role="img" aria-label={`${raw} stars`}>
-                            {"★".repeat(raw as number)}{"☆".repeat(Math.max(0, 4 - (raw as number)))}
-                          </span>
+                          (() => {
+                            const stars = Math.max(0, Math.min(4, Math.floor(raw as number)))
+                            return (
+                              <span role="img" aria-label={`${stars} stars`}>
+                                {"★".repeat(stars)}{"☆".repeat(4 - stars)}
+                              </span>
+                            )
+                          })()
                         ) : (
                           display
                         )}

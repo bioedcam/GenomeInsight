@@ -72,7 +72,6 @@ function getOperatorsForType(type: string) {
 
 interface QueryBuilderPanelProps {
   fields: QueryFieldInfo[]
-  operators: string[]
   query: RuleGroupType
   onQueryChange: (query: RuleGroupType) => void
 }
