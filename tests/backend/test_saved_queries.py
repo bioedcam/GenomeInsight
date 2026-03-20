@@ -47,12 +47,15 @@ class TestListSavedQueries:
         assert resp.json()["queries"] == []
 
     def test_returns_saved_queries(self, sq_client: TestClient) -> None:
+        filt = {
+            "combinator": "and",
+            "rules": [
+                {"field": "clinvar_significance", "operator": "=", "value": "Pathogenic"},
+            ],
+        }
         sq_client.post(
             "/api/saved-queries",
-            json={
-                "name": "Pathogenic",
-                "filter": {"combinator": "and", "rules": [{"field": "clinvar_significance", "operator": "=", "value": "Pathogenic"}]},
-            },
+            json={"name": "Pathogenic", "filter": filt},
         )
         resp = sq_client.get("/api/saved-queries")
         assert resp.status_code == 200
@@ -101,7 +104,10 @@ class TestUpdateSavedQuery:
         filt = {"combinator": "and", "rules": []}
         sq_client.post("/api/saved-queries", json={"name": "Editable", "filter": filt})
 
-        new_filt = {"combinator": "or", "rules": [{"field": "chrom", "operator": "=", "value": "X"}]}
+        new_filt = {
+            "combinator": "or",
+            "rules": [{"field": "chrom", "operator": "=", "value": "X"}],
+        }
         resp = sq_client.put(
             "/api/saved-queries/Editable",
             json={"filter": new_filt},
