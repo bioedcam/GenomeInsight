@@ -7,6 +7,7 @@
 import { Loader2 } from "lucide-react"
 import type { QueryResultPage, QueryVariantRow } from "@/types/query-builder"
 import { formatNumber } from "@/lib/format"
+import ExportButton from "@/components/query-builder/ExportButton"
 
 /** Columns displayed in the results table. */
 const DISPLAY_COLUMNS: Array<{
@@ -33,12 +34,16 @@ const DISPLAY_COLUMNS: Array<{
   { key: "revel", label: "REVEL", align: "right", format: (v) => (v != null ? String(v) : "—") },
 ]
 
+const QUERY_EXPORT_FORMATS = ["vcf", "tsv", "json", "csv"] as const
+
 interface QueryResultsTableProps {
   pages: QueryResultPage[]
   totalMatching: number | null
   hasMore: boolean
   isFetchingMore: boolean
   onLoadMore: () => void
+  onExport?: (format: string) => void
+  isExporting?: boolean
 }
 
 export default function QueryResultsTable({
@@ -47,6 +52,8 @@ export default function QueryResultsTable({
   hasMore,
   isFetchingMore,
   onLoadMore,
+  onExport,
+  isExporting,
 }: QueryResultsTableProps) {
   const allItems = pages.flatMap((p) => p.items)
 
@@ -58,6 +65,14 @@ export default function QueryResultsTable({
           Showing {formatNumber(allItems.length)}
           {totalMatching != null && ` of ${formatNumber(totalMatching)}`} matching variants
         </p>
+        {onExport && (
+          <ExportButton
+            formats={QUERY_EXPORT_FORMATS}
+            onExport={onExport}
+            disabled={allItems.length === 0}
+            isPending={isExporting}
+          />
+        )}
       </div>
 
       {/* Table */}

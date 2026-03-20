@@ -28,6 +28,7 @@ from backend.api.routes.databases import (
     router as databases_router,
 )
 from backend.api.routes.encode_ccres import router as encode_ccres_router
+from backend.api.routes.export import router as export_router
 from backend.api.routes.findings import router as findings_router
 from backend.api.routes.fitness import router as fitness_router
 from backend.api.routes.gene_health import router as gene_health_router
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     api_router.include_router(column_presets_router)
     api_router.include_router(databases_router)
     api_router.include_router(encode_ccres_router)
+    api_router.include_router(export_router)
     api_router.include_router(findings_router)
     api_router.include_router(fitness_router)
     api_router.include_router(gene_health_router)
