@@ -71,7 +71,7 @@ def _load_single_finding(
         try:
             parsed = json.loads(pmids_raw)
             if isinstance(parsed, list):
-                pmids = parsed
+                pmids = [p for p in parsed if isinstance(p, str) and p.isdigit()]
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -162,7 +162,7 @@ async def _html_to_pdf_single_page(html: str) -> bytes:
         browser = await pw.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
-            await page.set_content(html, wait_until="networkidle")
+            await page.set_content(html, wait_until="networkidle", timeout=30000)
             await page.emulate_media(media="screen")
             pdf_bytes = await page.pdf(
                 format="A4",
@@ -195,7 +195,7 @@ async def _html_to_png(html: str) -> bytes:
             page = await browser.new_page(
                 viewport={"width": 800, "height": 1200},
             )
-            await page.set_content(html, wait_until="networkidle")
+            await page.set_content(html, wait_until="networkidle", timeout=30000)
             await page.emulate_media(media="screen")
             # Screenshot the full content
             png_bytes = await page.screenshot(

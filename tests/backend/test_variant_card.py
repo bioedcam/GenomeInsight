@@ -178,7 +178,7 @@ def card_client(
 class TestLoadSingleFinding:
     """Test _load_single_finding helper."""
 
-    def test_loads_finding_by_id(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
+    def test_loads_finding_by_id(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=1)
         assert result["id"] == 1
@@ -187,49 +187,41 @@ class TestLoadSingleFinding:
         assert result["module"] == "cancer"
         assert result["evidence_level"] == 4
 
-    def test_loads_pgx_finding(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
+    def test_loads_pgx_finding(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=2)
         assert result["diplotype"] == "*1/*2"
         assert result["metabolizer_status"] == "Intermediate Metabolizer"
         assert result["drug"] == "clopidogrel"
 
-    def test_loads_nutrigenomics_finding(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_loads_nutrigenomics_finding(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=3)
         assert result["pathway"] == "Folate Metabolism"
         assert result["pathway_level"] == "Elevated"
 
-    def test_loads_prs_finding(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
+    def test_loads_prs_finding(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=4)
         assert result["prs_score"] == 0.45
         assert result["prs_percentile"] == 72.0
 
-    def test_loads_haplogroup_finding(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_loads_haplogroup_finding(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=5)
         assert result["haplogroup"] == "H1a1"
 
-    def test_pmid_citations_parsed(self, tmp_data_dir: Path, sample_with_findings: tuple) -> None:
+    def test_pmid_citations_parsed(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=1)
         assert result["pmid_citations"] == ["12345678", "87654321"]
 
-    def test_missing_pmids_returns_empty_list(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_missing_pmids_returns_empty_list(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         result = _load_single_finding(sample_engine, finding_id=3)
         assert result["pmid_citations"] == []
 
-    def test_raises_for_missing_finding(
-        self, tmp_data_dir: Path, sample_with_findings: tuple
-    ) -> None:
+    def test_raises_for_missing_finding(self, sample_with_findings: tuple) -> None:
         _, sample_engine, _ = sample_with_findings
         with pytest.raises(ValueError, match="Finding 999 not found"):
             _load_single_finding(sample_engine, finding_id=999)

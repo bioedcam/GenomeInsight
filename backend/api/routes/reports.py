@@ -47,8 +47,8 @@ class ReportRequest(BaseModel):
 class VariantCardRequest(BaseModel):
     """Request body for single-variant evidence card generation (P4-09)."""
 
-    sample_id: int = Field(..., description="Sample ID")
-    finding_id: int = Field(..., description="Finding ID in the sample's findings table")
+    sample_id: int = Field(..., gt=0, description="Sample ID")
+    finding_id: int = Field(..., gt=0, description="Finding ID in the sample's findings table")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────
