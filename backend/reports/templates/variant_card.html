@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Variant Evidence Card — {{ finding.gene_symbol or finding.rsid or "Finding" }}</title>
+{% from "_macros.html" import evidence_stars, clinvar_badge, pathway_badge %}
+<style>
+  /* ── Page layout ──────────────────────────────────────── */
+  @page {
+    size: A4;
+    margin: 15mm;
+    @bottom-center {
+      content: none;
+    }
+  }
+
+  /* ── Clinical typography ──────────────────────────────── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.55;
+    color: #1E293B;
+    background: #FFFFFF;
+    font-feature-settings: "liga" 1, "calt" 1, "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+  }
+
+  /* ── Card header ────────────────────────────────────── */
+  .card-header {
+    text-align: center;
+    padding: 0 0 12px 0;
+    border-bottom: 2.5px solid #0D9488;
+    margin-bottom: 16px;
+  }
+
+  .card-header h1 {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #0D9488;
+    margin-bottom: 2px;
+    letter-spacing: -0.3px;
+  }
+
+  .card-header .card-subtitle {
+    font-size: 10pt;
+    color: #475569;
+    font-weight: 500;
+  }
+
+  .card-header .card-meta {
+    font-size: 8pt;
+    color: #94A3B8;
+    margin-top: 4px;
+    letter-spacing: 0.2px;
+  }
+
+  .card-header .card-meta span {
+    margin: 0 4px;
+  }
+
+  /* ── Variant identity section ───────────────────────── */
+  .variant-identity {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #F0FDFA 0%, #ECFDF5 100%);
+    border: 1px solid #CCFBF1;
+    border-left: 4px solid #0D9488;
+    border-radius: 6px;
+    margin-bottom: 14px;
+  }
+
+  .variant-identity-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .variant-gene {
+    font-size: 18pt;
+    font-weight: 700;
+    color: #0D9488;
+    font-style: italic;
+    line-height: 1.2;
+  }
+
+  .variant-rsid {
+    font-size: 11pt;
+    color: #64748B;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono",
+                 Menlo, Consolas, monospace;
+  }
+
+  .variant-module {
+    font-size: 8.5pt;
+    color: #0F766E;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 2px;
+  }
+
+  .variant-identity-right {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .evidence-display {
+    margin-bottom: 4px;
+  }
+
+  .evidence-label {
+    font-size: 8pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* ── Finding text section ───────────────────────────── */
+  .finding-text-section {
+    padding: 12px 14px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    margin-bottom: 14px;
+  }
+
+  .finding-text-section h3 {
+    font-size: 9pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }
+
+  .finding-text-content {
+    font-size: 10.5pt;
+    color: #334155;
+    line-height: 1.6;
+  }
+
+  /* ── Clinical details grid ──────────────────────────── */
+  .clinical-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .detail-item {
+    padding: 8px 12px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+  }
+
+  .detail-label {
+    font-size: 7.5pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    display: block;
+  }
+
+  .detail-value {
+    font-size: 10pt;
+    color: #1E293B;
+    font-weight: 500;
+  }
+
+  /* Span full width for items that need it */
+  .detail-item--full {
+    grid-column: 1 / -1;
+  }
+
+  /* ── SVG visualization ──────────────────────────────── */
+  .svg-section {
+    margin-bottom: 14px;
+    text-align: center;
+    padding: 10px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+  }
+
+  .svg-section h3 {
+    font-size: 9pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+  }
+
+  .svg-section svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* ── References ─────────────────────────────────────── */
+  .references-section {
+    padding: 10px 14px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    margin-bottom: 14px;
+  }
+
+  .references-section h3 {
+    font-size: 9pt;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }
+
+  .pmid-link {
+    color: #0D9488;
+    text-decoration: none;
+    font-size: 9pt;
+  }
+
+  .pmid-link:hover {
+    text-decoration: underline;
+  }
+
+  /* ── Module disclaimer ──────────────────────────────── */
+  .card-disclaimer {
+    display: flex;
+    gap: 8px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    font-size: 8pt;
+    color: #92400E;
+    line-height: 1.4;
+  }
+
+  .card-disclaimer-icon {
+    font-size: 12pt;
+    line-height: 1;
+    flex-shrink: 0;
+    color: #D97706;
+  }
+
+  .card-disclaimer-body strong {
+    display: block;
+    font-size: 8.5pt;
+    margin-bottom: 2px;
+    color: #78350F;
+  }
+
+  .card-disclaimer-body p {
+    margin: 0;
+  }
+
+  /* ── Evidence stars ─────────────────────────────────── */
+  .evidence-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    vertical-align: middle;
+  }
+
+  .star {
+    font-size: 14pt;
+    line-height: 1;
+  }
+
+  .star-filled {
+    color: #F59E0B;
+  }
+
+  .star-empty {
+    color: #E2E8F0;
+  }
+
+  .star-label {
+    font-size: 8pt;
+    color: #94A3B8;
+    margin-left: 3px;
+    font-weight: 500;
+  }
+
+  /* ── Badge styles ───────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+
+  .badge-pathogenic        { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+  .badge-likely-pathogenic  { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+  .badge-vus               { background: #E0E7FF; color: #3730A3; border: 1px solid #C7D2FE; }
+  .badge-likely-benign      { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+  .badge-benign            { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+
+  .badge-elevated  { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+  .badge-moderate  { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+  .badge-standard  { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+
+  /* ── Footer ─────────────────────────────────────────── */
+  .card-footer {
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid #E2E8F0;
+    font-size: 7.5pt;
+    color: #94A3B8;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .card-footer .footer-brand {
+    font-weight: 600;
+    color: #64748B;
+    margin-bottom: 2px;
+  }
+
+  /* ── Print overrides ────────────────────────────────── */
+  @media print {
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      color-adjust: exact;
+    }
+
+    .star-filled {
+      color: #F59E0B !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .star-empty {
+      color: #E2E8F0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .badge {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .variant-identity {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .svg-section svg {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    a[href]::after {
+      content: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Card Header -->
+<div class="card-header">
+  <h1>Variant Evidence Card</h1>
+  <div class="card-subtitle">{{ sample_name }}</div>
+  <div class="card-meta">
+    <span>Generated {{ generated_at }}</span>
+    <span>&bull;</span>
+    <span>GenomeInsight v{{ version }}</span>
+  </div>
+</div>
+
+<!-- Variant Identity -->
+<div class="variant-identity">
+  <div class="variant-identity-left">
+    {% if finding.gene_symbol %}
+      <span class="variant-gene">{{ finding.gene_symbol }}</span>
+    {% endif %}
+    {% if finding.rsid %}
+      <span class="variant-rsid">{{ finding.rsid }}</span>
+    {% endif %}
+    <span class="variant-module">{{ module_display_name }}</span>
+  </div>
+  <div class="variant-identity-right">
+    <span class="evidence-label">Evidence Level</span>
+    <div class="evidence-display">
+      {{ evidence_stars(finding.evidence_level, show_label=true) }}
+    </div>
+  </div>
+</div>
+
+<!-- Finding Text -->
+<div class="finding-text-section">
+  <h3>Summary</h3>
+  <div class="finding-text-content">{{ finding.finding_text }}</div>
+</div>
+
+<!-- Clinical Details Grid -->
+{%- set details = [] -%}
+{%- if finding.clinvar_significance -%}
+  {%- set _ = details.append(("ClinVar Significance", clinvar_badge(finding.clinvar_significance))) -%}
+{%- endif -%}
+{%- if finding.zygosity -%}
+  {%- set _ = details.append(("Zygosity", finding.zygosity)) -%}
+{%- endif -%}
+{%- if finding.diplotype -%}
+  {%- set _ = details.append(("Diplotype", finding.diplotype)) -%}
+{%- endif -%}
+{%- if finding.metabolizer_status -%}
+  {%- set _ = details.append(("Metabolizer Status", finding.metabolizer_status)) -%}
+{%- endif -%}
+{%- if finding.drug -%}
+  {%- set _ = details.append(("Drug", finding.drug)) -%}
+{%- endif -%}
+{%- if finding.pathway -%}
+  {%- set _ = details.append(("Pathway", finding.pathway)) -%}
+{%- endif -%}
+{%- if finding.pathway_level -%}
+  {%- set _ = details.append(("Pathway Level", pathway_badge(finding.pathway_level))) -%}
+{%- endif -%}
+{%- if finding.haplogroup -%}
+  {%- set _ = details.append(("Haplogroup", finding.haplogroup)) -%}
+{%- endif -%}
+{%- if finding.prs_percentile is not none -%}
+  {%- set _ = details.append(("PRS Percentile", "%.1f%%" | format(finding.prs_percentile))) -%}
+{%- endif -%}
+{%- if finding.prs_score is not none -%}
+  {%- set _ = details.append(("PRS Score", "%.4f" | format(finding.prs_score))) -%}
+{%- endif -%}
+{%- if finding.phenotype -%}
+  {%- set _ = details.append(("Phenotype", finding.phenotype)) -%}
+{%- endif -%}
+{%- if finding.conditions -%}
+  {%- set _ = details.append(("Conditions", finding.conditions)) -%}
+{%- endif -%}
+{%- if finding.category -%}
+  {%- set _ = details.append(("Category", finding.category | replace("_", " ") | title)) -%}
+{%- endif -%}
+
+{% if details %}
+<div class="clinical-details">
+  {% for label, value in details %}
+  <div class="detail-item">
+    <span class="detail-label">{{ label }}</span>
+    <span class="detail-value">{{ value | safe }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- SVG Visualization -->
+{% if finding.svg_content %}
+<div class="svg-section">
+  <h3>Visualization</h3>
+  {{ finding.svg_content | safe }}
+</div>
+{% endif %}
+
+<!-- References -->
+{% if finding.pmid_citations %}
+<div class="references-section">
+  <h3>References</h3>
+  {% for pmid in finding.pmid_citations %}
+    <a href="https://pubmed.ncbi.nlm.nih.gov/{{ pmid }}/" class="pmid-link">PMID:{{ pmid }}</a>{% if not loop.last %}, {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Module Disclaimer -->
+{% if disclaimer_text %}
+<div class="card-disclaimer">
+  <div class="card-disclaimer-icon">&#9888;</div>
+  <div class="card-disclaimer-body">
+    <strong>{{ disclaimer_title }}</strong>
+    <p>{{ disclaimer_text }}</p>
+  </div>
+</div>
+{% endif %}
+
+<!-- Footer -->
+<div class="card-footer">
+  <div class="footer-brand">GenomeInsight &mdash; Variant Evidence Card</div>
+  This card is for educational and research purposes only. Not a substitute for
+  professional medical advice. Variant classifications may change as scientific
+  understanding evolves.
+</div>
+
+</body>
+</html>

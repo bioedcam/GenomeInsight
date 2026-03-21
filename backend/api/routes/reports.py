@@ -1,7 +1,10 @@
-"""Report generation API endpoints (P4-07).
+"""Report generation API endpoints (P4-07, P4-09).
 
-POST /api/reports/generate  — Generate a PDF report for a sample
-POST /api/reports/preview   — Generate HTML preview of a report
+POST /api/reports/generate       — Generate a PDF report for a sample
+POST /api/reports/preview        — Generate HTML preview of a report
+POST /api/reports/variant-card   — Generate single-variant evidence card (PDF)
+POST /api/reports/variant-card/png — Generate single-variant evidence card (PNG)
+POST /api/reports/variant-card/preview — HTML preview of variant evidence card
 """
 
 from __future__ import annotations
@@ -39,6 +42,13 @@ class ReportRequest(BaseModel):
         if v is not None and len(v) == 0:
             raise ValueError("modules list cannot be empty; use null for all modules")
         return v
+
+
+class VariantCardRequest(BaseModel):
+    """Request body for single-variant evidence card generation (P4-09)."""
+
+    sample_id: int = Field(..., description="Sample ID")
+    finding_id: int = Field(..., description="Finding ID in the sample's findings table")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────
@@ -85,6 +95,75 @@ async def preview_report(request: ReportRequest) -> HTMLResponse:
             sample_id=request.sample_id,
             modules=request.modules,
             title=request.title,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return HTMLResponse(content=html)
+
+
+# ── Variant evidence card endpoints (P4-09) ──────────────────────────
+
+
+@router.post("/variant-card")
+async def generate_variant_card(request: VariantCardRequest) -> Response:
+    """Generate a single-variant evidence card as PDF.
+
+    Returns a one-page PDF summarising a single finding with all
+    clinical metadata, evidence stars, and embedded SVG visualisation.
+    """
+    from backend.reports.variant_card import generate_variant_card_pdf
+
+    try:
+        pdf_bytes = await generate_variant_card_pdf(
+            sample_id=request.sample_id,
+            finding_id=request.finding_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    filename = f"variant_card_{request.sample_id}_{request.finding_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/variant-card/png")
+async def generate_variant_card_as_png(request: VariantCardRequest) -> Response:
+    """Generate a single-variant evidence card as PNG image."""
+    from backend.reports.variant_card import generate_variant_card_png
+
+    try:
+        png_bytes = await generate_variant_card_png(
+            sample_id=request.sample_id,
+            finding_id=request.finding_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    filename = f"variant_card_{request.sample_id}_{request.finding_id}.png"
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/variant-card/preview", response_class=HTMLResponse)
+async def preview_variant_card(request: VariantCardRequest) -> HTMLResponse:
+    """Generate an HTML preview of the variant evidence card."""
+    from backend.reports.variant_card import render_variant_card_html
+
+    try:
+        html = render_variant_card_html(
+            sample_id=request.sample_id,
+            finding_id=request.finding_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
