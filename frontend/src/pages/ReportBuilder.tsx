@@ -8,7 +8,7 @@
  * generate PDF → download → PDF is valid
  */
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import {
   FileText,
@@ -89,10 +89,12 @@ export default function ReportBuilder() {
   }, [summaryQuery.data])
 
   // Auto-select all modules with findings on first load
-  if (!initialized && availableModules.length > 0) {
-    setSelectedModules(new Set(availableModules.map((m) => m.module)))
-    setInitialized(true)
-  }
+  useEffect(() => {
+    if (!initialized && availableModules.length > 0) {
+      setSelectedModules(new Set(availableModules.map((m) => m.module)))
+      setInitialized(true)
+    }
+  }, [initialized, availableModules])
 
   const toggleModule = useCallback((mod: string) => {
     setSelectedModules((prev) => {
@@ -166,6 +168,16 @@ export default function ReportBuilder() {
     setPreviewHtml(null)
     setPreviewError(null)
   }, [])
+
+  // Close preview modal on Escape key
+  useEffect(() => {
+    if (!previewHtml) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePreview()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [previewHtml, closePreview])
 
   // No sample selected
   if (sampleId == null) {
@@ -326,7 +338,7 @@ export default function ReportBuilder() {
                       <span className="text-xs text-muted-foreground">
                         {mod.count} finding{mod.count !== 1 ? "s" : ""}
                       </span>
-                      {mod.max_evidence_level != null && mod.max_evidence_level > 0 && (
+                      {mod.max_evidence_level > 0 && (
                         <>
                           <span className="text-xs text-muted-foreground">·</span>
                           <EvidenceStars level={mod.max_evidence_level} />

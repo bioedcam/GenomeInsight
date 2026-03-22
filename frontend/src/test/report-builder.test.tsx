@@ -124,8 +124,10 @@ describe("ReportBuilder", () => {
     await user.click(cancerBtn)
 
     // Selected count should now be 2, total findings 9
-    const summarySection = screen.getByText("Selected modules").closest("div")?.parentElement
-    expect(summarySection).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByText("2")).toBeInTheDocument()
+      expect(screen.getByText("9")).toBeInTheDocument()
+    })
   })
 
   it("clears all modules on 'Clear all' click", async () => {
