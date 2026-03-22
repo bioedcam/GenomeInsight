@@ -47,11 +47,11 @@ const MOCK_SUMMARY: FindingsSummaryResponse = {
   high_confidence_findings: [],
 }
 
-let mockFetch: ReturnType<typeof vi.fn>
+const mockFetch = vi.fn()
+globalThis.fetch = mockFetch
 
 beforeEach(() => {
-  mockFetch = vi.fn()
-  global.fetch = mockFetch
+  mockFetch.mockReset()
 })
 
 afterEach(() => {
@@ -238,8 +238,8 @@ describe("ReportBuilder", () => {
     const mockUrl = "blob:test-url"
     const createObjectURL = vi.fn(() => mockUrl)
     const revokeObjectURL = vi.fn()
-    global.URL.createObjectURL = createObjectURL
-    global.URL.revokeObjectURL = revokeObjectURL
+    globalThis.URL.createObjectURL = createObjectURL
+    globalThis.URL.revokeObjectURL = revokeObjectURL
 
     const user = userEvent.setup()
     renderWithRoute(<ReportBuilder />, ["/reports?sample_id=1"])

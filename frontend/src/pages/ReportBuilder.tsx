@@ -338,7 +338,7 @@ export default function ReportBuilder() {
                       <span className="text-xs text-muted-foreground">
                         {mod.count} finding{mod.count !== 1 ? "s" : ""}
                       </span>
-                      {mod.max_evidence_level > 0 && (
+                      {mod.max_evidence_level != null && mod.max_evidence_level > 0 && (
                         <>
                           <span className="text-xs text-muted-foreground">·</span>
                           <EvidenceStars level={mod.max_evidence_level} />
