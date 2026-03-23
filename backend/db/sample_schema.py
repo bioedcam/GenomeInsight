@@ -21,7 +21,7 @@ from backend.db.tables import PREDEFINED_TAGS, sample_metadata_obj
 logger = structlog.get_logger(__name__)
 
 # Current schema version. Bump when new tables/columns are added to sample_metadata_obj.
-SAMPLE_SCHEMA_VERSION = 4
+SAMPLE_SCHEMA_VERSION = 5
 
 
 def create_sample_tables(engine: sa.Engine) -> None:
