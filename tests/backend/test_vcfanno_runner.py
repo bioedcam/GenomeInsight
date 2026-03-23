@@ -218,7 +218,7 @@ class TestOverlayConfigCRUD:
 
     def test_list_overlays(self, reference_engine: sa.Engine) -> None:
         for i in range(3):
-            content = f"chr1\t{i*100}\t{i*100+100}\tGENE{i}\n"
+            content = f"chr1\t{i * 100}\t{i * 100 + 100}\tGENE{i}\n"
             parsed = parse_bed_overlay(content)
             save_overlay_config(f"Overlay {i}", "", parsed, reference_engine)
 

@@ -30,7 +30,7 @@ class TestReferenceMetadata:
     """Verify reference_metadata contains all expected tables."""
 
     def test_reference_table_count(self):
-        assert len(reference_metadata.tables) == 20
+        assert len(reference_metadata.tables) == 21
 
     def test_reference_table_names(self):
         expected = {
@@ -54,6 +54,7 @@ class TestReferenceMetadata:
             "dbsnp_merges",
             "hla_proxy_lookup",
             "custom_panels",
+            "overlay_configs",
         }
         assert set(reference_metadata.tables.keys()) == expected
 
@@ -110,7 +111,7 @@ class TestSampleMetadata:
     """Verify sample_metadata_obj contains all expected tables."""
 
     def test_sample_table_count(self):
-        assert len(sample_metadata_obj.tables) == 11
+        assert len(sample_metadata_obj.tables) == 12
 
     def test_sample_table_names(self):
         expected = {
@@ -125,6 +126,7 @@ class TestSampleMetadata:
             "haplogroup_assignments",
             "panel_coverage",
             "watched_variants",
+            "variant_overlays",
         }
         assert set(sample_metadata_obj.tables.keys()) == expected
 

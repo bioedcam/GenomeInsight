@@ -224,9 +224,7 @@ async def upload_overlay(
     except OSError:
         # File save failed — remove the orphan DB record
         delete_overlay(overlay_id, registry.reference_engine)
-        raise HTTPException(
-            status_code=500, detail="Failed to save overlay file to disk."
-        )
+        raise HTTPException(status_code=500, detail="Failed to save overlay file to disk.")
 
     config = get_overlay(overlay_id, registry.reference_engine)
     if config is None:
