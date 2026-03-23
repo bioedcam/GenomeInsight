@@ -472,9 +472,7 @@ def get_overlay(overlay_id: int, engine: sa.Engine) -> OverlayConfig | None:
 def delete_overlay(overlay_id: int, engine: sa.Engine) -> bool:
     """Delete an overlay config by ID."""
     with engine.begin() as conn:
-        result = conn.execute(
-            sa.delete(overlay_configs).where(overlay_configs.c.id == overlay_id)
-        )
+        result = conn.execute(sa.delete(overlay_configs).where(overlay_configs.c.id == overlay_id))
     deleted = result.rowcount > 0
     if deleted:
         logger.info("overlay_config_deleted", overlay_id=overlay_id)
@@ -556,21 +554,25 @@ def apply_overlay(
             # VCF: exact position match (start == pos)
             rsids = pos_index.get((rec.chrom, rec.start), [])
             for rsid in rsids:
-                matches.append({
-                    "rsid": rsid,
-                    "overlay_id": overlay_id,
-                    "annotations": json.dumps(rec.annotations),
-                })
+                matches.append(
+                    {
+                        "rsid": rsid,
+                        "overlay_id": overlay_id,
+                        "annotations": json.dumps(rec.annotations),
+                    }
+                )
         else:
             # BED: range overlap [start, end)
             for (chrom, pos), rsids in pos_index.items():
                 if chrom == rec.chrom and rec.start <= pos < rec.end:
                     for rsid in rsids:
-                        matches.append({
-                            "rsid": rsid,
-                            "overlay_id": overlay_id,
-                            "annotations": json.dumps(rec.annotations),
-                        })
+                        matches.append(
+                            {
+                                "rsid": rsid,
+                                "overlay_id": overlay_id,
+                                "annotations": json.dumps(rec.annotations),
+                            }
+                        )
 
     # Deduplicate by (rsid, overlay_id) — keep first match
     seen: set[str] = set()
@@ -619,11 +621,13 @@ def get_overlay_results(
     results: list[dict] = []
     for row in rows:
         annot = json.loads(row.annotations) if row.annotations else {}
-        results.append({
-            "rsid": row.rsid,
-            "overlay_id": row.overlay_id,
-            **annot,
-        })
+        results.append(
+            {
+                "rsid": row.rsid,
+                "overlay_id": row.overlay_id,
+                **annot,
+            }
+        )
 
     return results
 
