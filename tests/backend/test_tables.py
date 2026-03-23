@@ -30,7 +30,7 @@ class TestReferenceMetadata:
     """Verify reference_metadata contains all expected tables."""
 
     def test_reference_table_count(self):
-        assert len(reference_metadata.tables) == 19
+        assert len(reference_metadata.tables) == 20
 
     def test_reference_table_names(self):
         expected = {
@@ -53,6 +53,7 @@ class TestReferenceMetadata:
             "gwas_associations",
             "dbsnp_merges",
             "hla_proxy_lookup",
+            "custom_panels",
         }
         assert set(reference_metadata.tables.keys()) == expected
 
