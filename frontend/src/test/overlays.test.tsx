@@ -68,14 +68,16 @@ const MOCK_RESULTS = {
   total: 2,
 }
 
+const originalFetch = globalThis.fetch
 const mockFetch = vi.fn()
-globalThis.fetch = mockFetch
 
 beforeEach(() => {
   mockFetch.mockReset()
+  globalThis.fetch = mockFetch
 })
 
 afterEach(() => {
+  globalThis.fetch = originalFetch
   vi.restoreAllMocks()
 })
 

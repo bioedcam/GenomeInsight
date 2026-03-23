@@ -106,8 +106,10 @@ export function useDeleteOverlay() {
         throw new Error(`Delete failed: ${res.status}${text ? ` - ${text}` : ""}`)
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, overlayId) => {
       queryClient.invalidateQueries({ queryKey: ["overlays"] })
+      queryClient.invalidateQueries({ queryKey: ["overlay", overlayId] })
+      queryClient.invalidateQueries({ queryKey: ["overlay-results", overlayId] })
     },
   })
 }

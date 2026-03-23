@@ -525,7 +525,7 @@ def apply_overlay(
             rows = conn.execute(
                 sa.select(av_table.c.rsid, av_table.c.chrom, av_table.c.pos)
             ).fetchall()
-        except Exception:
+        except (sa.exc.NoSuchTableError, sa.exc.OperationalError):
             rows = []
 
         # Fall back to raw_variants if annotated_variants is empty or missing
@@ -534,7 +534,7 @@ def apply_overlay(
                 rows = conn.execute(
                     sa.select(rv_table.c.rsid, rv_table.c.chrom, rv_table.c.pos)
                 ).fetchall()
-            except Exception:
+            except (sa.exc.NoSuchTableError, sa.exc.OperationalError):
                 rows = []
 
     if not rows:

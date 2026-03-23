@@ -19,7 +19,7 @@ export interface OverlayListResponse {
 
 /** Preview result from parsing an overlay file. */
 export interface OverlayParsePreviewResponse {
-  file_type: string
+  file_type: "bed" | "vcf"
   column_names: string[]
   record_count: number
   warnings: string[]

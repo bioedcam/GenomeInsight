@@ -151,7 +151,7 @@ function UploadPanel() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".bed,.vcf"
+          accept=".bed,.vcf,.vcf.gz"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -159,6 +159,11 @@ function UploadPanel() {
           }}
         />
       </div>
+
+      {/* Preview error */}
+      {previewMutation.isError && (
+        <p className="text-sm text-destructive">{previewMutation.error.message}</p>
+      )}
 
       {/* Preview */}
       {previewMutation.data && (
@@ -331,8 +336,12 @@ function OverlayList({
                 onClick={(e) => {
                   e.stopPropagation()
                   if (confirm(`Delete overlay "${overlay.name}"?`)) {
-                    deleteMutation.mutate(overlay.id)
-                    if (selectedOverlay?.id === overlay.id) onSelect(null)
+                    const wasSelected = selectedOverlay?.id === overlay.id
+                    deleteMutation.mutate(overlay.id, {
+                      onSuccess: () => {
+                        if (wasSelected) onSelect(null)
+                      },
+                    })
                   }
                 }}
                 disabled={deleteMutation.isPending}
@@ -344,6 +353,12 @@ function OverlayList({
           </div>
         ))}
       </div>
+      {applyMutation.isError && (
+        <p className="text-sm text-destructive mt-2">{applyMutation.error.message}</p>
+      )}
+      {deleteMutation.isError && (
+        <p className="text-sm text-destructive mt-2">{deleteMutation.error.message}</p>
+      )}
     </div>
   )
 }
@@ -417,7 +432,11 @@ function OverlayResults({
       if (k !== "overlay_id") allKeys.add(k)
     })
   })
-  const columns = Array.from(allKeys)
+  const columns = Array.from(allKeys).sort((a, b) => {
+    if (a === "rsid") return -1
+    if (b === "rsid") return 1
+    return a.localeCompare(b)
+  })
 
   return (
     <div className="space-y-3">

@@ -33,6 +33,7 @@ from backend.annotation.vcfanno_runner import (
     save_overlay_config,
 )
 from backend.db.connection import get_registry
+from backend.db.sample_schema import ensure_sample_schema_current
 from backend.db.tables import samples
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,7 @@ async def parse_overlay_preview(file: UploadFile) -> OverlayParsePreviewResponse
     try:
         content = content_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text.")
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text.") from None
 
     try:
         parsed = detect_and_parse_overlay(content, file.filename)
@@ -204,7 +205,7 @@ async def upload_overlay(
     try:
         content = content_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text.")
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text.") from None
 
     try:
         parsed = detect_and_parse_overlay(content, file.filename)
@@ -213,14 +214,23 @@ async def upload_overlay(
 
     registry = get_registry()
 
-    # Save overlay config (metadata only — records are re-parsed on apply)
+    # Store the raw file content first — if this fails, no orphan DB record
+    # We need an ID to name the file, so save config first, then file, and
+    # roll back the DB record if the file save fails.
     overlay_id = save_overlay_config(name, description, parsed, registry.reference_engine)
+
+    try:
+        _save_overlay_file(overlay_id, content, registry)
+    except OSError:
+        # File save failed — remove the orphan DB record
+        delete_overlay(overlay_id, registry.reference_engine)
+        raise HTTPException(
+            status_code=500, detail="Failed to save overlay file to disk."
+        )
+
     config = get_overlay(overlay_id, registry.reference_engine)
     if config is None:
         raise HTTPException(status_code=500, detail="Failed to retrieve saved overlay.")
-
-    # Store the raw file content for re-parsing during apply
-    _save_overlay_file(overlay_id, content, registry)
 
     return OverlayUploadResponse(
         overlay=_config_to_response(config),
@@ -285,7 +295,10 @@ def delete_overlay_config(overlay_id: int) -> dict[str, str]:
     # Clean up stored file
     file_path = registry.settings.data_dir / "overlays" / f"overlay_{overlay_id}.txt"
     if file_path.exists():
-        file_path.unlink()
+        try:
+            file_path.unlink()
+        except OSError:
+            logger.warning("Failed to delete overlay file: %s", file_path)
 
     return {"status": "deleted", "overlay_id": str(overlay_id)}
 
@@ -325,8 +338,6 @@ def apply_overlay_to_sample(
     sample_engine = _get_sample_engine(sample_id)
 
     # Ensure variant_overlays table exists
-    from backend.db.sample_schema import ensure_sample_schema_current
-
     ensure_sample_schema_current(sample_engine)
 
     result = apply_overlay(parsed, overlay_id, config.name, sample_engine)
