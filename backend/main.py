@@ -20,6 +20,7 @@ from backend.api.routes.cancer import router as cancer_router
 from backend.api.routes.cardiovascular import router as cardiovascular_router
 from backend.api.routes.carrier import router as carrier_router
 from backend.api.routes.column_presets import router as column_presets_router
+from backend.api.routes.custom_panels import router as custom_panels_router
 from backend.api.routes.databases import (
     cleanup_interrupted_sessions,
     shutdown_executor,
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     api_router.include_router(carrier_router)
     api_router.include_router(cardiovascular_router)
     api_router.include_router(column_presets_router)
+    api_router.include_router(custom_panels_router)
     api_router.include_router(databases_router)
     api_router.include_router(encode_ccres_router)
     api_router.include_router(export_router)

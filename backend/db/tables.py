@@ -359,6 +359,38 @@ hla_proxy_lookup = sa.Table(
 sa.Index("idx_hla_proxy_rsid", hla_proxy_lookup.c.proxy_rsid)
 sa.Index("idx_hla_proxy_allele", hla_proxy_lookup.c.hla_allele)
 
+# ── Custom Gene Panels (P4-11) ──────────────────────────────────────
+
+custom_panels = sa.Table(
+    "custom_panels",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("name", sa.Text, nullable=False),
+    sa.Column("description", sa.Text, server_default=""),
+    sa.Column(
+        "gene_symbols",
+        sa.Text,
+        nullable=False,
+        comment="JSON array of gene symbols",
+    ),
+    sa.Column(
+        "bed_regions",
+        sa.Text,
+        comment="JSON array of {chrom, start, end, name} objects (BED source only)",
+    ),
+    sa.Column(
+        "source_type",
+        sa.Text,
+        nullable=False,
+        server_default="gene_list",
+        comment="gene_list | bed",
+    ),
+    sa.Column("gene_count", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+sa.Index("idx_custom_panels_name", custom_panels.c.name)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sample DB (sample_{id}.db) — Created programmatically per sample
