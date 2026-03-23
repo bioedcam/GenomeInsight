@@ -391,6 +391,32 @@ custom_panels = sa.Table(
 
 sa.Index("idx_custom_panels_name", custom_panels.c.name)
 
+# ── Overlay Configs (P4-12, vcfanno integration) ─────────────────────
+
+overlay_configs = sa.Table(
+    "overlay_configs",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("name", sa.Text, nullable=False),
+    sa.Column("description", sa.Text, server_default=""),
+    sa.Column(
+        "file_type",
+        sa.Text,
+        nullable=False,
+        comment="bed | vcf",
+    ),
+    sa.Column(
+        "column_names",
+        sa.Text,
+        nullable=False,
+        comment="JSON array of annotation column names from the overlay file",
+    ),
+    sa.Column("region_count", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+)
+
+sa.Index("idx_overlay_configs_name", overlay_configs.c.name)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sample DB (sample_{id}.db) — Created programmatically per sample
@@ -663,3 +689,27 @@ watched_variants = sa.Table(
     sa.Column("clinvar_significance_at_watch", sa.Text),
     sa.Column("notes", sa.Text, server_default=""),
 )
+
+# ── Variant Overlays (P4-12, vcfanno integration) ────────────────────
+
+variant_overlays = sa.Table(
+    "variant_overlays",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("rsid", sa.Text, nullable=False),
+    sa.Column("overlay_id", sa.Integer, nullable=False),
+    sa.Column(
+        "annotations",
+        sa.Text,
+        nullable=False,
+        comment="JSON object mapping column_name -> value",
+    ),
+)
+
+sa.Index(
+    "idx_variant_overlays_rsid_overlay",
+    variant_overlays.c.rsid,
+    variant_overlays.c.overlay_id,
+    unique=True,
+)
+sa.Index("idx_variant_overlays_overlay_id", variant_overlays.c.overlay_id)

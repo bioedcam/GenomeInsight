@@ -1,0 +1,347 @@
+"""Tests for vcfanno integration (P4-12).
+
+Covers:
+  - BED overlay parsing (with annotation columns)
+  - VCF overlay parsing (INFO field extraction)
+  - Format auto-detection
+  - Overlay application to sample variants (BED range + VCF exact match)
+  - Overlay config CRUD operations
+  - Edge cases (empty files, invalid data, deduplication)
+"""
+
+from __future__ import annotations
+
+import pytest
+import sqlalchemy as sa
+
+from backend.annotation.vcfanno_runner import (
+    apply_overlay,
+    delete_overlay,
+    detect_and_parse_overlay,
+    get_overlay,
+    list_overlays,
+    parse_bed_overlay,
+    parse_vcf_overlay,
+    save_overlay_config,
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# BED overlay parsing
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestParseBedOverlay:
+    """Tests for BED overlay parser."""
+
+    def test_basic_bed_with_annotations(self) -> None:
+        """Parses BED file with extra annotation columns."""
+        content = (
+            "#chrom\tstart\tend\tname\tscore\n"
+            "chr1\t100\t200\tGENE1\t0.95\n"
+            "chr2\t300\t400\tGENE2\t0.87\n"
+        )
+        result = parse_bed_overlay(content)
+        assert result.file_type == "bed"
+        assert result.record_count == 2
+        assert "name" in result.column_names
+        assert "score" in result.column_names
+        assert result.records[0].chrom == "1"
+        assert result.records[0].start == 100
+        assert result.records[0].end == 200
+        assert result.records[0].annotations["name"] == "GENE1"
+        assert result.records[0].annotations["score"] == 0.95
+
+    def test_bed_without_header(self) -> None:
+        """Extra columns get auto-named when no header present."""
+        content = "chr1\t100\t200\tGENE1\t0.95\n"
+        result = parse_bed_overlay(content)
+        assert "bed_col_4" in result.column_names
+        assert "bed_col_5" in result.column_names
+        assert result.records[0].annotations["bed_col_4"] == "GENE1"
+
+    def test_bed_chrom_normalisation(self) -> None:
+        """Chromosomes are normalised (chr prefix stripped, M -> MT)."""
+        content = "chrM\t100\t200\n1\t300\t400\n"
+        result = parse_bed_overlay(content)
+        assert result.records[0].chrom == "MT"
+        assert result.records[1].chrom == "1"
+
+    def test_bed_skips_comments_and_track(self) -> None:
+        """Comment and track lines are skipped."""
+        content = "# comment\ntrack name=test\nbrowser position\nchr1\t100\t200\n"
+        result = parse_bed_overlay(content)
+        assert result.record_count == 1
+
+    def test_bed_invalid_coords_warned(self) -> None:
+        """Invalid coordinates generate warnings."""
+        content = "chr1\t200\t100\tGENE1\nchr2\t300\t400\tGENE2\n"
+        result = parse_bed_overlay(content)
+        assert result.record_count == 1
+        assert len(result.warnings) == 1
+
+    def test_bed_empty_raises(self) -> None:
+        """Empty BED file raises ValueError."""
+        with pytest.raises(ValueError, match="No valid BED records"):
+            parse_bed_overlay("")
+
+    def test_bed_numeric_conversion(self) -> None:
+        """Numeric values are auto-converted."""
+        content = "chr1\t100\t200\t42\t3.14\ttext\n"
+        result = parse_bed_overlay(content)
+        annot = result.records[0].annotations
+        assert annot["bed_col_4"] == 42
+        assert annot["bed_col_5"] == 3.14
+        assert annot["bed_col_6"] == "text"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# VCF overlay parsing
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestParseVcfOverlay:
+    """Tests for VCF overlay parser."""
+
+    def test_basic_vcf(self) -> None:
+        """Parses VCF with INFO field annotations."""
+        content = (
+            "##fileformat=VCFv4.2\n"
+            '##INFO=<ID=AF,Number=A,Type=Float,Description="Allele freq">\n'
+            '##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar sig">\n'
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tAF=0.05;CLNSIG=pathogenic\n"
+            "19\t44908684\trs429358\tT\tC\t.\tPASS\tAF=0.15;CLNSIG=risk_factor\n"
+        )
+        result = parse_vcf_overlay(content)
+        assert result.file_type == "vcf"
+        assert result.record_count == 2
+        assert "AF" in result.column_names
+        assert "CLNSIG" in result.column_names
+        assert result.records[0].chrom == "1"
+        assert result.records[0].start == 100000
+        assert result.records[0].annotations["AF"] == 0.05
+        assert result.records[0].annotations["CLNSIG"] == "pathogenic"
+
+    def test_vcf_flag_fields(self) -> None:
+        """VCF flag fields (no value) are parsed as True."""
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100\trs1\tA\tG\t.\tPASS\tDB;AF=0.1\n"
+        )
+        result = parse_vcf_overlay(content)
+        assert result.records[0].annotations["DB"] is True
+        assert result.records[0].annotations["AF"] == 0.1
+
+    def test_vcf_empty_info(self) -> None:
+        """VCF records with '.' INFO field produce empty annotations."""
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100\trs1\tA\tG\t.\tPASS\t.\n"
+        )
+        result = parse_vcf_overlay(content)
+        assert result.records[0].annotations == {}
+
+    def test_vcf_empty_raises(self) -> None:
+        """Empty VCF raises ValueError."""
+        with pytest.raises(ValueError, match="No valid VCF records"):
+            parse_vcf_overlay("")
+
+    def test_vcf_chrom_normalisation(self) -> None:
+        """VCF chromosomes are normalised."""
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "chr19\t100\trs1\tA\tG\t.\tPASS\tAF=0.1\n"
+        )
+        result = parse_vcf_overlay(content)
+        assert result.records[0].chrom == "19"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Format auto-detection
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestDetectAndParseOverlay:
+    """Tests for overlay format auto-detection."""
+
+    def test_vcf_by_extension(self) -> None:
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100\trs1\tA\tG\t.\tPASS\tAF=0.1\n"
+        )
+        result = detect_and_parse_overlay(content, "overlay.vcf")
+        assert result.file_type == "vcf"
+
+    def test_bed_by_extension(self) -> None:
+        content = "chr1\t100\t200\tGENE1\n"
+        result = detect_and_parse_overlay(content, "overlay.bed")
+        assert result.file_type == "bed"
+
+    def test_vcf_by_content(self) -> None:
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100\trs1\tA\tG\t.\tPASS\tAF=0.1\n"
+        )
+        result = detect_and_parse_overlay(content, "data.txt")
+        assert result.file_type == "vcf"
+
+    def test_bed_fallback(self) -> None:
+        content = "chr1\t100\t200\tGENE1\n"
+        result = detect_and_parse_overlay(content, "data.txt")
+        assert result.file_type == "bed"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Overlay config CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestOverlayConfigCRUD:
+    """Tests for overlay config database operations."""
+
+    def test_save_and_get(self, reference_engine: sa.Engine) -> None:
+        content = "chr1\t100\t200\tGENE1\t0.95\n"
+        parsed = parse_bed_overlay(content)
+        overlay_id = save_overlay_config("Test", "A test overlay", parsed, reference_engine)
+
+        config = get_overlay(overlay_id, reference_engine)
+        assert config is not None
+        assert config.name == "Test"
+        assert config.description == "A test overlay"
+        assert config.file_type == "bed"
+        assert config.region_count == 1
+
+    def test_list_overlays(self, reference_engine: sa.Engine) -> None:
+        for i in range(3):
+            content = f"chr1\t{i*100}\t{i*100+100}\tGENE{i}\n"
+            parsed = parse_bed_overlay(content)
+            save_overlay_config(f"Overlay {i}", "", parsed, reference_engine)
+
+        configs = list_overlays(reference_engine)
+        assert len(configs) == 3
+
+    def test_delete_overlay(self, reference_engine: sa.Engine) -> None:
+        content = "chr1\t100\t200\tGENE1\n"
+        parsed = parse_bed_overlay(content)
+        overlay_id = save_overlay_config("Test", "", parsed, reference_engine)
+
+        assert delete_overlay(overlay_id, reference_engine) is True
+        assert get_overlay(overlay_id, reference_engine) is None
+        assert delete_overlay(overlay_id, reference_engine) is False
+
+    def test_get_nonexistent(self, reference_engine: sa.Engine) -> None:
+        assert get_overlay(999, reference_engine) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Apply overlay to sample
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestApplyOverlay:
+    """Tests for applying overlays to sample variants."""
+
+    def test_bed_range_match(self, sample_with_variants: sa.Engine) -> None:
+        """BED overlay matches variants within [start, end) range."""
+        # rs12345 is at chrom=1, pos=100000
+        content = "chr1\t99999\t100001\ttest_region\t42\n"
+        parsed = parse_bed_overlay(content)
+
+        result = apply_overlay(parsed, 1, "Test", sample_with_variants)
+        assert result.variants_matched == 1
+        assert result.records_checked == 1
+
+    def test_bed_no_match(self, sample_with_variants: sa.Engine) -> None:
+        """BED overlay with no overlapping regions."""
+        content = "chr3\t1\t100\tno_match\n"
+        parsed = parse_bed_overlay(content)
+
+        result = apply_overlay(parsed, 1, "Test", sample_with_variants)
+        assert result.variants_matched == 0
+
+    def test_vcf_exact_match(self, sample_with_variants: sa.Engine) -> None:
+        """VCF overlay matches variants by exact position."""
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tCUSTOM=hello\n"
+            "19\t44908684\trs429358\tT\tC\t.\tPASS\tCUSTOM=world\n"
+        )
+        parsed = parse_vcf_overlay(content)
+
+        result = apply_overlay(parsed, 2, "VCF Test", sample_with_variants)
+        assert result.variants_matched == 2
+
+    def test_overlay_results_stored(self, sample_with_variants: sa.Engine) -> None:
+        """Applied overlay results are stored in variant_overlays table."""
+        from backend.annotation.vcfanno_runner import get_overlay_results
+
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tSCORE=0.99;LABEL=test\n"
+        )
+        parsed = parse_vcf_overlay(content)
+        apply_overlay(parsed, 3, "Results Test", sample_with_variants)
+
+        results = get_overlay_results(3, sample_with_variants)
+        assert len(results) == 1
+        assert results[0]["rsid"] == "rs12345"
+        assert results[0]["SCORE"] == 0.99
+        assert results[0]["LABEL"] == "test"
+
+    def test_overlay_reapply_replaces(self, sample_with_variants: sa.Engine) -> None:
+        """Re-applying an overlay replaces previous results."""
+        from backend.annotation.vcfanno_runner import get_overlay_results
+
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tV=1\n"
+        )
+        parsed = parse_vcf_overlay(content)
+        apply_overlay(parsed, 4, "Test", sample_with_variants)
+        assert len(get_overlay_results(4, sample_with_variants)) == 1
+
+        # Re-apply with different data
+        content2 = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tV=2\n"
+            "19\t44908684\trs429358\tT\tC\t.\tPASS\tV=3\n"
+        )
+        parsed2 = parse_vcf_overlay(content2)
+        apply_overlay(parsed2, 4, "Test", sample_with_variants)
+
+        results = get_overlay_results(4, sample_with_variants)
+        assert len(results) == 2
+
+    def test_delete_overlay_results(self, sample_with_variants: sa.Engine) -> None:
+        """Delete overlay results from sample."""
+        from backend.annotation.vcfanno_runner import delete_overlay_results, get_overlay_results
+
+        content = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t100000\trs12345\tA\tG\t.\tPASS\tV=1\n"
+        )
+        parsed = parse_vcf_overlay(content)
+        apply_overlay(parsed, 5, "Test", sample_with_variants)
+
+        deleted = delete_overlay_results(5, sample_with_variants)
+        assert deleted == 1
+        assert len(get_overlay_results(5, sample_with_variants)) == 0
+
+    def test_bed_multiple_variants_in_range(self, sample_with_variants: sa.Engine) -> None:
+        """BED region covering multiple variants matches all of them."""
+        # rs429358 at 19:44908684, rs7412 at 19:44908822
+        content = "19\t44908600\t44908900\tAPOE_region\t1\n"
+        parsed = parse_bed_overlay(content)
+
+        result = apply_overlay(parsed, 6, "Multi", sample_with_variants)
+        assert result.variants_matched == 2

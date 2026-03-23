@@ -26,9 +26,9 @@ from backend.db.tables import (
 class TestPanelCoverageSchema:
     """Test panel_coverage table definition and creation."""
 
-    def test_schema_version_is_4(self) -> None:
-        """SAMPLE_SCHEMA_VERSION bumped for P3-67 (cross-module link columns)."""
-        assert SAMPLE_SCHEMA_VERSION == 4
+    def test_schema_version_is_5(self) -> None:
+        """SAMPLE_SCHEMA_VERSION bumped for P4-12 (variant_overlays table)."""
+        assert SAMPLE_SCHEMA_VERSION == 5
 
     def test_table_created_on_new_sample(self, sample_engine: sa.Engine) -> None:
         """panel_coverage exists in freshly created sample DBs."""
