@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from backend.analysis.custom_panels import (
     MAX_FILE_SIZE_BYTES,
     CustomPanel,
+    ParsedPanel,
     delete_custom_panel,
     detect_and_parse,
     get_custom_panel,
@@ -148,17 +149,8 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
-@router.post("/parse")
-async def parse_panel_preview(
-    file: UploadFile,
-) -> ParsePreviewResponse:
-    """Parse a gene panel file without saving (preview mode).
-
-    Accepts .txt, .csv, .tsv, or .bed files. Returns extracted gene
-    symbols and any parse warnings for user review before saving.
-
-    Example: ``POST /api/panels/parse`` with multipart file upload.
-    """
+async def _read_and_parse_upload(file: UploadFile) -> ParsedPanel:
+    """Read, validate, and parse an uploaded panel file."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
 
@@ -178,9 +170,23 @@ async def parse_panel_preview(
         )
 
     try:
-        parsed = detect_and_parse(content, file.filename)
+        return detect_and_parse(content, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/parse")
+async def parse_panel_preview(
+    file: UploadFile,
+) -> ParsePreviewResponse:
+    """Parse a gene panel file without saving (preview mode).
+
+    Accepts .txt, .csv, .tsv, or .bed files. Returns extracted gene
+    symbols and any parse warnings for user review before saving.
+
+    Example: ``POST /api/panels/parse`` with multipart file upload.
+    """
+    parsed = await _read_and_parse_upload(file)
 
     return ParsePreviewResponse(
         gene_symbols=parsed.gene_symbols,
@@ -205,28 +211,7 @@ async def upload_custom_panel(
 
     Example: ``POST /api/panels/upload?name=My+Panel`` with multipart file upload.
     """
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided.")
-
-    content_bytes = await file.read()
-    if len(content_bytes) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE_BYTES // 1024} KB.",
-        )
-
-    try:
-        content = content_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="File must be UTF-8 encoded text.",
-        )
-
-    try:
-        parsed = detect_and_parse(content, file.filename)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    parsed = await _read_and_parse_upload(file)
 
     registry = get_registry()
     panel_id = save_custom_panel(name, description, parsed, registry.reference_engine)

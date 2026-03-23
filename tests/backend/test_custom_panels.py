@@ -100,10 +100,10 @@ class TestParseGeneList:
         assert result.gene_symbols == ["HLA-B", "HLA-DQB1"]
 
     def test_gene_with_dot(self) -> None:
-        """Gene symbols with dots are valid (e.g., MTHFR.1)."""
-        content = "MTHFR\nACTN3"
+        """Gene symbols with dots are valid (e.g., APOBEC3G.1)."""
+        content = "APOBEC3G.1\nMTHFR"
         result = parse_gene_list(content)
-        assert result.gene_symbols == ["MTHFR", "ACTN3"]
+        assert result.gene_symbols == ["APOBEC3G.1", "MTHFR"]
 
     def test_whitespace_trimming(self) -> None:
         """Leading/trailing whitespace is trimmed."""

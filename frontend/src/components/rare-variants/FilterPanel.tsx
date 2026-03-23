@@ -100,42 +100,32 @@ export default function FilterPanel({ onSearch, isSearching }: FilterPanelProps)
   function handleSavePanel() {
     if (!panelName.trim()) return
 
-    // If there's a pending file, upload it via the API
-    if (pendingFile) {
-      uploadMutation.mutate(
-        { file: pendingFile, name: panelName.trim() },
-        {
-          onSuccess: () => {
-            setPanelName("")
-            setShowSaveDialog(false)
-            setPendingFile(null)
-          },
-        },
-      )
-    } else {
-      // Create a text file from the gene text and upload
-      const genes = geneText
-        .split(/[\n,]+/)
-        .map((g) => g.trim().toUpperCase())
-        .filter(Boolean)
-      if (genes.length === 0) return
+    // Always use current geneText to ensure edits are captured
+    const genes = geneText
+      .split(/[\n,]+/)
+      .map((g) => g.trim().toUpperCase())
+      .filter(Boolean)
+    if (genes.length === 0) return
 
-      const blob = new Blob([genes.join("\n")], { type: "text/plain" })
-      const file = new File([blob], "custom_panel.txt", { type: "text/plain" })
-      uploadMutation.mutate(
-        { file, name: panelName.trim() },
-        {
-          onSuccess: () => {
-            setPanelName("")
-            setShowSaveDialog(false)
-            setPendingFile(null)
-          },
+    const blob = new Blob([genes.join("\n")], { type: "text/plain" })
+    const file = new File([blob], pendingFile?.name ?? "custom_panel.txt", { type: "text/plain" })
+    uploadMutation.mutate(
+      { file, name: panelName.trim() },
+      {
+        onSuccess: () => {
+          setPanelName("")
+          setShowSaveDialog(false)
+          setPendingFile(null)
         },
-      )
-    }
+      },
+    )
   }
 
   function handleDeletePanel(panelId: number) {
+    const panel = panelsQuery.data?.items.find((p) => p.id === panelId)
+    if (!window.confirm(`Delete panel "${panel?.name ?? panelId}"? This cannot be undone.`)) {
+      return
+    }
     deleteMutation.mutate(panelId)
   }
 

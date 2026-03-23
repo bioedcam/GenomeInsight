@@ -143,7 +143,6 @@ def panel_client(tmp_data_dir: Path, sample_db_path: Path) -> Generator[TestClie
                     "file_format": "23andme_v5",
                     "file_hash": "abc123",
                     "db_path": "samples/sample_1.db",
-                    "status": "complete",
                 }
             ],
         )
