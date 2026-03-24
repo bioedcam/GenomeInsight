@@ -23,6 +23,7 @@ export interface VariantRow {
   annotation_coverage: number | null
   evidence_conflict: boolean | null
   ensemble_pathogenic: boolean | null
+  tags: string[] | null
 }
 
 export interface VariantPage {
@@ -128,4 +129,14 @@ export interface ColumnPreset {
   name: string
   columns: string[]
   predefined: boolean
+}
+
+/** Tag for variant classification (P4-12b). */
+export interface Tag {
+  id: number
+  name: string
+  color: string
+  is_predefined: boolean
+  created_at: string | null
+  variant_count: number | null
 }

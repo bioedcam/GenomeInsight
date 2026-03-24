@@ -33,12 +33,41 @@ export const conflictColumn = col.accessor("evidence_conflict", {
   },
 })
 
+/** Tag color map for consistent pill rendering. Falls back to gray. */
+const TAG_DEFAULT_COLOR = "#6b7280"
+
 export const allColumns = [
   conflictColumn,
   col.accessor("rsid", {
     header: "rsID",
     size: 120,
     cell: (info) => info.getValue(),
+  }),
+  col.accessor("tags", {
+    id: "tags",
+    header: "Tags",
+    size: 160,
+    cell: (info) => {
+      const tags = info.getValue()
+      if (!tags || tags.length === 0) return ""
+      return createElement(
+        "div",
+        { className: "flex items-center gap-1 overflow-hidden" },
+        ...tags.map((tag) =>
+          createElement(
+            "span",
+            {
+              key: tag,
+              className:
+                "inline-flex items-center px-1.5 py-0.5 text-[11px] font-medium rounded-full text-white truncate max-w-[80px]",
+              style: { backgroundColor: TAG_DEFAULT_COLOR },
+              title: tag,
+            },
+            tag,
+          ),
+        ),
+      )
+    },
   }),
   col.accessor("chrom", {
     header: "Chr",

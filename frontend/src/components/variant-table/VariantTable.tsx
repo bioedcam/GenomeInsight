@@ -54,6 +54,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [startChrom, setStartChrom] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined)
+  const [activeTag, setActiveTag] = useState<string | null>(null)
 
   // Variant detail side panel state (P2-21)
   const [selectedRsid, setSelectedRsid] = useState<string | null>(null)
@@ -122,7 +123,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     isFetchingNextPage,
     status,
     error,
-  } = useVariants({ sampleId, filter, showUnannotated, startChrom })
+  } = useVariants({ sampleId, filter, showUnannotated, startChrom, tag: activeTag })
 
   // Chromosome counts for the nav bar (P1-15b)
   const { data: chromCounts, isLoading: chromCountsLoading } =
@@ -132,6 +133,7 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     sampleId,
     filter,
     showUnannotated,
+    tag: activeTag,
   })
 
   const { data: totalVariants } = useTotalVariantCount(sampleId)
@@ -253,6 +255,9 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         onPresetChange={handlePresetChange}
         activeFilter={activeFilter}
         onClearFilter={() => setActiveFilter(undefined)}
+        sampleId={sampleId}
+        activeTag={activeTag}
+        onTagFilter={setActiveTag}
       />
 
       <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
