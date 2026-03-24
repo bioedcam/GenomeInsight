@@ -20,6 +20,8 @@ interface VariantQueryParams {
   showUnannotated?: boolean
   /** When set, jump to the first variant on this chromosome (P1-15b). */
   startChrom?: string | null
+  /** Filter variants by tag name (P4-12b). */
+  tag?: string | null
 }
 
 async function fetchVariantPage(
@@ -27,6 +29,7 @@ async function fetchVariantPage(
   cursor: VariantCursor | null,
   limit: number,
   filter?: string,
+  tag?: string | null,
 ): Promise<VariantPage> {
   const params = new URLSearchParams({
     sample_id: String(sampleId),
@@ -39,6 +42,9 @@ async function fetchVariantPage(
   if (filter) {
     params.set("filter", filter)
   }
+  if (tag) {
+    params.set("tag", tag)
+  }
   const res = await fetch(`/api/variants?${params}`)
   if (!res.ok) {
     const text = await res.text().catch(() => "")
@@ -50,10 +56,14 @@ async function fetchVariantPage(
 async function fetchVariantCount(
   sampleId: number,
   filter?: string,
+  tag?: string | null,
 ): Promise<VariantCount> {
   const params = new URLSearchParams({ sample_id: String(sampleId) })
   if (filter) {
     params.set("filter", filter)
+  }
+  if (tag) {
+    params.set("tag", tag)
   }
   const res = await fetch(`/api/variants/count?${params}`)
   if (!res.ok) {
@@ -71,7 +81,7 @@ async function fetchVariantCount(
  * on that chromosome by using cursor (chrom, pos=0). The chromosome is
  * included in the queryKey so changing it resets and refetches.
  */
-export function useVariants({ sampleId, filter, showUnannotated, startChrom }: VariantQueryParams) {
+export function useVariants({ sampleId, filter, showUnannotated, startChrom, tag }: VariantQueryParams) {
   const effectiveFilter = buildEffectiveFilter(filter, showUnannotated)
 
   // Build initial cursor for chromosome jump (P1-15b).
@@ -81,9 +91,9 @@ export function useVariants({ sampleId, filter, showUnannotated, startChrom }: V
     : null
 
   return useInfiniteQuery({
-    queryKey: ["variants", sampleId, effectiveFilter, startChrom ?? null],
+    queryKey: ["variants", sampleId, effectiveFilter, startChrom ?? null, tag ?? null],
     queryFn: ({ pageParam }) =>
-      fetchVariantPage(sampleId!, pageParam, PAGE_SIZE, effectiveFilter),
+      fetchVariantPage(sampleId!, pageParam, PAGE_SIZE, effectiveFilter, tag),
     initialPageParam: initialCursor,
     getNextPageParam: (lastPage): VariantCursor | null => {
       if (!lastPage.has_more || !lastPage.next_cursor_chrom || lastPage.next_cursor_pos == null) {
@@ -103,12 +113,12 @@ export function useVariants({ sampleId, filter, showUnannotated, startChrom }: V
  * Async total count — fires separately from the first page.
  * Cached per filter combination via query key.
  */
-export function useVariantsCount({ sampleId, filter, showUnannotated }: VariantQueryParams) {
+export function useVariantsCount({ sampleId, filter, showUnannotated, tag }: VariantQueryParams) {
   const effectiveFilter = buildEffectiveFilter(filter, showUnannotated)
 
   return useQuery({
-    queryKey: ["variants-count", sampleId, effectiveFilter],
-    queryFn: () => fetchVariantCount(sampleId!, effectiveFilter),
+    queryKey: ["variants-count", sampleId, effectiveFilter, tag ?? null],
+    queryFn: () => fetchVariantCount(sampleId!, effectiveFilter, tag),
     enabled: sampleId != null,
     staleTime: Infinity,
   })

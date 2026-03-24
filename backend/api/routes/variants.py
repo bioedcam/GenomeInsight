@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from backend.analysis.ancestry import get_ancestry_matched_af_column, get_inferred_ancestry
 from backend.db.connection import get_registry
-from backend.db.tables import annotated_variants, raw_variants, samples
+from backend.db.tables import annotated_variants, raw_variants, samples, tags, variant_tags
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,8 @@ class VariantRow(BaseModel):
     # P3-26: Ancestry-matched allele frequency
     ancestry_matched_af: float | None = None
     ancestry_matched_population: str | None = None
+    # P4-12b: Variant tags
+    tags: list[str] | None = None
 
 
 class VariantPage(BaseModel):
@@ -313,6 +315,7 @@ def list_variants(
     cursor_pos: int | None = Query(None, description="Cursor position"),
     limit: int = Query(50, ge=1, le=500, description="Page size"),
     filter: str | None = Query(None, description="Filters as key:value,key:value"),
+    tag: str | None = Query(None, description="Filter by tag name"),
 ) -> VariantPage:
     """Return a page of variants using cursor-based keyset pagination.
 
@@ -338,6 +341,15 @@ def list_variants(
     if filter_clauses:
         query = query.where(sa.and_(*filter_clauses))
 
+    # P4-12b: Filter by tag name
+    if tag:
+        tag_subq = (
+            sa.select(variant_tags.c.rsid)
+            .join(tags, variant_tags.c.tag_id == tags.c.id)
+            .where(tags.c.name == tag)
+        )
+        query = query.where(table.c.rsid.in_(tag_subq))
+
     # Apply cursor
     cursor_clause = _build_cursor_clause(table, cursor_chrom, cursor_pos)
     if cursor_clause is not None:
@@ -355,6 +367,22 @@ def list_variants(
     items = [
         _row_to_variant(row, table, ancestry_af_col, ancestry_population) for row in result_rows
     ]
+
+    # P4-12b: Batch-lookup tags for all rsids in the page
+    if items:
+        rsid_list = [item.rsid for item in items]
+        tag_query = (
+            sa.select(variant_tags.c.rsid, tags.c.name)
+            .join(tags, variant_tags.c.tag_id == tags.c.id)
+            .where(variant_tags.c.rsid.in_(rsid_list))
+        )
+        with sample_engine.connect() as conn:
+            tag_rows = conn.execute(tag_query).fetchall()
+        tag_map: dict[str, list[str]] = {}
+        for tr in tag_rows:
+            tag_map.setdefault(tr.rsid, []).append(tr.name)
+        for item in items:
+            item.tags = tag_map.get(item.rsid)
 
     next_chrom: str | None = None
     next_pos: int | None = None
@@ -376,6 +404,7 @@ def list_variants(
 def variant_count(
     sample_id: int = Query(..., description="Sample ID to count variants for"),
     filter: str | None = Query(None, description="Filters as key:value,key:value"),
+    tag: str | None = Query(None, description="Filter by tag name"),
 ) -> VariantCount:
     """Return the total variant count, optionally filtered.
 
@@ -391,10 +420,19 @@ def variant_count(
     if filter_clauses:
         query = query.where(sa.and_(*filter_clauses))
 
+    # P4-12b: Filter by tag name
+    if tag:
+        tag_subq = (
+            sa.select(variant_tags.c.rsid)
+            .join(tags, variant_tags.c.tag_id == tags.c.id)
+            .where(tags.c.name == tag)
+        )
+        query = query.where(table.c.rsid.in_(tag_subq))
+
     with sample_engine.connect() as conn:
         total = conn.execute(query).scalar() or 0
 
-    return VariantCount(total=total, filtered=bool(filter_clauses))
+    return VariantCount(total=total, filtered=bool(filter_clauses or tag))
 
 
 @router.get("/chromosomes")
