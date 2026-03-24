@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from huey import SqliteHuey
+from huey import SqliteHuey, crontab
 
 from backend.config import get_settings
 
@@ -363,3 +363,214 @@ def create_prefetch_job() -> str:
         )
 
     return job_id
+
+
+# ── Update manager tasks (P4-16) ──────────────────────────────────────
+
+
+def create_update_check_job() -> str:
+    """Create a job record for an update check task. Returns the job_id."""
+
+    from backend.db.connection import get_registry
+    from backend.db.tables import jobs
+
+    job_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    registry = get_registry()
+
+    with registry.reference_engine.begin() as conn:
+        conn.execute(
+            jobs.insert().values(
+                job_id=job_id,
+                sample_id=None,
+                job_type="update_check",
+                status="pending",
+                progress_pct=0.0,
+                message="Queued for database update check",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    return job_id
+
+
+@huey.task()
+def run_update_check_task(job_id: str) -> None:
+    """Huey background task: check for database updates and apply auto-updates.
+
+    This is the on-demand / startup update check task.
+    """
+    from backend.db.connection import get_registry
+    from backend.db.update_manager import run_scheduled_update_check
+
+    try:
+        _update_job(job_id, status="running", message="Checking for database updates")
+
+        registry = get_registry()
+        result = run_scheduled_update_check(registry)
+
+        msg_parts = []
+        if result.available:
+            msg_parts.append(f"{len(result.available)} update(s) available")
+        if result.up_to_date:
+            msg_parts.append(f"{len(result.up_to_date)} up to date")
+        if result.errors:
+            msg_parts.append(f"{len(result.errors)} error(s)")
+
+        _update_job(
+            job_id,
+            status="complete",
+            progress_pct=100.0,
+            message="; ".join(msg_parts) or "Update check complete",
+            error="; ".join(result.errors[:5]) if result.errors else None,
+        )
+
+        logger.info(
+            "update_check_task_complete",
+            extra={
+                "job_id": job_id,
+                "available": len(result.available),
+                "errors": len(result.errors),
+            },
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "update_check_task_failed",
+            extra={"job_id": job_id},
+        )
+        _update_job(
+            job_id,
+            status="failed",
+            message="Update check failed",
+            error=str(exc),
+        )
+
+
+@huey.task()
+def run_database_update_task(job_id: str, db_name: str) -> None:
+    """Huey background task: run a specific database update."""
+    from backend.db.connection import get_registry
+    from backend.db.update_manager import run_clinvar_update
+
+    try:
+        _update_job(
+            job_id,
+            status="running",
+            message=f"Updating {db_name}",
+        )
+
+        registry = get_registry()
+
+        if db_name == "clinvar":
+            result = run_clinvar_update(registry)
+            msg = (
+                f"ClinVar updated: {result.new_version} "
+                f"({result.variants_reclassified} reclassified, "
+                f"{result.variants_added} added)"
+            )
+        else:
+            msg = f"Update for {db_name} not yet implemented"
+
+        _update_job(
+            job_id,
+            status="complete",
+            progress_pct=100.0,
+            message=msg,
+        )
+
+        logger.info(
+            "database_update_task_complete",
+            extra={"job_id": job_id, "db_name": db_name},
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "database_update_task_failed",
+            extra={"job_id": job_id, "db_name": db_name},
+        )
+        _update_job(
+            job_id,
+            status="failed",
+            message=f"{db_name} update failed",
+            error=str(exc),
+        )
+
+
+def create_database_update_job(db_name: str) -> str:
+    """Create a job record for a database update task. Returns the job_id."""
+
+    from backend.db.connection import get_registry
+    from backend.db.tables import jobs
+
+    job_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    registry = get_registry()
+
+    with registry.reference_engine.begin() as conn:
+        conn.execute(
+            jobs.insert().values(
+                job_id=job_id,
+                sample_id=None,
+                job_type="database_update",
+                status="pending",
+                progress_pct=0.0,
+                message=f"Queued for {db_name} update",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    return job_id
+
+
+# Periodic task: fires daily at 03:00 by default.
+# The actual check frequency is controlled by update_check_interval
+# in settings — the periodic task reads the setting and skips if
+# not yet due. Always fires once on startup via the lifespan hook.
+@huey.periodic_task(crontab(hour="3", minute="0"))
+def periodic_update_check() -> None:
+    """Periodic Huey task: daily update check at 03:00.
+
+    Respects the ``update_check_interval`` setting — if set to
+    "startup" this task is effectively a no-op (startup check
+    handled by lifespan). If "weekly", checks last run time and
+    skips if < 7 days since last check.
+    """
+    import sqlalchemy as sa
+
+    from backend.config import get_settings
+    from backend.db.connection import get_registry
+    from backend.db.tables import update_history
+
+    settings = get_settings()
+
+    if settings.update_check_interval == "startup":
+        # Startup-only: periodic task does nothing
+        return
+
+    if settings.update_check_interval == "weekly":
+        # Check if last update was within 7 days
+        registry = get_registry()
+        with registry.reference_engine.connect() as conn:
+            last_check = conn.execute(
+                sa.select(update_history.c.updated_at)
+                .order_by(update_history.c.updated_at.desc())
+                .limit(1)
+            ).fetchone()
+
+        if last_check and last_check.updated_at:
+            from datetime import timedelta
+
+            last_updated = last_check.updated_at
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=UTC)
+            age = datetime.now(UTC) - last_updated
+            if age < timedelta(days=7):
+                logger.info("periodic_update_check_skipped_weekly", age_days=age.days)
+                return
+
+    # Run the check
+    job_id = create_update_check_job()
+    run_update_check_task(job_id)
