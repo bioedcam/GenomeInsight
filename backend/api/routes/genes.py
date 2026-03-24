@@ -6,6 +6,8 @@ summaries for the Nightingale protein visualization page.
 
 GET  /api/genes/{symbol}          — Full gene detail
 GET  /api/genes/{symbol}/variants — Variants in gene for a sample
+POST /api/genes/{symbol}/refresh-uniprot — Force refresh UniProt cache
+GET  /api/uniprot-cache/stats     — UniProt cache statistics
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from backend.db.tables import (
     uniprot_cache,
 )
 from backend.utils.pubmed import PubMedFetcher
+from backend.utils.uniprot import UniProtCacheFetcher
 
 logger = structlog.get_logger(__name__)
 
@@ -630,4 +633,93 @@ def get_gene_variants(
         gene_symbol=gene_symbol,
         variants=variants,
         total=len(variants),
+    )
+
+
+# ── UniProt cache management endpoints (P4-12c) ─────────────────────
+
+
+class UniProtRefreshResponse(BaseModel):
+    """Response from a forced UniProt cache refresh."""
+
+    gene_symbol: str
+    success: bool
+    accession: str | None = None
+    domains_count: int = 0
+    features_count: int = 0
+    message: str = ""
+
+
+class UniProtCacheStatsResponse(BaseModel):
+    """UniProt cache statistics for admin panel."""
+
+    total_entries: int = 0
+    fresh_entries: int = 0
+    stale_entries: int = 0
+    oldest_entry: str | None = None
+    newest_entry: str | None = None
+    genes_cached: list[str] = []
+
+
+def _get_fetcher() -> UniProtCacheFetcher:
+    """Create a UniProtCacheFetcher using the reference engine."""
+    registry = get_registry()
+    return UniProtCacheFetcher(registry.reference_engine, ttl_days=_UNIPROT_TTL_DAYS)
+
+
+@router.post("/{symbol}/refresh-uniprot", response_model=UniProtRefreshResponse)
+def refresh_uniprot_cache(symbol: str) -> UniProtRefreshResponse:
+    """Force refresh UniProt protein data for a gene.
+
+    Bypasses the cache and fetches directly from the UniProt REST API.
+    Useful when the user wants to ensure the latest protein data is
+    available without waiting for TTL expiry.
+
+    Example: ``POST /api/genes/BRCA1/refresh-uniprot``
+    """
+    gene_symbol = symbol.upper()
+    fetcher = _get_fetcher()
+    result = fetcher.refresh(gene_symbol)
+
+    if result is None:
+        return UniProtRefreshResponse(
+            gene_symbol=gene_symbol,
+            success=False,
+            message="Failed to fetch from UniProt API. Check network connectivity.",
+        )
+
+    return UniProtRefreshResponse(
+        gene_symbol=gene_symbol,
+        success=True,
+        accession=result.accession,
+        domains_count=len(result.domains),
+        features_count=len(result.features),
+        message=f"Refreshed {gene_symbol} ({result.accession}): "
+        f"{len(result.domains)} domains, {len(result.features)} features.",
+    )
+
+
+# Separate router for cache stats (no gene symbol prefix)
+cache_router = APIRouter(prefix="/uniprot-cache", tags=["gene-detail"])
+
+
+@cache_router.get("/stats", response_model=UniProtCacheStatsResponse)
+def get_uniprot_cache_stats() -> UniProtCacheStatsResponse:
+    """Return UniProt cache statistics.
+
+    Used by the admin panel (Settings > System Health) to display
+    cache usage and freshness.
+
+    Example: ``GET /api/uniprot-cache/stats``
+    """
+    fetcher = _get_fetcher()
+    stats = fetcher.get_cache_stats()
+
+    return UniProtCacheStatsResponse(
+        total_entries=stats.total_entries,
+        fresh_entries=stats.fresh_entries,
+        stale_entries=stats.stale_entries,
+        oldest_entry=stats.oldest_entry,
+        newest_entry=stats.newest_entry,
+        genes_cached=stats.genes_cached,
     )
