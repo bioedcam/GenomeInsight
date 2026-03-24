@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -30,6 +31,9 @@ import structlog
 from backend.db.tables import uniprot_cache
 
 logger = structlog.get_logger(__name__)
+
+# Type alias for progress callback: (done, total) -> None
+_ProgressCallback = Callable[[int, int], None]
 
 # Default TTL for UniProt cache entries
 DEFAULT_TTL_DAYS = 30
@@ -279,6 +283,7 @@ class UniProtCacheFetcher:
         *,
         skip_fresh: bool = True,
         delay_seconds: float = _API_DELAY_SECONDS,
+        progress_callback: _ProgressCallback | None = None,
     ) -> PrefetchResult:
         """Pre-fetch UniProt data for a list of genes.
 
@@ -286,18 +291,23 @@ class UniProtCacheFetcher:
             gene_symbols: Gene symbols to pre-fetch.
             skip_fresh: Skip genes already in fresh cache.
             delay_seconds: Delay between API calls for rate limiting.
+            progress_callback: Optional ``(done, total) -> None`` called
+                after each gene is processed.
 
         Returns:
             PrefetchResult with counts and any errors.
         """
         result = PrefetchResult(total_genes=len(gene_symbols))
+        total = len(gene_symbols)
 
-        for gene in gene_symbols:
+        for idx, gene in enumerate(gene_symbols, 1):
             # Check if already cached and fresh
             if skip_fresh:
                 cached = self._get_from_cache(gene)
                 if cached is not None:
                     result.cached_already += 1
+                    if progress_callback is not None:
+                        progress_callback(idx, total)
                     continue
 
             # Fetch from API
@@ -307,6 +317,9 @@ class UniProtCacheFetcher:
             else:
                 result.failed += 1
                 result.errors.append(f"Failed to fetch {gene}")
+
+            if progress_callback is not None:
+                progress_callback(idx, total)
 
             # Rate limiting
             if delay_seconds > 0:
@@ -494,7 +507,7 @@ class UniProtCacheFetcher:
             if existing:
                 conn.execute(
                     uniprot_cache.update()
-                    .where(uniprot_cache.c.accession == existing.accession)
+                    .where(uniprot_cache.c.gene_symbol == gene_symbol)
                     .values(
                         accession=accession,
                         gene_symbol=gene_symbol,

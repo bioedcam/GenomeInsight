@@ -667,17 +667,36 @@ def _get_fetcher() -> UniProtCacheFetcher:
     return UniProtCacheFetcher(registry.reference_engine, ttl_days=_UNIPROT_TTL_DAYS)
 
 
+# Per-gene cooldown to prevent excessive API calls (gene_symbol → last refresh time)
+_refresh_cooldowns: dict[str, datetime] = {}
+_REFRESH_COOLDOWN_SECONDS = 60
+
+
 @router.post("/{symbol}/refresh-uniprot", response_model=UniProtRefreshResponse)
 def refresh_uniprot_cache(symbol: str) -> UniProtRefreshResponse:
     """Force refresh UniProt protein data for a gene.
 
     Bypasses the cache and fetches directly from the UniProt REST API.
     Useful when the user wants to ensure the latest protein data is
-    available without waiting for TTL expiry.
+    available without waiting for TTL expiry. Subject to a 60-second
+    per-gene cooldown to prevent excessive API calls.
 
     Example: ``POST /api/genes/BRCA1/refresh-uniprot``
     """
     gene_symbol = symbol.upper()
+
+    # Cooldown check
+    last_refresh = _refresh_cooldowns.get(gene_symbol)
+    if last_refresh is not None:
+        elapsed = (datetime.now(UTC) - last_refresh).total_seconds()
+        if elapsed < _REFRESH_COOLDOWN_SECONDS:
+            remaining = int(_REFRESH_COOLDOWN_SECONDS - elapsed)
+            return UniProtRefreshResponse(
+                gene_symbol=gene_symbol,
+                success=False,
+                message=f"Cooldown active. Try again in {remaining}s.",
+            )
+
     fetcher = _get_fetcher()
     result = fetcher.refresh(gene_symbol)
 
@@ -687,6 +706,9 @@ def refresh_uniprot_cache(symbol: str) -> UniProtRefreshResponse:
             success=False,
             message="Failed to fetch from UniProt API. Check network connectivity.",
         )
+
+    # Record cooldown timestamp
+    _refresh_cooldowns[gene_symbol] = datetime.now(UTC)
 
     return UniProtRefreshResponse(
         gene_symbol=gene_symbol,

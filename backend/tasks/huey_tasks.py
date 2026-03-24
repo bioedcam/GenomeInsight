@@ -286,11 +286,20 @@ def prefetch_uniprot_priority_genes(job_id: str) -> None:
         registry = get_registry()
         fetcher = UniProtCacheFetcher(registry.reference_engine)
 
-        total = len(PRIORITY_GENES)
+        def progress_callback(done: int, total: int) -> None:
+            pct = (done / total * 100) if total > 0 else 0.0
+            _update_job(
+                job_id,
+                status="running",
+                progress_pct=round(pct, 1),
+                message=f"Pre-fetching UniProt: {done}/{total} genes",
+            )
+
         result_data = fetcher.prefetch_genes(
             PRIORITY_GENES,
             skip_fresh=True,
             delay_seconds=0.5,
+            progress_callback=progress_callback,
         )
 
         _update_job(
@@ -300,7 +309,8 @@ def prefetch_uniprot_priority_genes(job_id: str) -> None:
             message=(
                 f"UniProt pre-fetch complete: {result_data.fetched} fetched, "
                 f"{result_data.cached_already} already cached, "
-                f"{result_data.failed} failed (of {total} genes)"
+                f"{result_data.failed} failed "
+                f"(of {result_data.total_genes} genes)"
             ),
             error="; ".join(result_data.errors[:5]) if result_data.errors else None,
         )
