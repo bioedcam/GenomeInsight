@@ -54,7 +54,11 @@ LOINC_DBSNP_ID = "81255-2"  # dbSNP [ID]
 LOINC_CLINVAR_SIGNIFICANCE = "53037-8"  # Genetic disease assessed
 LOINC_AF = "81258-6"  # Sample variant allelic frequency
 
-# Allelic state LOINC answer codes
+# Allelic state LOINC answer codes.
+# hom_ref uses the same LOINC code as hom_alt (LA6705-3 = "Homozygous")
+# because FHIR allelic-state only distinguishes het vs hom.  hom_ref rows
+# may appear in annotated_variants when the sample matches the reference;
+# they are included for completeness in the exported bundle.
 ALLELIC_STATE_MAP: dict[str, dict[str, str]] = {
     "het": {
         "system": LOINC_SYSTEM,
@@ -332,7 +336,7 @@ def build_fhir_bundle(
     *,
     include_all: bool = True,
 ) -> dict[str, Any]:
-    """Build a FHIR R4 Bundle (type=document) for a sample.
+    """Build a FHIR R4 Bundle (type=collection) for a sample.
 
     Parameters
     ----------
