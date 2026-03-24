@@ -533,24 +533,18 @@ class TestRefreshEndpoint:
         # Clear any existing cooldown
         genes_mod._refresh_cooldowns.pop("COOLDOWN", None)
 
-        with patch(
-            "backend.api.routes.genes._get_fetcher"
-        ) as mock_get_fetcher:
+        with patch("backend.api.routes.genes._get_fetcher") as mock_get_fetcher:
             mock_fetcher = MagicMock()
             mock_fetcher.refresh.return_value = mock_result
             mock_get_fetcher.return_value = mock_fetcher
 
             # First refresh succeeds
-            resp1 = uniprot_client.post(
-                "/api/genes/COOLDOWN/refresh-uniprot"
-            )
+            resp1 = uniprot_client.post("/api/genes/COOLDOWN/refresh-uniprot")
             assert resp1.status_code == 200
             assert resp1.json()["success"] is True
 
             # Second refresh within cooldown is rejected
-            resp2 = uniprot_client.post(
-                "/api/genes/COOLDOWN/refresh-uniprot"
-            )
+            resp2 = uniprot_client.post("/api/genes/COOLDOWN/refresh-uniprot")
             assert resp2.status_code == 200
             assert resp2.json()["success"] is False
             assert "Cooldown" in resp2.json()["message"]
