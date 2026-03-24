@@ -428,13 +428,18 @@ def run_update_check_task(job_id: str) -> None:
 
         logger.info(
             "update_check_task_complete",
-            job_id=job_id,
-            available=len(result.available),
-            errors=len(result.errors),
+            extra={
+                "job_id": job_id,
+                "available": len(result.available),
+                "errors": len(result.errors),
+            },
         )
 
     except Exception as exc:
-        logger.exception("update_check_task_failed", job_id=job_id)
+        logger.exception(
+            "update_check_task_failed",
+            extra={"job_id": job_id},
+        )
         _update_job(
             job_id,
             status="failed",
@@ -477,15 +482,13 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
 
         logger.info(
             "database_update_task_complete",
-            job_id=job_id,
-            db_name=db_name,
+            extra={"job_id": job_id, "db_name": db_name},
         )
 
     except Exception as exc:
         logger.exception(
             "database_update_task_failed",
-            job_id=job_id,
-            db_name=db_name,
+            extra={"job_id": job_id, "db_name": db_name},
         )
         _update_job(
             job_id,
@@ -560,7 +563,10 @@ def periodic_update_check() -> None:
         if last_check and last_check.updated_at:
             from datetime import timedelta
 
-            age = datetime.now(UTC) - last_check.updated_at
+            last_updated = last_check.updated_at
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=UTC)
+            age = datetime.now(UTC) - last_updated
             if age < timedelta(days=7):
                 logger.info("periodic_update_check_skipped_weekly", age_days=age.days)
                 return

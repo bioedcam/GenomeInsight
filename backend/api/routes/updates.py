@@ -6,7 +6,7 @@ viewing update history, and managing re-annotation prompts.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.db.connection import get_registry
@@ -121,14 +121,17 @@ async def trigger_update(req: TriggerUpdateRequest) -> TriggerUpdateResponse:
             detail=f"Update not supported for '{req.db_name}'. Supported: {sorted(supported)}",
         )
 
-    # Check bandwidth window
+    # Check bandwidth window — look up actual expected download size
     registry = get_registry()
     settings = registry.settings
-    if not should_download_now(0, settings.update_download_window):
+    from backend.db.database_registry import DATABASES
+
+    db_info = DATABASES.get(req.db_name)
+    estimated_size = db_info.expected_size_bytes if db_info else 0
+    if not should_download_now(estimated_size, settings.update_download_window):
         raise HTTPException(
             status_code=409,
-            detail=f"Outside bandwidth window ({settings.update_download_window}). "
-            "ClinVar updates bypass this check due to small size.",
+            detail=f"Outside bandwidth window ({settings.update_download_window}).",
         )
 
     job_id = create_database_update_job(req.db_name)
@@ -144,7 +147,7 @@ async def trigger_update(req: TriggerUpdateRequest) -> TriggerUpdateResponse:
 @router.get("/history", response_model=list[UpdateHistoryEntry])
 async def list_update_history(
     db_name: str | None = None,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=500),
 ) -> list[UpdateHistoryEntry]:
     """Get update history, optionally filtered by database name."""
     registry = get_registry()

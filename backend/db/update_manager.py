@@ -491,9 +491,9 @@ def _precheck_clinvar(
                             "new_significance": new_sig,
                         }
                     )
-    except Exception:
+    except sa.exc.OperationalError:
         # watched_variants table may not exist in older sample DBs
-        pass
+        logger.debug("watched_variants_check_skipped", sample_id=sample_id)
 
     return result
 

@@ -101,9 +101,11 @@ class TestShouldDownloadNow:
             mock_dt.now.return_value.time.return_value = dt_time(12, 0)
             assert should_download_now(200 * 1024 * 1024, "02:00-06:00") is False
 
-    def test_exactly_at_threshold(self):
-        # Exactly 100 MB = under threshold (< not <=)
-        assert should_download_now(BANDWIDTH_WINDOW_THRESHOLD, "02:00-06:00") is not None
+    def test_exactly_at_threshold_is_gated(self):
+        # Exactly 100 MB is NOT under threshold (< not <=), so bandwidth window applies
+        with patch("backend.db.update_manager.datetime") as mock_dt:
+            mock_dt.now.return_value.time.return_value = dt_time(12, 0)
+            assert should_download_now(BANDWIDTH_WINDOW_THRESHOLD, "02:00-06:00") is False
 
 
 # ═══════════════════════════════════════════════════════════════════════
