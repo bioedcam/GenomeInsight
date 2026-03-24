@@ -45,3 +45,31 @@ export async function fetchReportPreview(request: ReportRequest): Promise<string
   }
   return res.text()
 }
+
+// ── FHIR R4 DiagnosticReport export (P4-12a) ────────────────────────
+
+export interface FhirExportRequest {
+  sample_id: number
+  include_all?: boolean
+}
+
+/**
+ * Export a FHIR R4 Bundle (DiagnosticReport + Observations) and trigger
+ * browser download. Calls POST /api/export/fhir.
+ */
+export function useExportFhir() {
+  return useMutation({
+    mutationFn: async (request: FhirExportRequest): Promise<Blob> => {
+      const res = await fetch("/api/export/fhir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`FHIR export failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.blob()
+    },
+  })
+}

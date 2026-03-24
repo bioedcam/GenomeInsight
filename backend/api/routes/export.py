@@ -1,7 +1,8 @@
-"""Export results API endpoints (P4-05).
+"""Export results API endpoints (P4-05, P4-12a).
 
 POST /api/export/query  — Export query builder results as VCF/TSV/JSON/CSV.
 POST /api/export/sql    — Export raw SQL console results as TSV/JSON/CSV.
+POST /api/export/fhir   — Export FHIR R4 Bundle (DiagnosticReport + Observations).
 
 All formats use StreamingResponse to avoid holding large result sets in
 memory.  Content-Disposition headers trigger a download in browsers.
@@ -103,6 +104,19 @@ class ExportSqlRequest(BaseModel):
     sample_id: int
     sql: str = Field(..., min_length=1, max_length=10_000)
     format: Literal["tsv", "json", "csv"]
+
+
+class ExportFhirRequest(BaseModel):
+    """POST /api/export/fhir request body."""
+
+    sample_id: int
+    include_all: bool = Field(
+        True,
+        description=(
+            "If true, include all annotated variants. "
+            "If false, only include variants with ClinVar annotations."
+        ),
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -420,3 +434,34 @@ def export_sql(body: ExportSqlRequest) -> StreamingResponse:
             media_type=content_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
+
+
+# ── FHIR R4 export (P4-12a) ────────────────────────────────────────
+
+
+@router.post("/fhir")
+def export_fhir(body: ExportFhirRequest) -> StreamingResponse:
+    """Export a FHIR R4 Bundle (DiagnosticReport + Observations).
+
+    Returns a FHIR R4 Bundle as JSON containing one DiagnosticReport and
+    one Observation per annotated variant.  Scope is limited to genomic
+    core resources — no Condition or MedicationStatement (R-17 mitigation).
+    """
+    from backend.reports.fhir_export import build_fhir_bundle
+
+    try:
+        bundle = build_fhir_bundle(
+            sample_id=body.sample_id,
+            include_all=body.include_all,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    filename = _make_filename("fhir.json")
+    content = json.dumps(bundle, indent=2, default=str)
+
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/fhir+json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
