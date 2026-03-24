@@ -1,11 +1,12 @@
-/** Dashboard status bar — sample info + database version indicators (P1-20).
+/** Dashboard status bar — sample info + database version indicators (P1-20, P4-17).
  *
- * Shows current sample name, variant count, and database statuses.
- * Database dots: filled = downloaded, hollow = not downloaded / update available.
+ * Shows current sample name, variant count, and database version stamps.
+ * Database dots: filled = current (no update), hollow = update available.
+ * Click navigates to Settings / Update Manager.
  */
 
 import { useNavigate } from 'react-router-dom'
-import { useDatabaseList } from '@/api/setup'
+import { useDatabaseStatuses, useUpdateCheck } from '@/api/updates'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
 import { Database, User } from 'lucide-react'
@@ -32,10 +33,31 @@ function formatRelativeTime(dateStr: string): string {
 
 export default function StatusBar({ sample, variantCount }: StatusBarProps) {
   const navigate = useNavigate()
-  const { data: dbList } = useDatabaseList()
+  const { data: statuses } = useDatabaseStatuses()
+  const { data: updateCheck } = useUpdateCheck(true)
 
-  const downloadedCount = dbList?.downloaded_count ?? 0
-  const totalCount = dbList?.total_count ?? 0
+  // Build a set of db_names that have updates available
+  const updatesAvailable = new Set(
+    updateCheck?.available?.map((u) => u.db_name) ?? [],
+  )
+
+  // Databases with a version stamp (installed)
+  const installed = statuses?.filter((s) => s.current_version != null) ?? []
+  const totalTracked = statuses?.length ?? 0
+
+  // Pick the top 2 DBs to show version strings (ClinVar + one more)
+  const versionLabels = installed
+    .filter((s) => s.version_display)
+    .slice(0, 2)
+    .map((s) => `${s.display_name} ${s.version_display}`)
+
+  // Count current vs update-available
+  const currentCount = totalTracked > 0
+    ? statuses!.filter(
+        (s) => s.current_version != null && !updatesAvailable.has(s.db_name),
+      ).length
+    : 0
+  const updateCount = updatesAvailable.size
 
   return (
     <div
@@ -54,17 +76,17 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
         </span>
         {variantCount != null && (
           <span className="text-muted-foreground">
-            · {formatNumber(variantCount)} SNPs
+            &middot; {formatNumber(variantCount)} SNPs
           </span>
         )}
         {sample.created_at && (
           <span className="text-muted-foreground hidden sm:inline">
-            · Uploaded {formatRelativeTime(sample.created_at)}
+            &middot; Uploaded {formatRelativeTime(sample.created_at)}
           </span>
         )}
       </div>
 
-      {/* Right: Database status */}
+      {/* Right: Database version stamps + dots */}
       <button
         type="button"
         onClick={() => navigate('/settings')}
@@ -72,26 +94,50 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
           'flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded',
         )}
-        aria-label={`Databases: ${downloadedCount} of ${totalCount} downloaded`}
+        aria-label={`Databases: ${currentCount} current, ${updateCount} update${updateCount !== 1 ? 's' : ''} available`}
         title="View database status in Settings"
       >
         <Database className="h-3.5 w-3.5 shrink-0" />
-        <span className="hidden sm:inline text-xs">Databases</span>
+
+        {/* Version labels (e.g., "ClinVar Mar 2026 · gnomAD 2.1.1") */}
+        {versionLabels.length > 0 && (
+          <span className="hidden md:inline text-xs">
+            {versionLabels.join(' \u00b7 ')}
+          </span>
+        )}
+
+        {/* Dot indicators: ●●●○ */}
         <span className="flex items-center gap-0.5" aria-hidden="true">
-          {totalCount > 0
-            ? Array.from({ length: totalCount }, (_, i) => (
+          {totalTracked > 0 ? (
+            statuses!.map((s) => {
+              const hasVersion = s.current_version != null
+              const hasUpdate = updatesAvailable.has(s.db_name)
+              // Filled = installed & current, Hollow = update available or not installed
+              const isCurrent = hasVersion && !hasUpdate
+              return (
                 <span
-                  key={i}
+                  key={s.db_name}
                   className={cn(
                     'inline-block h-2 w-2 rounded-full',
-                    i < downloadedCount
+                    isCurrent
                       ? 'bg-primary'
-                      : 'border border-muted-foreground',
+                      : hasUpdate
+                        ? 'border border-amber-500'
+                        : 'border border-muted-foreground',
                   )}
+                  title={`${s.display_name}: ${
+                    isCurrent
+                      ? `v${s.current_version}`
+                      : hasUpdate
+                        ? 'Update available'
+                        : 'Not installed'
+                  }`}
                 />
-              ))
-            : <span className="text-xs">—</span>
-          }
+              )
+            })
+          ) : (
+            <span className="text-xs">&mdash;</span>
+          )}
         </span>
       </button>
     </div>

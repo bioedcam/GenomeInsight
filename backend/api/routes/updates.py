@@ -14,8 +14,9 @@ from backend.db.update_manager import (
     AUTO_UPDATE_DEFAULTS,
     check_all_updates,
     dismiss_prompt,
+    format_version_display,
     get_active_prompts,
-    get_current_version,
+    get_all_version_stamps,
     get_update_history,
     should_download_now,
 )
@@ -63,8 +64,12 @@ class ReannotationPrompt(BaseModel):
 
 class DatabaseStatus(BaseModel):
     db_name: str
+    display_name: str
     current_version: str | None
+    version_display: str | None
+    downloaded_at: str | None
     auto_update: bool
+    update_available: bool
 
 
 class TriggerUpdateRequest(BaseModel):
@@ -157,18 +162,35 @@ async def list_update_history(
 
 @router.get("/status", response_model=list[DatabaseStatus])
 async def get_database_statuses() -> list[DatabaseStatus]:
-    """Get current version and auto-update status for all databases."""
+    """Get current version, display info, and update availability for all databases."""
+    from backend.db.database_registry import DATABASES
+
     registry = get_registry()
     engine = registry.reference_engine
 
+    # Fetch all version stamps in one query
+    stamps = {s["db_name"]: s for s in get_all_version_stamps(engine)}
+
+    # Check which databases have updates available (cached, no network call)
+    # We only mark update_available based on whether we have a version at all;
+    # actual update checks are done via GET /updates/check
     result = []
     for db_name, auto_update in AUTO_UPDATE_DEFAULTS.items():
-        version = get_current_version(engine, db_name)
+        stamp = stamps.get(db_name)
+        version = stamp["version"] if stamp else None
+        downloaded_at = stamp["downloaded_at"] if stamp else None
+        db_info = DATABASES.get(db_name)
+        display_name = db_info.display_name if db_info else db_name
+
         result.append(
             DatabaseStatus(
                 db_name=db_name,
+                display_name=display_name,
                 current_version=version,
+                version_display=format_version_display(version, db_name),
+                downloaded_at=downloaded_at,
                 auto_update=auto_update,
+                update_available=False,  # Set by GET /updates/check
             )
         )
     return result

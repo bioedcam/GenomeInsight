@@ -45,7 +45,9 @@ from backend.db.update_manager import (
     check_all_updates,
     check_clinvar_update,
     dismiss_prompt,
+    format_version_display,
     get_active_prompts,
+    get_all_version_stamps,
     get_current_version,
     get_update_history,
     parse_time_window,
@@ -690,3 +692,84 @@ class TestUpdateAPI:
         data = resp.json()
         assert data["db_name"] == "clinvar"
         assert data["job_id"] == "test-job-id"
+
+    def test_status_returns_enhanced_fields(self, update_client):
+        """P4-17: status returns display_name, version_display, downloaded_at."""
+        resp = update_client.get("/api/updates/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+        first = data[0]
+        assert "display_name" in first
+        assert "version_display" in first
+        assert "downloaded_at" in first
+        assert "update_available" in first
+        assert isinstance(first["update_available"], bool)
+
+        # Check that display_name comes from database_registry
+        clinvar = next((d for d in data if d["db_name"] == "clinvar"), None)
+        assert clinvar is not None
+        assert clinvar["display_name"] == "ClinVar"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Version stamping tests (P4-17 / T4-18)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestVersionStamping:
+    """T4-18: Version stamps correctly recorded after each database load/update."""
+
+    def test_get_all_version_stamps_empty(self, reference_engine):
+        stamps = get_all_version_stamps(reference_engine)
+        assert stamps == []
+
+    def test_get_all_version_stamps_after_record(self, reference_engine):
+        _record_version(reference_engine, "clinvar", "20260315", 30_000_000)
+        _record_version(reference_engine, "gnomad", "2.1.1", 2_000_000_000)
+
+        stamps = get_all_version_stamps(reference_engine)
+        assert len(stamps) == 2
+
+        by_name = {s["db_name"]: s for s in stamps}
+        assert by_name["clinvar"]["version"] == "20260315"
+        assert by_name["clinvar"]["file_size_bytes"] == 30_000_000
+        assert by_name["clinvar"]["downloaded_at"] is not None
+        assert by_name["gnomad"]["version"] == "2.1.1"
+
+    def test_version_stamp_updated_on_second_record(self, reference_engine):
+        _record_version(reference_engine, "clinvar", "20260301", 29_000_000)
+        _record_version(reference_engine, "clinvar", "20260315", 30_000_000)
+
+        stamps = get_all_version_stamps(reference_engine)
+        assert len(stamps) == 1
+        assert stamps[0]["version"] == "20260315"
+        assert stamps[0]["file_size_bytes"] == 30_000_000
+
+    def test_format_version_display_clinvar_date(self):
+        assert format_version_display("20260315", "clinvar") == "Mar 2026"
+        assert format_version_display("20260101", "clinvar") == "Jan 2026"
+        assert format_version_display("20251201", "clinvar") == "Dec 2025"
+
+    def test_format_version_display_non_date(self):
+        assert format_version_display("2.1.1", "gnomad") == "2.1.1"
+        assert format_version_display("4.6a", "dbnsfp") == "4.6a"
+        assert format_version_display("110", "vep_bundle") == "110"
+
+    def test_format_version_display_none(self):
+        assert format_version_display(None, "clinvar") is None
+
+    def test_stamps_have_downloaded_at_as_iso(self, reference_engine):
+        _record_version(reference_engine, "clinvar", "20260315", 1000)
+
+        stamps = get_all_version_stamps(reference_engine)
+        assert len(stamps) == 1
+        # downloaded_at should be an ISO-format string
+        dt_str = stamps[0]["downloaded_at"]
+        assert dt_str is not None
+        # Verify it parses
+        from datetime import datetime
+
+        datetime.fromisoformat(dt_str)
