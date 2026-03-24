@@ -18,7 +18,7 @@ import logging
 
 import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.db.connection import get_registry
 from backend.db.tables import samples, tags, variant_tags
@@ -47,7 +47,7 @@ class TagCreate(BaseModel):
 
     sample_id: int
     name: str
-    color: str = "#6B7280"
+    color: str = Field(default="#6B7280", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class TagUpdate(BaseModel):
@@ -55,7 +55,7 @@ class TagUpdate(BaseModel):
 
     sample_id: int
     name: str | None = None
-    color: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class VariantTagAction(BaseModel):

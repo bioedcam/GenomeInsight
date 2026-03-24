@@ -22,7 +22,7 @@ export function useVariantTags(sampleId: number | null, rsid: string | null) {
   return useQuery({
     queryKey: ["variant-tags", sampleId, rsid],
     queryFn: async (): Promise<Tag[]> => {
-      const res = await fetch(`/api/tags/variant/${rsid}?sample_id=${sampleId}`)
+      const res = await fetch(`/api/tags/variant/${encodeURIComponent(rsid!)}?sample_id=${sampleId}`)
       if (!res.ok) throw new Error("Failed to fetch variant tags")
       return res.json()
     },
@@ -117,10 +117,12 @@ export function useRemoveVariantTag(sampleId: number | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (data: { rsid: string; tag_id: number }) => {
-      const res = await fetch(
-        `/api/tags/variant?sample_id=${sampleId}&rsid=${data.rsid}&tag_id=${data.tag_id}`,
-        { method: "DELETE" },
-      )
+      const params = new URLSearchParams({
+        sample_id: String(sampleId),
+        rsid: data.rsid,
+        tag_id: String(data.tag_id),
+      })
+      const res = await fetch(`/api/tags/variant?${params}`, { method: "DELETE" })
       if (!res.ok) throw new Error("Failed to remove tag")
       return res.json()
     },

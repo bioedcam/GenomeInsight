@@ -208,6 +208,37 @@ class TestUpdateTag:
         )
         assert resp.status_code == 403
 
+    def test_update_tag_duplicate_name_409(self, tags_client: TestClient) -> None:
+        """PUT /api/tags/{id} with conflicting name returns 409."""
+        # Create two custom tags
+        resp1 = tags_client.post(
+            "/api/tags",
+            json={"sample_id": 1, "name": "Tag Alpha"},
+        )
+        assert resp1.status_code == 201
+
+        resp2 = tags_client.post(
+            "/api/tags",
+            json={"sample_id": 1, "name": "Tag Beta"},
+        )
+        assert resp2.status_code == 201
+        beta_id = resp2.json()["id"]
+
+        # Try to rename Beta to Alpha
+        resp = tags_client.put(
+            f"/api/tags/{beta_id}",
+            json={"sample_id": 1, "name": "Tag Alpha"},
+        )
+        assert resp.status_code == 409
+
+    def test_update_nonexistent_tag_404(self, tags_client: TestClient) -> None:
+        """PUT /api/tags/{id} on nonexistent tag returns 404."""
+        resp = tags_client.put(
+            "/api/tags/99999",
+            json={"sample_id": 1, "name": "Ghost"},
+        )
+        assert resp.status_code == 404
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # DELETE /api/tags/{id} — Delete tag
@@ -304,10 +335,11 @@ class TestVariantTagging:
         tag_id = resp.json()[0]["id"]
 
         # Add tag first
-        tags_client.post(
+        add_resp = tags_client.post(
             "/api/tags/variant",
             json={"sample_id": 1, "rsid": "rs429358", "tag_id": tag_id},
         )
+        assert add_resp.status_code == 200
 
         # Remove it
         resp = tags_client.delete(
@@ -331,14 +363,16 @@ class TestVariantTagging:
         tag_id_2 = all_tags[1]["id"]
 
         # Add both tags to a variant
-        tags_client.post(
+        resp1 = tags_client.post(
             "/api/tags/variant",
             json={"sample_id": 1, "rsid": "rs7412", "tag_id": tag_id_1},
         )
-        tags_client.post(
+        assert resp1.status_code == 200
+        resp2 = tags_client.post(
             "/api/tags/variant",
             json={"sample_id": 1, "rsid": "rs7412", "tag_id": tag_id_2},
         )
+        assert resp2.status_code == 200
 
         # Get tags for the variant
         resp = tags_client.get("/api/tags/variant/rs7412", params={"sample_id": 1})
