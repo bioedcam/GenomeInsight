@@ -23,7 +23,7 @@ export interface VariantRow {
   annotation_coverage: number | null
   evidence_conflict: boolean | null
   ensemble_pathogenic: boolean | null
-  tags: string[] | null
+  tags?: string[] | null
 }
 
 export interface VariantPage {
