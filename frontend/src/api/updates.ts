@@ -37,13 +37,19 @@ export const UPDATE_CHECK_KEY = ['updates', 'check'] as const
 
 async function fetchDatabaseStatuses(): Promise<DatabaseStatus[]> {
   const res = await fetch('/api/updates/status')
-  if (!res.ok) throw new Error(`Database status fetch failed: ${res.status}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Database status fetch failed: ${res.status} ${text}`.trim())
+  }
   return res.json()
 }
 
 async function fetchUpdateCheck(): Promise<UpdateCheckResult> {
   const res = await fetch('/api/updates/check')
-  if (!res.ok) throw new Error(`Update check failed: ${res.status}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Update check failed: ${res.status} ${text}`.trim())
+  }
   return res.json()
 }
 

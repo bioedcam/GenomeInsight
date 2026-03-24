@@ -52,11 +52,9 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
     .map((s) => `${s.display_name} ${s.version_display}`)
 
   // Count current vs update-available
-  const currentCount = totalTracked > 0
-    ? statuses!.filter(
-        (s) => s.current_version != null && !updatesAvailable.has(s.db_name),
-      ).length
-    : 0
+  const currentCount = statuses?.filter(
+    (s) => s.current_version != null && !updatesAvailable.has(s.db_name),
+  ).length ?? 0
   const updateCount = updatesAvailable.size
 
   return (
@@ -108,8 +106,8 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
 
         {/* Dot indicators: ●●●○ */}
         <span className="flex items-center gap-0.5" aria-hidden="true">
-          {totalTracked > 0 ? (
-            statuses!.map((s) => {
+          {statuses && statuses.length > 0 ? (
+            statuses.map((s) => {
               const hasVersion = s.current_version != null
               const hasUpdate = updatesAvailable.has(s.db_name)
               // Filled = installed & current, Hollow = update available or not installed

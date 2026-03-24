@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.db.connection import get_registry
+from backend.db.database_registry import DATABASES
 from backend.db.update_manager import (
     AUTO_UPDATE_DEFAULTS,
     check_all_updates,
@@ -162,9 +163,11 @@ async def list_update_history(
 
 @router.get("/status", response_model=list[DatabaseStatus])
 async def get_database_statuses() -> list[DatabaseStatus]:
-    """Get current version, display info, and update availability for all databases."""
-    from backend.db.database_registry import DATABASES
+    """Get current version and display info for all tracked databases.
 
+    Note: ``update_available`` is always False here. Call
+    ``GET /updates/check`` for actual update availability (network call).
+    """
     registry = get_registry()
     engine = registry.reference_engine
 

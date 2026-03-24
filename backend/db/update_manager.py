@@ -182,17 +182,20 @@ def get_all_version_stamps(engine: Engine) -> list[dict]:
     ]
 
 
+# Databases that use YYYYMMDD date-based versioning.
+DATE_VERSIONED_DATABASES: set[str] = {"clinvar"}
+
+
 def format_version_display(version: str | None, db_name: str) -> str | None:
     """Format a version string for display in the status bar.
 
-    ClinVar versions are YYYYMMDD → "Mar 2026".
+    Date-versioned databases (YYYYMMDD) are formatted as "Mar 2026".
     Other versions are returned as-is.
     """
     if version is None:
         return None
 
-    # ClinVar and similar date-based versions (YYYYMMDD)
-    if db_name in ("clinvar",) and len(version) == 8 and version.isdigit():
+    if db_name in DATE_VERSIONED_DATABASES and len(version) == 8 and version.isdigit():
         try:
             dt = datetime.strptime(version, "%Y%m%d")
             return dt.strftime("%b %Y")
