@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
 import { useFindingsSummary } from "@/api/findings"
-import { useGenerateReport, fetchReportPreview } from "@/api/reports"
+import { useGenerateReport, useExportFhir, fetchReportPreview } from "@/api/reports"
 import EvidenceStars from "@/components/ui/EvidenceStars"
 import type { FindingSummaryItem } from "@/types/findings"
 
@@ -80,6 +80,7 @@ export default function ReportBuilder() {
 
   const summaryQuery = useFindingsSummary(sampleId)
   const generateMutation = useGenerateReport()
+  const fhirMutation = useExportFhir()
 
   // Build ordered list of modules that have findings
   const availableModules: FindingSummaryItem[] = useMemo(() => {
@@ -163,6 +164,25 @@ export default function ReportBuilder() {
       },
     )
   }, [sampleId, selectedModules, selectedCount, reportTitle, generateMutation])
+
+  const handleFhirExport = useCallback(() => {
+    if (!sampleId) return
+    fhirMutation.mutate(
+      { sample_id: sampleId, include_all: true },
+      {
+        onSuccess: (blob) => {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = `genomeinsight_${sampleId}.fhir.json`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+        },
+      },
+    )
+  }, [sampleId, fhirMutation])
 
   const closePreview = useCallback(() => {
     setPreviewHtml(null)
@@ -416,7 +436,37 @@ export default function ReportBuilder() {
                 {generateMutation.isPending ? "Generating…" : "Download PDF"}
               </button>
 
+              {/* FHIR export button */}
+              <button
+                type="button"
+                onClick={handleFhirExport}
+                disabled={fhirMutation.isPending}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium transition-colors",
+                  fhirMutation.isPending
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:bg-accent",
+                )}
+                aria-label="Export FHIR R4 Bundle"
+              >
+                {fhirMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {fhirMutation.isPending ? "Exporting…" : "Export FHIR R4"}
+              </button>
+
               {/* Error messages */}
+              {fhirMutation.isError && (
+                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                  <AlertCircle className="h-3 w-3 inline-block mr-1" />
+                  {fhirMutation.error instanceof Error
+                    ? fhirMutation.error.message
+                    : "FHIR export failed"}
+                </div>
+              )}
+
               {generateMutation.isError && (
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
                   <AlertCircle className="h-3 w-3 inline-block mr-1" />
