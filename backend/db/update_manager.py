@@ -153,6 +153,58 @@ def get_current_version(engine: Engine, db_name: str) -> str | None:
     return row.version if row else None
 
 
+def get_all_version_stamps(engine: Engine) -> list[dict]:
+    """Return all version stamps from the database_versions table.
+
+    Each dict includes db_name, version, downloaded_at, file_size_bytes,
+    and checksum_sha256.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(
+                database_versions.c.db_name,
+                database_versions.c.version,
+                database_versions.c.downloaded_at,
+                database_versions.c.file_size_bytes,
+                database_versions.c.checksum_sha256,
+            )
+        ).fetchall()
+
+    return [
+        {
+            "db_name": row.db_name,
+            "version": row.version,
+            "downloaded_at": row.downloaded_at.isoformat() if row.downloaded_at else None,
+            "file_size_bytes": row.file_size_bytes,
+            "checksum_sha256": row.checksum_sha256,
+        }
+        for row in rows
+    ]
+
+
+# Databases that use YYYYMMDD date-based versioning.
+DATE_VERSIONED_DATABASES: set[str] = {"clinvar"}
+
+
+def format_version_display(version: str | None, db_name: str) -> str | None:
+    """Format a version string for display in the status bar.
+
+    Date-versioned databases (YYYYMMDD) are formatted as "Mar 2026".
+    Other versions are returned as-is.
+    """
+    if version is None:
+        return None
+
+    if db_name in DATE_VERSIONED_DATABASES and len(version) == 8 and version.isdigit():
+        try:
+            dt = datetime.strptime(version, "%Y%m%d")
+            return dt.strftime("%b %Y")
+        except ValueError:
+            return version
+
+    return version
+
+
 def check_clinvar_update(
     reference_engine: Engine,
     *,
