@@ -43,7 +43,6 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
 
   // Databases with a version stamp (installed)
   const installed = statuses?.filter((s) => s.current_version != null) ?? []
-  const totalTracked = statuses?.length ?? 0
 
   // Pick the top 2 DBs to show version strings (ClinVar + one more)
   const versionLabels = installed
