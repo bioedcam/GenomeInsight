@@ -142,6 +142,7 @@ def _add_missing_columns(engine: sa.Engine, from_version: int) -> bool:
 
     if from_version < 6:
         # P4-19: Add GRCh38 liftover columns to annotated_variants
+        added_liftover = False
         inspector = sa.inspect(engine)
         if "annotated_variants" in inspector.get_table_names():
             existing_cols = {c["name"] for c in inspector.get_columns("annotated_variants")}
@@ -150,20 +151,21 @@ def _add_missing_columns(engine: sa.Engine, from_version: int) -> bool:
                     conn.execute(
                         sa.text("ALTER TABLE annotated_variants ADD COLUMN chrom_grch38 TEXT")
                     )
-                    added = True
+                    added_liftover = True
                 if "pos_grch38" not in existing_cols:
                     conn.execute(
                         sa.text(
                             "ALTER TABLE annotated_variants ADD COLUMN pos_grch38 INTEGER"
                         )
                     )
-                    added = True
-            if added:
+                    added_liftover = True
+            if added_liftover:
                 logger.info(
                     "liftover_columns_added",
                     columns=["chrom_grch38", "pos_grch38"],
                     from_version=from_version,
                 )
+                added = True
 
     return added
 

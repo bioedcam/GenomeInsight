@@ -29,11 +29,10 @@ _liftover: LiftOver | None = None
 def _get_liftover() -> LiftOver:
     """Return (or lazily initialise) the hg19→hg38 LiftOver instance."""
     global _liftover
-    if _liftover is None:
-        with _lock:
-            if _liftover is None:
-                logger.info("liftover_init", extra={"from": "hg19", "to": "hg38"})
-                _liftover = LiftOver("hg19", "hg38")
+    with _lock:
+        if _liftover is None:
+            logger.info("liftover_init", extra={"from": "hg19", "to": "hg38"})
+            _liftover = LiftOver("hg19", "hg38")
     return _liftover
 
 

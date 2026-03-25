@@ -41,6 +41,7 @@ class TestConvertCoordinate:
         assert result is not None
         chrom, pos = result
         assert chrom == "19"
+        assert pos == 44404662
 
     def test_x_chromosome(self) -> None:
         """X chromosome coordinates lift correctly."""

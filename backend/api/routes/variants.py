@@ -297,6 +297,8 @@ def _row_to_variant(
             "annotation_coverage",
             "evidence_conflict",
             "ensemble_pathogenic",
+            "chrom_grch38",
+            "pos_grch38",
         ):
             data[field] = getattr(row, field, None)
 

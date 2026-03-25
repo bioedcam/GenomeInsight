@@ -4,7 +4,7 @@ Provides GRCh38 lifted coordinates for sample variants. Coordinates are
 computed on demand and cached in the ``annotated_variants`` table's
 ``chrom_grch38`` / ``pos_grch38`` columns.
 
-GET  /api/liftover/{sample_id}          — Batch liftover for a sample
+POST /api/liftover/{sample_id}          — Batch liftover for a sample
 GET  /api/liftover/convert              — Convert a single coordinate
 """
 
@@ -51,7 +51,7 @@ class BatchLiftoverStats(BaseModel):
 
 
 @router.get("/convert", response_model=SingleLiftoverResult)
-async def convert_single(
+def convert_single(
     chrom: str = Query(..., description="Chromosome (e.g. '1', 'X', 'MT')"),
     pos: int = Query(..., gt=0, description="1-based GRCh37 position"),
 ) -> SingleLiftoverResult:
@@ -73,7 +73,7 @@ async def convert_single(
 
 
 @router.post("/{sample_id}", response_model=BatchLiftoverStats)
-async def batch_liftover_sample(
+def batch_liftover_sample(
     sample_id: int,
 ) -> BatchLiftoverStats:
     """Compute and store GRCh38 coordinates for all annotated variants in a sample.
@@ -135,20 +135,28 @@ async def batch_liftover_sample(
     variants = [(r.rsid, r.chrom, r.pos) for r in rows]
     lift_results = batch_convert(variants)
 
-    # Write results back in batches
+    # Write results back using batched executemany
     converted = 0
     failed = 0
-    with sample_engine.begin() as conn:
-        for rsid, result in lift_results.items():
-            if result is not None:
-                conn.execute(
-                    annotated_variants.update()
-                    .where(annotated_variants.c.rsid == rsid)
-                    .values(chrom_grch38=result[0], pos_grch38=result[1])
-                )
-                converted += 1
-            else:
-                failed += 1
+    updates: list[dict[str, str | int]] = []
+    for rsid, result in lift_results.items():
+        if result is not None:
+            updates.append({"_rsid": rsid, "chrom_grch38": result[0], "pos_grch38": result[1]})
+            converted += 1
+        else:
+            failed += 1
+
+    if updates:
+        stmt = (
+            annotated_variants.update()
+            .where(annotated_variants.c.rsid == sa.bindparam("_rsid"))
+            .values(
+                chrom_grch38=sa.bindparam("chrom_grch38"),
+                pos_grch38=sa.bindparam("pos_grch38"),
+            )
+        )
+        with sample_engine.begin() as conn:
+            conn.execute(stmt, updates)
 
     with sample_engine.connect() as conn:
         total = conn.execute(
