@@ -104,11 +104,14 @@ def batch_liftover_sample(
                 detail="Sample database schema needs upgrade for liftover columns",
             )
 
-        already_lifted = conn.execute(
-            sa.select(sa.func.count()).select_from(annotated_variants).where(
-                annotated_variants.c.chrom_grch38.isnot(None)
-            )
-        ).scalar() or 0
+        already_lifted = (
+            conn.execute(
+                sa.select(sa.func.count())
+                .select_from(annotated_variants)
+                .where(annotated_variants.c.chrom_grch38.isnot(None))
+            ).scalar()
+            or 0
+        )
 
         rows = conn.execute(
             sa.select(
@@ -121,9 +124,10 @@ def batch_liftover_sample(
     if not rows:
         # Count total to report
         with sample_engine.connect() as conn:
-            total = conn.execute(
-                sa.select(sa.func.count()).select_from(annotated_variants)
-            ).scalar() or 0
+            total = (
+                conn.execute(sa.select(sa.func.count()).select_from(annotated_variants)).scalar()
+                or 0
+            )
         return BatchLiftoverStats(
             total=total,
             converted=0,
@@ -159,9 +163,9 @@ def batch_liftover_sample(
             conn.execute(stmt, updates)
 
     with sample_engine.connect() as conn:
-        total = conn.execute(
-            sa.select(sa.func.count()).select_from(annotated_variants)
-        ).scalar() or 0
+        total = (
+            conn.execute(sa.select(sa.func.count()).select_from(annotated_variants)).scalar() or 0
+        )
 
     return BatchLiftoverStats(
         total=total,
