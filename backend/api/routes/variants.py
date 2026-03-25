@@ -99,6 +99,9 @@ class VariantRow(BaseModel):
     ancestry_matched_population: str | None = None
     # P4-12b: Variant tags
     tags: list[str] | None = None
+    # P4-19: GRCh38 liftover coordinates
+    chrom_grch38: str | None = None
+    pos_grch38: int | None = None
 
 
 class VariantPage(BaseModel):

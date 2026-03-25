@@ -397,3 +397,41 @@ class TestSchemaMigration:
         # Second call should detect version is current and return False
         updated = ensure_sample_schema_current(engine)
         assert updated is False
+
+    def _create_v5_sample_db(self, db_path: Path) -> sa.Engine:
+        """Create a sample DB at v5 (has findings cross-links but no liftover columns)."""
+        engine = sa.create_engine(f"sqlite:///{db_path}")
+        with engine.connect() as conn:
+            conn.execute(sa.text("PRAGMA journal_mode=WAL"))
+            conn.execute(
+                sa.text(
+                    """CREATE TABLE annotated_variants (
+                        rsid TEXT PRIMARY KEY,
+                        chrom TEXT NOT NULL,
+                        pos INTEGER NOT NULL,
+                        ref TEXT,
+                        alt TEXT,
+                        genotype TEXT,
+                        annotation_coverage INTEGER
+                    )"""
+                )
+            )
+            conn.execute(sa.text("PRAGMA user_version = 5"))
+            conn.commit()
+        return engine
+
+    def test_upgrade_v5_adds_liftover_columns(self, tmp_path):
+        """v5 → v6 adds chrom_grch38 and pos_grch38 columns to annotated_variants."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v5_sample_db(db_path)
+
+        cols_before = _get_columns(db_path, "annotated_variants")
+        assert "chrom_grch38" not in cols_before
+        assert "pos_grch38" not in cols_before
+
+        updated = ensure_sample_schema_current(engine)
+        assert updated is True
+
+        cols_after = _get_columns(db_path, "annotated_variants")
+        assert "chrom_grch38" in cols_after
+        assert "pos_grch38" in cols_after

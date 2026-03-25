@@ -153,6 +153,10 @@ class VariantDetailResponse(BaseModel):
     ensemble_pathogenic: bool | None = None
     annotation_coverage: int | None = None
 
+    # P4-19: GRCh38 liftover coordinates
+    chrom_grch38: str | None = None
+    pos_grch38: int | None = None
+
     # ── Extended detail fields (P2-20) ────────────────────────────────
     transcripts: list[TranscriptAnnotation] = []
     gene_phenotypes: list[GenePhenotypeRecord] = []
