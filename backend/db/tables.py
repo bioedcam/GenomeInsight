@@ -515,6 +515,9 @@ annotated_variants = sa.Table(
     sa.Column("ensemble_pathogenic", sa.Boolean, server_default=sa.text("0")),
     # Annotation coverage bitmask (6-bit: VEP|ClinVar|gnomAD|dbNSFP|CPIC|GWAS)
     sa.Column("annotation_coverage", sa.Integer),
+    # GRCh38 liftover (P4-19) — parallel coordinates, NULL if unmapped
+    sa.Column("chrom_grch38", sa.Text, comment="GRCh38 chromosome (lifted from GRCh37)"),
+    sa.Column("pos_grch38", sa.Integer, comment="GRCh38 position, 1-based (lifted from GRCh37)"),
 )
 
 sa.Index(

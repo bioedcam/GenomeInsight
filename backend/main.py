@@ -37,6 +37,7 @@ from backend.api.routes.genes import cache_router as uniprot_cache_router
 from backend.api.routes.genes import router as genes_router
 from backend.api.routes.igv_tracks import router as igv_tracks_router
 from backend.api.routes.ingest import router as ingest_router
+from backend.api.routes.liftover import router as liftover_router
 from backend.api.routes.methylation import router as methylation_router
 from backend.api.routes.nutrigenomics import router as nutrigenomics_router
 from backend.api.routes.overlays import router as overlays_router
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     api_router.include_router(uniprot_cache_router)
     api_router.include_router(igv_tracks_router)
     api_router.include_router(ingest_router)
+    api_router.include_router(liftover_router)
     api_router.include_router(methylation_router)
     api_router.include_router(nutrigenomics_router)
     api_router.include_router(overlays_router)
