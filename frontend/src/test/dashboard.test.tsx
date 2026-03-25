@@ -74,11 +74,39 @@ function mockQCStatsResponse() {
   }
 }
 
+function mockUpdateStatusResponse(statuses?: unknown[]) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => statuses ?? [
+      { db_name: 'clinvar', display_name: 'ClinVar', current_version: '20260315', version_display: 'Mar 2026', downloaded_at: '2026-03-15T00:00:00', auto_update: true, update_available: false },
+      { db_name: 'gnomad', display_name: 'gnomAD', current_version: '2.1.1', version_display: '2.1.1', downloaded_at: '2026-03-01T00:00:00', auto_update: false, update_available: false },
+      { db_name: 'dbnsfp', display_name: 'dbNSFP', current_version: null, version_display: null, downloaded_at: null, auto_update: false, update_available: false },
+      { db_name: 'vep_bundle', display_name: 'VEP Bundle', current_version: null, version_display: null, downloaded_at: null, auto_update: false, update_available: false },
+    ],
+  }
+}
+
+function mockUpdateCheckResponse(available?: unknown[]) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      available: available ?? [],
+      up_to_date: ['clinvar', 'gnomad'],
+      errors: [],
+      checked_at: new Date().toISOString(),
+    }),
+  }
+}
+
 function setupFetchMocks(options: {
   samples?: unknown[]
   variantCount?: number
   dbDownloaded?: number
   dbTotal?: number
+  updateStatuses?: unknown[]
+  updatesAvailable?: unknown[]
 } = {}) {
   mockFetch.mockImplementation((url: string) => {
     if (url.includes('/api/samples')) {
@@ -89,6 +117,12 @@ function setupFetchMocks(options: {
     }
     if (url.includes('/api/variants/count')) {
       return Promise.resolve(mockVariantCountResponse(options.variantCount ?? 623841))
+    }
+    if (url.includes('/api/updates/status')) {
+      return Promise.resolve(mockUpdateStatusResponse(options.updateStatuses))
+    }
+    if (url.includes('/api/updates/check')) {
+      return Promise.resolve(mockUpdateCheckResponse(options.updatesAvailable))
     }
     if (url.includes('/api/databases')) {
       return Promise.resolve(mockDatabaseListResponse(
@@ -164,11 +198,16 @@ describe('StatusBar', () => {
     expect(dbButton).toBeInTheDocument()
   })
 
-  it('shows database dots based on download status', async () => {
-    setupFetchMocks({ dbDownloaded: 2, dbTotal: 4 })
+  it('shows database version dots based on update status', async () => {
+    setupFetchMocks({
+      updateStatuses: [
+        { db_name: 'clinvar', display_name: 'ClinVar', current_version: '20260315', version_display: 'Mar 2026', downloaded_at: '2026-03-15T00:00:00', auto_update: true, update_available: false },
+        { db_name: 'gnomad', display_name: 'gnomAD', current_version: '2.1.1', version_display: '2.1.1', downloaded_at: '2026-03-01T00:00:00', auto_update: false, update_available: false },
+      ],
+    })
     render(<StatusBar sample={SAMPLE} variantCount={100} />)
-    // Wait for database list to load
-    const dbButton = await screen.findByRole('button', { name: /2 of 4/i })
+    // Wait for update status to load — aria-label reflects current/update counts
+    const dbButton = await screen.findByRole('button', { name: /2 current/i })
     expect(dbButton).toBeInTheDocument()
   })
 })
