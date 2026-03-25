@@ -154,9 +154,7 @@ def _add_missing_columns(engine: sa.Engine, from_version: int) -> bool:
                     added_liftover = True
                 if "pos_grch38" not in existing_cols:
                     conn.execute(
-                        sa.text(
-                            "ALTER TABLE annotated_variants ADD COLUMN pos_grch38 INTEGER"
-                        )
+                        sa.text("ALTER TABLE annotated_variants ADD COLUMN pos_grch38 INTEGER")
                     )
                     added_liftover = True
             if added_liftover:
