@@ -61,7 +61,7 @@ export default function App() {
         <Route path="/query-builder" element={<QueryBuilderView />} />
         <Route path="/overlays" element={<OverlaysView />} />
         <Route path="/reports" element={<ReportBuilder />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/*" element={<Settings />} />
       </Route>
     </Routes>
   )

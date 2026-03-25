@@ -86,7 +86,7 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
       {/* Right: Database version stamps + dots */}
       <button
         type="button"
-        onClick={() => navigate('/settings')}
+        onClick={() => navigate('/settings/updates')}
         className={cn(
           'flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded',
