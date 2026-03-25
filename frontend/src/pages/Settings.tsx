@@ -90,7 +90,7 @@ export default function Settings() {
         {/* Content area */}
         <div className="flex-1 min-w-0">
           <Routes>
-            <Route index element={<Navigate to="/settings/updates" replace />} />
+            <Route index element={<Navigate to="updates" replace />} />
             <Route path="general" element={<GeneralPlaceholder />} />
             <Route path="updates" element={<UpdateManager />} />
             <Route path="health" element={<HealthPlaceholder />} />

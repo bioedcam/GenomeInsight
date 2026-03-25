@@ -13,6 +13,7 @@ import {
   useReannotationPrompts,
   useTriggerUpdate,
   useDismissPrompt,
+  useToggleAutoUpdate,
   type DatabaseStatus,
   type UpdateAvailable,
   type UpdateHistoryEntry,
@@ -33,7 +34,8 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number | null): string {
-  if (bytes == null || bytes === 0) return '—'
+  if (bytes == null) return '—'
+  if (bytes === 0) return '0 B'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -105,7 +107,7 @@ function ReannotationBanner({ prompts }: { prompts: ReannotationPrompt[] }) {
                 key={p.id}
                 type="button"
                 onClick={() => dismissMutation.mutate(p.id)}
-                disabled={dismissMutation.isPending}
+                disabled={dismissMutation.isPending && dismissMutation.variables === p.id}
                 className={cn(
                   'inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium',
                   'border border-amber-400 dark:border-amber-600',
@@ -132,7 +134,9 @@ interface DatabaseRowProps {
   updateInfo: UpdateAvailable | undefined
   checkedAt: string | null
   onTriggerUpdate: (dbName: string) => void
+  onToggleAutoUpdate: (dbName: string, enabled: boolean) => void
   isUpdating: boolean
+  isTogglingAutoUpdate: boolean
 }
 
 function DatabaseRow({
@@ -140,7 +144,9 @@ function DatabaseRow({
   updateInfo,
   checkedAt,
   onTriggerUpdate,
+  onToggleAutoUpdate,
   isUpdating,
+  isTogglingAutoUpdate,
 }: DatabaseRowProps) {
   const hasUpdate = status.update_available || updateInfo != null
 
@@ -213,9 +219,12 @@ function DatabaseRow({
           role="switch"
           aria-checked={status.auto_update}
           aria-label={`Auto-update ${status.display_name}`}
+          onClick={() => onToggleAutoUpdate(status.db_name, !status.auto_update)}
+          disabled={isTogglingAutoUpdate}
           className={cn(
             'relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
             status.auto_update ? 'bg-primary' : 'bg-muted-foreground/30',
           )}
         >
@@ -396,6 +405,7 @@ export default function UpdateManager() {
   const { data: updateCheck, isLoading: checkLoading, refetch: recheckUpdates } = useUpdateCheck(true)
   const { data: prompts } = useReannotationPrompts()
   const triggerMutation = useTriggerUpdate()
+  const autoUpdateMutation = useToggleAutoUpdate()
 
   const updatesMap = new Map(
     updateCheck?.available?.map((u) => [u.db_name, u]) ?? [],
@@ -506,9 +516,16 @@ export default function UpdateManager() {
                   updateInfo={updatesMap.get(s.db_name)}
                   checkedAt={updateCheck?.checked_at ?? null}
                   onTriggerUpdate={(dbName) => triggerMutation.mutate(dbName)}
+                  onToggleAutoUpdate={(dbName, enabled) =>
+                    autoUpdateMutation.mutate({ dbName, enabled })
+                  }
                   isUpdating={
                     triggerMutation.isPending &&
                     triggerMutation.variables === s.db_name
+                  }
+                  isTogglingAutoUpdate={
+                    autoUpdateMutation.isPending &&
+                    autoUpdateMutation.variables?.dbName === s.db_name
                   }
                 />
               ))

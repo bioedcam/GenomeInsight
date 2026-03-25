@@ -126,6 +126,18 @@ async function dismissPrompt(promptId: number): Promise<void> {
   }
 }
 
+async function toggleAutoUpdate(dbName: string, enabled: boolean): Promise<void> {
+  const res = await fetch('/api/updates/auto-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ db_name: dbName, enabled }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Toggle auto-update failed: ${res.status} ${text}`.trim())
+  }
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 
 /** Fetch per-DB version stamps and auto-update status. staleTime=1h. */
@@ -185,6 +197,18 @@ export function useDismissPrompt() {
     mutationFn: (promptId: number) => dismissPrompt(promptId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: REANNOTATION_PROMPTS_KEY })
+    },
+  })
+}
+
+/** Toggle auto-update for a database. Invalidates status cache on success. */
+export function useToggleAutoUpdate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ dbName, enabled }: { dbName: string; enabled: boolean }) =>
+      toggleAutoUpdate(dbName, enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: DB_STATUS_KEY })
     },
   })
 }

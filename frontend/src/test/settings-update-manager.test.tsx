@@ -11,10 +11,14 @@ import UpdateManager from '@/components/settings/UpdateManager'
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const mockFetch = vi.fn()
-globalThis.fetch = mockFetch
 
 beforeEach(() => {
   mockFetch.mockReset()
+  vi.stubGlobal('fetch', mockFetch)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 // ── Mock responses ───────────────────────────────────────────────────
@@ -103,9 +107,28 @@ function setupFetchMocks(options: {
   available?: unknown[]
   history?: unknown[]
   prompts?: unknown[]
+  triggerResponse?: unknown
+  autoUpdateResponse?: unknown
 } = {}) {
-  mockFetch.mockImplementation((url: string) => {
+  mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (typeof url === 'string') {
+      if (url.includes('/api/updates/trigger') && init?.method === 'POST')
+        return Promise.resolve({
+          ok: true,
+          status: 202,
+          json: async () =>
+            options.triggerResponse ?? {
+              job_id: 'job-default',
+              db_name: 'unknown',
+              message: 'Update queued',
+            },
+        })
+      if (url.includes('/api/updates/auto-update') && init?.method === 'POST')
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => options.autoUpdateResponse ?? {},
+        })
       if (url.includes('/api/updates/status'))
         return Promise.resolve(mockStatusResponse(options.statuses))
       if (url.includes('/api/updates/check'))
@@ -458,40 +481,11 @@ describe('Trigger Update', () => {
           release_date: '2026-03-20',
         },
       ],
-    })
-
-    // Also mock the trigger response
-    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
-      if (typeof url === 'string') {
-        if (url.includes('/api/updates/trigger') && init?.method === 'POST')
-          return Promise.resolve({
-            ok: true,
-            status: 202,
-            json: async () => ({
-              job_id: 'job-123',
-              db_name: 'clinvar',
-              message: 'Update queued for clinvar',
-            }),
-          })
-        if (url.includes('/api/updates/status'))
-          return Promise.resolve(mockStatusResponse())
-        if (url.includes('/api/updates/check'))
-          return Promise.resolve(
-            mockCheckResponse([
-              {
-                db_name: 'clinvar',
-                latest_version: '20260320',
-                download_size_bytes: 5242880,
-                release_date: '2026-03-20',
-              },
-            ]),
-          )
-        if (url.includes('/api/updates/history'))
-          return Promise.resolve(mockHistoryResponse([]))
-        if (url.includes('/api/updates/prompts'))
-          return Promise.resolve(mockPromptsResponse([]))
-      }
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+      triggerResponse: {
+        job_id: 'job-123',
+        db_name: 'clinvar',
+        message: 'Update queued for clinvar',
+      },
     })
 
     render(<UpdateManager />, { wrapper: createWrapper() })
