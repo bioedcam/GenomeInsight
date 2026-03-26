@@ -1,0 +1,84 @@
+"""Nuclear Delete API endpoint (P4-21).
+
+Single operation that wipes ALL data — all per-sample SQLite databases,
+reference.db, vep_bundle.db, gnomad_af.db, dbnsfp.db, cached downloads,
+literature cache. Full reset to fresh install / setup wizard state.
+
+Removes the entire contents of the configured data directory
+(``~/.genomeinsight/`` by default).
+
+    DELETE /api/data/nuclear — Wipe all data and return to setup wizard
+"""
+
+from __future__ import annotations
+
+import logging
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from backend.db.connection import get_registry, reset_registry
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/data", tags=["data"])
+
+
+class NuclearDeleteResponse(BaseModel):
+    """Response after successful nuclear delete."""
+
+    deleted: bool
+    message: str
+
+
+def _remove_sqlite_files(path: Path) -> None:
+    """Remove a SQLite database file and its WAL/SHM journals."""
+    path.unlink(missing_ok=True)
+    Path(f"{path}-wal").unlink(missing_ok=True)
+    Path(f"{path}-shm").unlink(missing_ok=True)
+
+
+@router.delete("/nuclear", response_model=NuclearDeleteResponse)
+async def nuclear_delete() -> NuclearDeleteResponse:
+    """Wipe ALL data and reset to fresh-install state.
+
+    Deletes every file inside the configured ``data_dir`` — sample databases,
+    reference databases, downloaded bundles, logs, caches, config, and the
+    disclaimer marker. After completion the application redirects to the
+    setup wizard on next page load.
+    """
+    registry = get_registry()
+    settings = registry.settings
+    data_dir = settings.data_dir
+
+    if not data_dir.exists():
+        raise HTTPException(status_code=404, detail="Data directory does not exist.")
+
+    try:
+        # 1. Dispose all cached SQLite engines so file handles are released
+        reset_registry()
+
+        # 2. Remove everything inside data_dir
+        for child in data_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+
+        # 3. Recreate the empty data_dir structure expected by lifespan
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Nuclear delete completed: all data wiped from %s", data_dir)
+    except Exception:
+        logger.exception("Nuclear delete failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Nuclear delete failed. Check server logs for details.",
+        )
+
+    return NuclearDeleteResponse(
+        deleted=True,
+        message="All data has been deleted. The application will return to the setup wizard.",
+    )
