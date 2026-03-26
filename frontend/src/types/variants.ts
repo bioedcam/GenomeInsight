@@ -23,6 +23,8 @@ export interface VariantRow {
   annotation_coverage: number | null
   evidence_conflict: boolean | null
   ensemble_pathogenic: boolean | null
+  chrom_grch38: string | null
+  pos_grch38: number | null
   tags?: string[] | null
 }
 

@@ -66,6 +66,8 @@ function makeVariantPage(
       annotation_coverage: 0b111111,
       evidence_conflict: i === 0,
       ensemble_pathogenic: i === 0,
+      chrom_grch38: "1",
+      pos_grch38: startPos + i * 100 + 50000,
     })),
     next_cursor_chrom: hasMore ? "1" : null,
     next_cursor_pos: hasMore ? startPos + count * 100 : null,
@@ -317,6 +319,8 @@ describe("VariantTable", () => {
           annotation_coverage: null,
           evidence_conflict: null,
           ensemble_pathogenic: null,
+          chrom_grch38: null,
+          pos_grch38: null,
         },
       ],
       next_cursor_chrom: null,
@@ -725,6 +729,129 @@ describe("ColumnPresets (P1-15c)", () => {
     await waitFor(() => {
       const params = new URLSearchParams(window.location.search)
       expect(params.get("profile")).toBe("frequency")
+    })
+  })
+})
+
+describe("GRCh38 liftover toggle (P4-20)", () => {
+  it("renders GRCh38 toggle button in toolbar", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /show grch38 coordinates/i })).toBeInTheDocument()
+    })
+  })
+
+  it("GRCh38 columns are hidden by default", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText("Chr (GRCh38)")).not.toBeInTheDocument()
+    expect(screen.queryByText("Pos (GRCh38)")).not.toBeInTheDocument()
+  })
+
+  it("shows GRCh38 columns when toggle is activated", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    const toggle = screen.getByRole("button", { name: /show grch38 coordinates/i })
+    await user.click(toggle)
+
+    await waitFor(() => {
+      expect(screen.getByText("Chr (GRCh38)")).toBeInTheDocument()
+      expect(screen.getByText("Pos (GRCh38)")).toBeInTheDocument()
+    })
+    expect(toggle).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("hides GRCh38 columns when toggle is deactivated", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    const toggle = screen.getByRole("button", { name: /show grch38 coordinates/i })
+    await user.click(toggle)
+
+    await waitFor(() => {
+      expect(screen.getByText("Chr (GRCh38)")).toBeInTheDocument()
+    })
+
+    await user.click(toggle)
+
+    await waitFor(() => {
+      expect(screen.queryByText("Chr (GRCh38)")).not.toBeInTheDocument()
+      expect(screen.queryByText("Pos (GRCh38)")).not.toBeInTheDocument()
+    })
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("GRCh38 columns remain visible after switching presets", async () => {
+    const page = makeVariantPage(2)
+    setupFetchMock(page, makeCountResponse(2))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    // Enable GRCh38
+    await user.click(screen.getByRole("button", { name: /show grch38 coordinates/i }))
+    await waitFor(() => {
+      expect(screen.getByText("Chr (GRCh38)")).toBeInTheDocument()
+    })
+
+    // Switch to Clinical preset
+    await user.click(screen.getByRole("button", { name: "Column presets" }))
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument())
+    await user.click(screen.getByRole("menuitem", { name: /Clinical/ }))
+
+    // GRCh38 columns should still be visible
+    await waitFor(() => {
+      expect(screen.getByText("Chr (GRCh38)")).toBeInTheDocument()
+      expect(screen.getByText("Pos (GRCh38)")).toBeInTheDocument()
+    })
+  })
+
+  it("displays lifted coordinate values in GRCh38 columns", async () => {
+    const page = makeVariantPage(1)
+    setupFetchMock(page, makeCountResponse(1))
+
+    const user = userEvent.setup()
+    render(<VariantTable sampleId={1} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("rs100")).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole("button", { name: /show grch38 coordinates/i }))
+
+    await waitFor(() => {
+      // pos_grch38 = 1000 + 0 * 100 + 50000 = 51000
+      expect(screen.getByText("51,000")).toBeInTheDocument()
     })
   })
 })

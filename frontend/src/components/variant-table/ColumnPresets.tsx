@@ -9,6 +9,8 @@ import type { ColumnPreset } from "@/types/variants"
 const ALWAYS_VISIBLE = new Set(["evidence_conflict", "rsid", "chrom", "pos"])
 
 /** All toggleable column IDs in display order. */
+// GRCh38 columns (chrom_grch38, pos_grch38) are excluded — controlled by the
+// showGRCh38 toggle in VariantTable, not by preset selection.
 const ALL_COLUMN_IDS = [
   "genotype", "ref", "alt", "zygosity", "gene_symbol", "consequence",
   "clinvar_significance", "clinvar_review_stars", "gnomad_af_global",
