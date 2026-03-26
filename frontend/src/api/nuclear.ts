@@ -19,8 +19,9 @@ export function useNuclearDelete() {
       return await res.json()
     },
     onSuccess: () => {
-      // Invalidate all queries since everything is gone
       queryClient.clear()
+      // Redirect to setup wizard — app is in fresh-install state
+      window.location.href = "/"
     },
   })
 }

@@ -4,7 +4,7 @@
  * delete button. On success, redirects to the setup wizard.
  */
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
 import { useNuclearDelete } from "@/api/nuclear"
 
@@ -17,20 +17,15 @@ export default function NuclearDelete() {
 
   const isConfirmed = confirmText === CONFIRMATION_PHRASE
 
-  const handleDelete = useCallback(() => {
+  function handleDelete() {
     if (!isConfirmed) return
-    nuclearDelete.mutate(undefined, {
-      onSuccess: () => {
-        // Redirect to setup wizard after wipe
-        window.location.href = "/"
-      },
-    })
-  }, [isConfirmed, nuclearDelete])
+    nuclearDelete.mutate()
+  }
 
-  const handleCancel = useCallback(() => {
+  function handleCancel() {
     setShowConfirm(false)
     setConfirmText("")
-  }, [])
+  }
 
   return (
     <div className="space-y-4" data-testid="nuclear-delete">

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import shutil
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -33,13 +32,7 @@ class NuclearDeleteResponse(BaseModel):
     message: str
 
 
-def _remove_sqlite_files(path: Path) -> None:
-    """Remove a SQLite database file and its WAL/SHM journals."""
-    path.unlink(missing_ok=True)
-    Path(f"{path}-wal").unlink(missing_ok=True)
-    Path(f"{path}-shm").unlink(missing_ok=True)
-
-
+# TODO(P4-21a): Gate behind PIN/password auth when auth system lands (P4-21a).
 @router.delete("/nuclear", response_model=NuclearDeleteResponse)
 async def nuclear_delete() -> NuclearDeleteResponse:
     """Wipe ALL data and reset to fresh-install state.
@@ -60,10 +53,12 @@ async def nuclear_delete() -> NuclearDeleteResponse:
         # 1. Dispose all cached SQLite engines so file handles are released
         reset_registry()
 
-        # 2. Remove everything inside data_dir
+        # 2. Remove everything inside data_dir (symlink-safe)
         for child in data_dir.iterdir():
-            if child.is_dir():
-                shutil.rmtree(child, ignore_errors=True)
+            if child.is_symlink():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
             else:
                 child.unlink(missing_ok=True)
 
