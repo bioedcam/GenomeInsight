@@ -11,6 +11,7 @@ import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Settings2, RefreshCw, Activity, Info } from 'lucide-react'
 import UpdateManager from '@/components/settings/UpdateManager'
+import NuclearDelete from '@/components/settings/NuclearDelete'
 import PlaceholderPage from '@/components/PlaceholderPage'
 
 const NAV_ITEMS = [
@@ -47,13 +48,26 @@ function SettingsNav() {
   )
 }
 
-function GeneralPlaceholder() {
+function GeneralSettings() {
   return (
-    <PlaceholderPage
-      moduleName="General Settings"
-      phase={4}
-      description="Application preferences, dark mode, storage path configuration."
-    />
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground mb-1">General Settings</h2>
+        <p className="text-sm text-muted-foreground">
+          Application preferences and data management.
+        </p>
+      </div>
+
+      <hr className="border-border" />
+
+      {/* Danger zone */}
+      <div>
+        <h3 className="text-base font-semibold text-red-600 dark:text-red-400 mb-4">
+          Danger Zone
+        </h3>
+        <NuclearDelete />
+      </div>
+    </div>
   )
 }
 
@@ -91,7 +105,7 @@ export default function Settings() {
         <div className="flex-1 min-w-0">
           <Routes>
             <Route index element={<Navigate to="updates" replace />} />
-            <Route path="general" element={<GeneralPlaceholder />} />
+            <Route path="general" element={<GeneralSettings />} />
             <Route path="updates" element={<UpdateManager />} />
             <Route path="health" element={<HealthPlaceholder />} />
             <Route path="about" element={<AboutPlaceholder />} />
