@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Settings2, RefreshCw, Activity, Info } from 'lucide-react'
 import UpdateManager from '@/components/settings/UpdateManager'
 import NuclearDelete from '@/components/settings/NuclearDelete'
+import SystemHealth from '@/components/settings/SystemHealth'
 import PlaceholderPage from '@/components/PlaceholderPage'
 
 const NAV_ITEMS = [
@@ -71,14 +72,8 @@ function GeneralSettings() {
   )
 }
 
-function HealthPlaceholder() {
-  return (
-    <PlaceholderPage
-      moduleName="System Health"
-      phase={4}
-      description="Log explorer, database stats, disk usage, and service status."
-    />
-  )
+function HealthPage() {
+  return <SystemHealth />
 }
 
 function AboutPlaceholder() {
@@ -107,7 +102,7 @@ export default function Settings() {
             <Route index element={<Navigate to="updates" replace />} />
             <Route path="general" element={<GeneralSettings />} />
             <Route path="updates" element={<UpdateManager />} />
-            <Route path="health" element={<HealthPlaceholder />} />
+            <Route path="health" element={<HealthPage />} />
             <Route path="about" element={<AboutPlaceholder />} />
           </Routes>
         </div>

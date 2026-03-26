@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.api.routes.admin import router as admin_router
 from backend.api.routes.allergy import router as allergy_router
 from backend.api.routes.ancestry import router as ancestry_router
 from backend.api.routes.annotation import router as annotation_router
@@ -61,6 +62,7 @@ from backend.auth import AuthMiddleware
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
 from backend.db.tables import reference_metadata
+from backend.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry = get_registry()
     # Ensure reference tables exist (safe on existing DBs via checkfirst)
     reference_metadata.create_all(registry.reference_engine, checkfirst=True)
+    # Configure structured logging with DB persistence
+    configure_logging(engine_getter=lambda: registry.reference_engine)
     # Mark any leftover in-progress download sessions as interrupted/stale
     cleanup_interrupted_sessions(registry.reference_engine)
     logger.info("DBRegistry initialised (reference.db engine ready)")
@@ -128,6 +132,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": VERSION}
 
     # API routes (must be included BEFORE static mount)
+    api_router.include_router(admin_router)
     api_router.include_router(auth_router)
     api_router.include_router(allergy_router)
     api_router.include_router(ancestry_router)
