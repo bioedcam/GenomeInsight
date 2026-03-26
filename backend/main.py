@@ -16,6 +16,7 @@ from backend.api.routes.ancestry import router as ancestry_router
 from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.apoe import router as apoe_router
+from backend.api.routes.auth import router as auth_router
 from backend.api.routes.cancer import router as cancer_router
 from backend.api.routes.cardiovascular import router as cardiovascular_router
 from backend.api.routes.carrier import router as carrier_router
@@ -56,6 +57,7 @@ from backend.api.routes.traits import router as traits_router
 from backend.api.routes.updates import router as updates_router
 from backend.api.routes.variant_detail import router as variant_detail_router
 from backend.api.routes.variants import router as variants_router
+from backend.auth import AuthMiddleware
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
 from backend.db.tables import reference_metadata
@@ -114,6 +116,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Auth middleware — enforces session auth when enabled
+    app.add_middleware(AuthMiddleware)
+
     # Create a fresh API router per app instance to avoid duplicate routes
     api_router = APIRouter(prefix="/api")
 
@@ -123,6 +128,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": VERSION}
 
     # API routes (must be included BEFORE static mount)
+    api_router.include_router(auth_router)
     api_router.include_router(allergy_router)
     api_router.include_router(ancestry_router)
     api_router.include_router(apoe_router)
