@@ -33,16 +33,31 @@ interface VariantTableProps {
   sampleId: number | null
 }
 
-/** Convert a preset's column list to TanStack Table VisibilityState. */
+/** GRCh38 liftover column IDs (P4-20). */
+const GRCH38_COLUMNS = ["chrom_grch38", "pos_grch38"]
+
+/** Convert a preset's column list to TanStack Table VisibilityState.
+ *  GRCh38 columns are controlled separately via the liftover toggle (P4-20). */
 function presetToVisibility(
   presetColumns: string[] | null,
   allColumnIds: string[],
+  showGRCh38: boolean,
 ): VisibilityState {
-  if (!presetColumns) return {} // all visible
+  if (!presetColumns) {
+    // All visible — but still respect GRCh38 toggle
+    return {
+      chrom_grch38: showGRCh38,
+      pos_grch38: showGRCh38,
+    }
+  }
   const visibility: VisibilityState = {}
   for (const colId of allColumnIds) {
     if (ALWAYS_VISIBLE.has(colId)) continue
-    visibility[colId] = presetColumns.includes(colId)
+    if (GRCH38_COLUMNS.includes(colId)) {
+      visibility[colId] = showGRCh38
+    } else {
+      visibility[colId] = presetColumns.includes(colId)
+    }
   }
   return visibility
 }
@@ -51,7 +66,11 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [showUnannotated, setShowUnannotated] = useState(false)
   const [showConflictsOnly, setShowConflictsOnly] = useState(false)
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [showGRCh38, setShowGRCh38] = useState(false)
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    chrom_grch38: false,
+    pos_grch38: false,
+  })
   const [startChrom, setStartChrom] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined)
   const [activeTag, setActiveTag] = useState<string | null>(null)
@@ -82,18 +101,18 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     const match = presets.find((p) => p.name.toLowerCase() === activePreset.toLowerCase())
     if (match) {
       setActivePreset(match.name)
-      setColumnVisibility(presetToVisibility(match.columns, allColumnIds))
+      setColumnVisibility(presetToVisibility(match.columns, allColumnIds, showGRCh38))
     } else {
       // Invalid preset in URL — reset
       setActivePreset(null)
     }
     initialPresetApplied.current = true
-  }, [presets, activePreset, allColumnIds])
+  }, [presets, activePreset, allColumnIds, showGRCh38])
 
   const handlePresetChange = useCallback(
     (presetName: string | null, columns: string[] | null) => {
       setActivePreset(presetName)
-      setColumnVisibility(presetToVisibility(columns, allColumnIds))
+      setColumnVisibility(presetToVisibility(columns, allColumnIds, showGRCh38))
 
       // Update URL param
       const url = new URL(window.location.href)
@@ -104,8 +123,21 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
       }
       window.history.replaceState({}, "", url.toString())
     },
-    [allColumnIds],
+    [allColumnIds, showGRCh38],
   )
+
+  // GRCh38 liftover toggle (P4-20): show/hide GRCh38 columns independently of presets
+  const handleToggleGRCh38 = useCallback(() => {
+    setShowGRCh38((prev) => {
+      const next = !prev
+      setColumnVisibility((vis) => ({
+        ...vis,
+        chrom_grch38: next,
+        pos_grch38: next,
+      }))
+      return next
+    })
+  }, [])
 
   // Server-side filter string (set by quick-apply suggestions in P1-15e, P2-22 conflicts toggle).
   const filter = useMemo(() => {
@@ -258,6 +290,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         sampleId={sampleId}
         activeTag={activeTag}
         onTagFilter={setActiveTag}
+        showGRCh38={showGRCh38}
+        onToggleGRCh38={handleToggleGRCh38}
       />
 
       <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">

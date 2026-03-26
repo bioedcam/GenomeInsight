@@ -1,7 +1,7 @@
 /** Variant table toolbar: search + unannotated toggle + conflicts-only toggle + tag filter + preset selector + filter badge (P1-15a, P1-15c, P1-15e, P2-22, P4-12b). */
 
 import { useEffect, useRef, useState } from "react"
-import { Search, Eye, EyeOff, AlertTriangle, X, Tag } from "lucide-react"
+import { Search, Eye, EyeOff, AlertTriangle, X, Tag, ArrowRightLeft } from "lucide-react"
 import ColumnPresets from "./ColumnPresets"
 import { filterLabel } from "./filterSuggestions"
 import { useTags } from "@/api/tags"
@@ -24,6 +24,8 @@ interface VariantToolbarProps {
   sampleId: number | null
   activeTag?: string | null
   onTagFilter?: (tagName: string | null) => void
+  showGRCh38: boolean
+  onToggleGRCh38: () => void
 }
 
 export default function VariantToolbar({
@@ -44,6 +46,8 @@ export default function VariantToolbar({
   sampleId,
   activeTag,
   onTagFilter,
+  showGRCh38,
+  onToggleGRCh38,
 }: VariantToolbarProps) {
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
   const tagDropdownRef = useRef<HTMLDivElement>(null)
@@ -207,6 +211,22 @@ export default function VariantToolbar({
           <X className="h-3 w-3" />
         </button>
       )}
+
+      {/* GRCh38 liftover toggle (P4-20) */}
+      <button
+        type="button"
+        onClick={onToggleGRCh38}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+          showGRCh38
+            ? "border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+            : "border-input bg-background text-muted-foreground hover:text-foreground"
+        }`}
+        aria-pressed={showGRCh38}
+        aria-label={showGRCh38 ? "Hide GRCh38 coordinates" : "Show GRCh38 coordinates"}
+      >
+        <ArrowRightLeft className="h-4 w-4" />
+        <span>GRCh38</span>
+      </button>
 
       {/* Column preset selector (P1-15c) */}
       <ColumnPresets activePreset={activePreset} onPresetChange={onPresetChange} />

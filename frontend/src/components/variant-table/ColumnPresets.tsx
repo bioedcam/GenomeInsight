@@ -15,6 +15,7 @@ const ALL_COLUMN_IDS = [
   "rare_flag", "cadd_phred", "sift_score", "sift_pred",
   "polyphen2_hsvar_score", "polyphen2_hsvar_pred", "revel",
   "annotation_coverage", "ensemble_pathogenic",
+  "chrom_grch38", "pos_grch38",
 ]
 
 /** Human-readable labels for columns. */
@@ -37,6 +38,8 @@ const COLUMN_LABELS: Record<string, string> = {
   revel: "REVEL",
   annotation_coverage: "Coverage",
   ensemble_pathogenic: "Ensemble",
+  chrom_grch38: "Chr (GRCh38)",
+  pos_grch38: "Pos (GRCh38)",
 }
 
 interface ColumnPresetsProps {

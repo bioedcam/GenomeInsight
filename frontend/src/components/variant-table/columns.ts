@@ -183,4 +183,14 @@ export const allColumns = [
     size: 80,
     cell: (info) => (info.getValue() === true ? "Path" : ""),
   }),
+  col.accessor("chrom_grch38", {
+    header: "Chr (GRCh38)",
+    size: 100,
+    cell: (info) => info.getValue() ?? "",
+  }),
+  col.accessor("pos_grch38", {
+    header: "Pos (GRCh38)",
+    size: 120,
+    cell: (info) => info.getValue()?.toLocaleString() ?? "",
+  }),
 ]
