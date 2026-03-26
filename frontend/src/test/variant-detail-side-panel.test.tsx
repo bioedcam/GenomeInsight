@@ -41,6 +41,8 @@ function makeVariantPage(count: number): VariantPage {
       annotation_coverage: 0b111111,
       evidence_conflict: i === 0,
       ensemble_pathogenic: i === 0,
+      chrom_grch38: null,
+      pos_grch38: null,
     })),
     next_cursor_chrom: null,
     next_cursor_pos: null,
