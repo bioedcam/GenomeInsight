@@ -9,13 +9,14 @@ import type { ColumnPreset } from "@/types/variants"
 const ALWAYS_VISIBLE = new Set(["evidence_conflict", "rsid", "chrom", "pos"])
 
 /** All toggleable column IDs in display order. */
+// GRCh38 columns (chrom_grch38, pos_grch38) are excluded — controlled by the
+// showGRCh38 toggle in VariantTable, not by preset selection.
 const ALL_COLUMN_IDS = [
   "genotype", "ref", "alt", "zygosity", "gene_symbol", "consequence",
   "clinvar_significance", "clinvar_review_stars", "gnomad_af_global",
   "rare_flag", "cadd_phred", "sift_score", "sift_pred",
   "polyphen2_hsvar_score", "polyphen2_hsvar_pred", "revel",
   "annotation_coverage", "ensemble_pathogenic",
-  "chrom_grch38", "pos_grch38",
 ]
 
 /** Human-readable labels for columns. */
@@ -38,8 +39,6 @@ const COLUMN_LABELS: Record<string, string> = {
   revel: "REVEL",
   annotation_coverage: "Coverage",
   ensemble_pathogenic: "Ensemble",
-  chrom_grch38: "Chr (GRCh38)",
-  pos_grch38: "Pos (GRCh38)",
 }
 
 interface ColumnPresetsProps {

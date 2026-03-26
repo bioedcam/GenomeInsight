@@ -45,10 +45,16 @@ function presetToVisibility(
 ): VisibilityState {
   if (!presetColumns) {
     // All visible — but still respect GRCh38 toggle
-    return {
-      chrom_grch38: showGRCh38,
-      pos_grch38: showGRCh38,
+    const visibility: VisibilityState = {}
+    for (const colId of allColumnIds) {
+      if (ALWAYS_VISIBLE.has(colId)) continue
+      if (GRCH38_COLUMNS.includes(colId)) {
+        visibility[colId] = showGRCh38
+      } else {
+        visibility[colId] = true
+      }
     }
+    return visibility
   }
   const visibility: VisibilityState = {}
   for (const colId of allColumnIds) {
