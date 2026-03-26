@@ -78,6 +78,57 @@ def _get_session_count() -> int:
     return len(_sessions)
 
 
+# ── Rate limiting ─────────────────────────────────────────────────────
+
+# Track failed login attempts per IP: {ip: (fail_count, first_fail_time)}
+_login_attempts: dict[str, tuple[int, float]] = {}
+
+_MAX_ATTEMPTS = 5
+_LOCKOUT_SECONDS = 300  # 5-minute lockout after max attempts
+_ATTEMPT_WINDOW = 600  # 10-minute sliding window
+
+
+def check_rate_limit(client_ip: str) -> str | None:
+    """Check if IP is rate-limited. Returns error message or None."""
+    record = _login_attempts.get(client_ip)
+    if record is None:
+        return None
+    count, first_time = record
+    elapsed = time.time() - first_time
+    # Window expired — reset
+    if elapsed > _ATTEMPT_WINDOW:
+        _login_attempts.pop(client_ip, None)
+        return None
+    if count >= _MAX_ATTEMPTS:
+        remaining = int(_LOCKOUT_SECONDS - elapsed)
+        if remaining > 0:
+            return f"Too many failed attempts. Try again in {remaining}s."
+        # Lockout expired
+        _login_attempts.pop(client_ip, None)
+        return None
+    return None
+
+
+def record_failed_attempt(client_ip: str) -> None:
+    """Record a failed login attempt for rate limiting."""
+    record = _login_attempts.get(client_ip)
+    now = time.time()
+    if record is None or now - record[1] > _ATTEMPT_WINDOW:
+        _login_attempts[client_ip] = (1, now)
+    else:
+        _login_attempts[client_ip] = (record[0] + 1, record[1])
+
+
+def reset_rate_limit(client_ip: str) -> None:
+    """Clear rate limit on successful login."""
+    _login_attempts.pop(client_ip, None)
+
+
+def clear_all_rate_limits() -> None:
+    """Clear all rate limits (for testing)."""
+    _login_attempts.clear()
+
+
 # ── Auth middleware ───────────────────────────────────────────────────
 
 # Paths that are always exempt from auth
@@ -86,7 +137,6 @@ _AUTH_EXEMPT_PATHS = frozenset(
         "/api/health",
         "/api/auth/login",
         "/api/auth/status",
-        "/api/auth/set-password",
     }
 )
 
@@ -94,9 +144,12 @@ _AUTH_EXEMPT_PATHS = frozenset(
 _AUTH_EXEMPT_PREFIXES = ("/api/setup",)
 
 
-def _is_auth_exempt(path: str) -> bool:
+def _is_auth_exempt(path: str, *, has_password: bool = False) -> bool:
     """Check if a path is exempt from authentication."""
     if path in _AUTH_EXEMPT_PATHS:
+        return True
+    # set-password is only exempt when no password is configured yet
+    if path == "/api/auth/set-password" and not has_password:
         return True
     for prefix in _AUTH_EXEMPT_PREFIXES:
         if path.startswith(prefix):
@@ -112,12 +165,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     When auth_enabled is False or no password hash is set, all requests
     pass through. When enabled, non-exempt API requests must have a
-    valid session cookie.
+    valid session cookie. CORS preflight (OPTIONS) requests always pass.
     """
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
+        # CORS preflight must pass through for proper cross-origin handling
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         settings = get_settings()
 
         # Auth disabled — pass through
@@ -125,7 +182,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Exempt paths pass through
-        if _is_auth_exempt(request.url.path):
+        if _is_auth_exempt(
+            request.url.path, has_password=bool(settings.auth_password_hash)
+        ):
             return await call_next(request)
 
         # Check session cookie

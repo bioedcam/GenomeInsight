@@ -17,10 +17,13 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from backend.auth import (
+    check_rate_limit,
     clear_all_sessions,
     create_session,
     destroy_session,
     hash_password,
+    record_failed_attempt,
+    reset_rate_limit,
     validate_session,
     verify_password,
 )
@@ -57,7 +60,7 @@ class LoginResponse(BaseModel):
 class SetPasswordRequest(BaseModel):
     """Set/update password request."""
 
-    password: str = Field(..., min_length=4)
+    password: str = Field(..., min_length=4, max_length=72)
     current_password: str = ""
 
 
@@ -90,21 +93,27 @@ def _read_config_toml(config_path: Path) -> dict:
         return {}
 
 
+def _escape_toml_string(value: str) -> str:
+    """Escape a string for TOML basic string representation."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _write_config_toml(config_path: Path, content: dict) -> None:
     """Write a dict as TOML to config_path."""
     lines: list[str] = []
     for table_name, table_values in content.items():
+        if not isinstance(table_values, dict):
+            continue
         lines.append(f"[{table_name}]")
-        if isinstance(table_values, dict):
-            for key, value in table_values.items():
-                if isinstance(value, str):
-                    lines.append(f'{key} = "{value}"')
-                elif isinstance(value, bool):
-                    lines.append(f"{key} = {'true' if value else 'false'}")
-                elif isinstance(value, (int, float)):
-                    lines.append(f"{key} = {value}")
-                else:
-                    lines.append(f'{key} = "{value}"')
+        for key, value in table_values.items():
+            if isinstance(value, bool):
+                lines.append(f"{key} = {'true' if value else 'false'}")
+            elif isinstance(value, (int, float)):
+                lines.append(f"{key} = {value}")
+            elif isinstance(value, str):
+                lines.append(f'{key} = "{_escape_toml_string(value)}"')
+            else:
+                lines.append(f'{key} = "{_escape_toml_string(str(value))}"')
         lines.append("")
     config_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -165,9 +174,17 @@ async def auth_status(request: Request) -> AuthStatusResponse:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, response: Response) -> LoginResponse:
+async def login(
+    body: LoginRequest, request: Request, response: Response
+) -> LoginResponse:
     """Authenticate with PIN/password and set session cookie."""
     settings = get_settings()
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Rate limit check
+    rate_msg = check_rate_limit(client_ip)
+    if rate_msg:
+        raise HTTPException(status_code=429, detail=rate_msg)
 
     if not settings.auth_password_hash:
         raise HTTPException(
@@ -176,9 +193,11 @@ async def login(body: LoginRequest, response: Response) -> LoginResponse:
         )
 
     if not verify_password(body.password, settings.auth_password_hash):
-        logger.warning("auth_login_failed")
+        record_failed_attempt(client_ip)
+        logger.warning("auth_login_failed", client_ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid password")
 
+    reset_rate_limit(client_ip)
     session_id = create_session()
     response.set_cookie(
         key="gi_session",

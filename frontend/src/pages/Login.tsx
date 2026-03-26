@@ -5,7 +5,7 @@
  * does not have a valid session. Redirects to "/" on success.
  */
 import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import { useLogin, useAuthStatus } from "@/api/auth"
 import { Shield, AlertCircle, Dna } from "lucide-react"
 
@@ -18,14 +18,12 @@ export default function Login() {
 
   // If auth is not enabled, redirect to dashboard
   if (authStatus && !authStatus.auth_enabled) {
-    navigate("/", { replace: true })
-    return null
+    return <Navigate to="/" replace />
   }
 
   // If already authenticated, redirect to dashboard
   if (authStatus?.authenticated) {
-    navigate("/", { replace: true })
-    return null
+    return <Navigate to="/" replace />
   }
 
   const handleSubmit = async (e: FormEvent) => {

@@ -18,6 +18,7 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from backend.auth import (
+    clear_all_rate_limits,
     clear_all_sessions,
     create_session,
     hash_password,
@@ -114,6 +115,7 @@ class TestSessionManagement:
 def auth_client(tmp_data_dir: Path):
     """TestClient with auth enabled and password set."""
     clear_all_sessions()
+    clear_all_rate_limits()
     password_hash = hash_password("testpin")
     settings = Settings(
         data_dir=tmp_data_dir,
@@ -142,6 +144,7 @@ def auth_client(tmp_data_dir: Path):
 
         reset_registry()
     clear_all_sessions()
+    clear_all_rate_limits()
 
 
 @pytest.fixture
@@ -384,3 +387,67 @@ class TestSetPassword:
             "/api/auth/login", json={"password": "anything"}
         )
         assert resp.status_code == 400
+
+    def test_set_password_requires_auth_when_password_exists(
+        self, auth_client: TestClient
+    ) -> None:
+        """set-password is NOT exempt from auth when a password is already set."""
+        resp = auth_client.post(
+            "/api/auth/set-password",
+            json={"password": "newpin", "current_password": "testpin"},
+        )
+        # Should be blocked by middleware (no session cookie)
+        assert resp.status_code == 401
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Rate limiting
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestRateLimiting:
+    """Test login rate limiting."""
+
+    def setup_method(self) -> None:
+        clear_all_rate_limits()
+
+    def test_rate_limit_after_max_attempts(
+        self, auth_client: TestClient
+    ) -> None:
+        # Make 5 failed attempts
+        for _ in range(5):
+            auth_client.post(
+                "/api/auth/login", json={"password": "wrong"}
+            )
+
+        # 6th attempt should be rate-limited
+        resp = auth_client.post(
+            "/api/auth/login", json={"password": "wrong"}
+        )
+        assert resp.status_code == 429
+        assert "Too many failed attempts" in resp.json()["detail"]
+
+    def test_successful_login_resets_rate_limit(
+        self, auth_client: TestClient
+    ) -> None:
+        # Make some failed attempts
+        for _ in range(3):
+            auth_client.post(
+                "/api/auth/login", json={"password": "wrong"}
+            )
+
+        # Successful login should reset the counter
+        resp = auth_client.post(
+            "/api/auth/login", json={"password": "testpin"}
+        )
+        assert resp.status_code == 200
+
+        # Should be able to make failed attempts again without hitting rate limit
+        for _ in range(3):
+            resp = auth_client.post(
+                "/api/auth/login", json={"password": "wrong"}
+            )
+            assert resp.status_code == 401
+
+    def teardown_method(self) -> None:
+        clear_all_rate_limits()
