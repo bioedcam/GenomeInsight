@@ -1,7 +1,7 @@
 /** Tests for SystemHealth component (P4-21b). */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor, fireEvent } from "./test-utils"
+import { render, screen, waitFor } from "./test-utils"
 import SystemHealth from "@/components/settings/SystemHealth"
 
 const mockFetch = vi.fn()

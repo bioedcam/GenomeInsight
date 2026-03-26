@@ -14,7 +14,7 @@ entries filterable by level and component.
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,13 +24,7 @@ from fastapi.testclient import TestClient
 
 from backend.config import Settings
 from backend.db.connection import reset_registry
-from backend.db.tables import (
-    jobs,
-    log_entries,
-    reference_metadata,
-    samples,
-)
-
+from backend.db.tables import jobs, log_entries, reference_metadata, samples
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -53,7 +47,7 @@ def admin_client(tmp_data_dir: Path) -> Generator[TestClient, None, None]:
     reference_metadata.create_all(engine)
 
     # Seed log entries
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     log_data = [
         {
             "timestamp": now,
@@ -130,6 +124,7 @@ def admin_client(tmp_data_dir: Path) -> Generator[TestClient, None, None]:
     with (
         patch("backend.main.get_settings", return_value=settings),
         patch("backend.db.connection.get_settings", return_value=settings),
+        patch("backend.api.routes.admin.get_settings", return_value=settings),
     ):
         reset_registry()
         from backend.main import create_app
