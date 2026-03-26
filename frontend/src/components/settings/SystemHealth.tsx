@@ -464,7 +464,13 @@ function LogRow({ entry }: { entry: LogEntry }) {
         <tr>
           <td colSpan={4} className="bg-muted/20 px-3 py-2">
             <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
-              {JSON.stringify(JSON.parse(entry.event_data!), null, 2)}
+              {(() => {
+                try {
+                  return JSON.stringify(JSON.parse(entry.event_data!), null, 2)
+                } catch {
+                  return entry.event_data
+                }
+              })()}
             </pre>
           </td>
         </tr>

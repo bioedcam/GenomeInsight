@@ -6,11 +6,15 @@ and the ``log_entries`` table in reference.db (for the admin panel log explorer)
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 from datetime import UTC, datetime
 
 import structlog
+
+# Guard against recursive log writes (e.g. if the DB insert triggers logging)
+_in_db_processor = contextvars.ContextVar("_in_db_processor", default=False)
 
 
 def _db_processor_factory(engine_getter: callable) -> callable:
@@ -27,6 +31,10 @@ def _db_processor_factory(engine_getter: callable) -> callable:
         event_dict: structlog.types.EventDict,
     ) -> structlog.types.EventDict:
         """Write each log entry to the log_entries table."""
+        if _in_db_processor.get():
+            return event_dict
+
+        _in_db_processor.set(True)
         try:
             engine = engine_getter()
             if engine is None:
@@ -66,6 +74,8 @@ def _db_processor_factory(engine_getter: callable) -> callable:
         except Exception:
             # Never let logging failures crash the app
             pass
+        finally:
+            _in_db_processor.set(False)
 
         return event_dict
 

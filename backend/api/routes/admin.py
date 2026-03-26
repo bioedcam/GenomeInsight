@@ -9,7 +9,7 @@ Provides endpoints for the Settings > System Health page:
 
 from __future__ import annotations
 
-import os
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +17,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+from sqlalchemy.pool import NullPool
 
 from backend.config import get_settings
 from backend.db.connection import get_registry
@@ -114,7 +115,7 @@ class SystemStatus(BaseModel):
 
 
 @router.get("/logs", response_model=LogResponse)
-async def get_logs(
+def get_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     level: str | None = Query(
@@ -196,14 +197,14 @@ def _count_rows(engine: sa.Engine, table_name: str) -> int | None:
     """Count rows in a table, returning None on error."""
     try:
         with engine.connect() as conn:
-            result = conn.execute(sa.text(f"SELECT COUNT(*) FROM [{table_name}]"))  # noqa: S608
+            result = conn.execute(sa.text(f'SELECT COUNT(*) FROM "{table_name}"'))  # noqa: S608
             return result.scalar()
     except Exception:
         return None
 
 
 @router.get("/db-stats", response_model=list[DatabaseStat])
-async def get_db_stats() -> list[DatabaseStat]:
+def get_db_stats() -> list[DatabaseStat]:
     """Return stats for all reference databases."""
     settings = get_settings()
     registry = get_registry()
@@ -260,7 +261,7 @@ async def get_db_stats() -> list[DatabaseStat]:
         row_count = None
         if exists and db_name in db_main_tables:
             try:
-                tmp_engine = sa.create_engine(f"sqlite:///{db_path}")
+                tmp_engine = sa.create_engine(f"sqlite:///{db_path}", poolclass=NullPool)
                 row_count = _count_rows(tmp_engine, db_main_tables[db_name])
                 tmp_engine.dispose()
             except Exception:
@@ -286,7 +287,7 @@ async def get_db_stats() -> list[DatabaseStat]:
 
 
 @router.get("/sample-stats", response_model=list[SampleStat])
-async def get_sample_stats() -> list[SampleStat]:
+def get_sample_stats() -> list[SampleStat]:
     """Return file stats for all sample databases."""
     settings = get_settings()
     registry = get_registry()
@@ -333,18 +334,18 @@ def _dir_size(path: Path) -> int:
 
 
 @router.get("/disk-usage", response_model=DiskUsage)
-async def get_disk_usage() -> DiskUsage:
+def get_disk_usage() -> DiskUsage:
     """Return disk usage breakdown for the data directory."""
     settings = get_settings()
     data_dir = settings.data_dir
 
-    # Filesystem stats
+    # Filesystem stats (cross-platform)
     try:
-        stat = os.statvfs(str(data_dir))
-        total_bytes = stat.f_frsize * stat.f_blocks
-        free_bytes = stat.f_frsize * stat.f_bavail
-        used_bytes = total_bytes - free_bytes
-    except (OSError, AttributeError):
+        usage = shutil.disk_usage(str(data_dir))
+        total_bytes = usage.total
+        free_bytes = usage.free
+        used_bytes = usage.used
+    except OSError:
         total_bytes = 0
         free_bytes = 0
         used_bytes = 0
@@ -385,7 +386,7 @@ async def get_disk_usage() -> DiskUsage:
 
 
 @router.get("/status", response_model=SystemStatus)
-async def get_system_status() -> SystemStatus:
+def get_system_status() -> SystemStatus:
     """Return system status: uptime, active jobs, version."""
     from backend.main import VERSION
 
