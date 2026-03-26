@@ -168,9 +168,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     valid session cookie. CORS preflight (OPTIONS) requests always pass.
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # CORS preflight must pass through for proper cross-origin handling
         if request.method == "OPTIONS":
             return await call_next(request)
@@ -182,16 +180,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Exempt paths pass through
-        if _is_auth_exempt(
-            request.url.path, has_password=bool(settings.auth_password_hash)
-        ):
+        if _is_auth_exempt(request.url.path, has_password=bool(settings.auth_password_hash)):
             return await call_next(request)
 
         # Check session cookie
         session_id = request.cookies.get("gi_session")
-        if not session_id or not validate_session(
-            session_id, settings.session_timeout_hours
-        ):
+        if not session_id or not validate_session(session_id, settings.session_timeout_hours):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authentication required"},

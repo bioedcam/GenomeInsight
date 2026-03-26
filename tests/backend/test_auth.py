@@ -183,9 +183,7 @@ def noauth_client(tmp_data_dir: Path):
 class TestLogin:
     """T4-22a: Login with correct PIN returns session cookie, wrong PIN returns 401."""
 
-    def test_correct_password_returns_session_cookie(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_correct_password_returns_session_cookie(self, auth_client: TestClient) -> None:
         resp = auth_client.post(
             "/api/auth/login",
             json={"password": "testpin"},
@@ -223,9 +221,7 @@ class TestExpiredSession:
         from backend.auth import _sessions
 
         # Login first
-        resp = auth_client.post(
-            "/api/auth/login", json={"password": "testpin"}
-        )
+        resp = auth_client.post("/api/auth/login", json={"password": "testpin"})
         assert resp.status_code == 200
         session_cookie = resp.cookies.get("gi_session")
 
@@ -253,9 +249,7 @@ class TestAuthEnforcement:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
-    def test_protected_endpoint_returns_401(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_protected_endpoint_returns_401(self, auth_client: TestClient) -> None:
         resp = auth_client.get("/api/samples")
         assert resp.status_code == 401
 
@@ -264,9 +258,7 @@ class TestAuthEnforcement:
         assert resp.status_code == 200
 
     def test_login_endpoint_exempt(self, auth_client: TestClient) -> None:
-        resp = auth_client.post(
-            "/api/auth/login", json={"password": "wrong"}
-        )
+        resp = auth_client.post("/api/auth/login", json={"password": "wrong"})
         # Should return 401 (wrong password), not blocked by middleware
         assert resp.status_code == 401
 
@@ -274,13 +266,9 @@ class TestAuthEnforcement:
         resp = auth_client.get("/api/setup/status")
         assert resp.status_code == 200
 
-    def test_authenticated_request_passes(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_authenticated_request_passes(self, auth_client: TestClient) -> None:
         # Login first
-        login_resp = auth_client.post(
-            "/api/auth/login", json={"password": "testpin"}
-        )
+        login_resp = auth_client.post("/api/auth/login", json={"password": "testpin"})
         cookies = {"gi_session": login_resp.cookies.get("gi_session")}
 
         # Access protected endpoint
@@ -297,16 +285,12 @@ class TestAuthEnforcement:
 class TestAuthDisabled:
     """When auth is disabled, no authentication is required."""
 
-    def test_no_auth_needed_when_disabled(
-        self, noauth_client: TestClient
-    ) -> None:
+    def test_no_auth_needed_when_disabled(self, noauth_client: TestClient) -> None:
         resp = noauth_client.get("/api/samples")
         # Should not be 401
         assert resp.status_code != 401
 
-    def test_auth_status_shows_disabled(
-        self, noauth_client: TestClient
-    ) -> None:
+    def test_auth_status_shows_disabled(self, noauth_client: TestClient) -> None:
         resp = noauth_client.get("/api/auth/status")
         assert resp.status_code == 200
         body = resp.json()
@@ -324,9 +308,7 @@ class TestLogout:
 
     def test_logout_clears_session(self, auth_client: TestClient) -> None:
         # Login
-        login_resp = auth_client.post(
-            "/api/auth/login", json={"password": "testpin"}
-        )
+        login_resp = auth_client.post("/api/auth/login", json={"password": "testpin"})
         cookies = {"gi_session": login_resp.cookies.get("gi_session")}
 
         # Logout
@@ -363,13 +345,9 @@ class TestSetPassword:
         )
         assert resp.status_code == 422
 
-    def test_change_password_requires_current(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_change_password_requires_current(self, auth_client: TestClient) -> None:
         # Login first
-        login_resp = auth_client.post(
-            "/api/auth/login", json={"password": "testpin"}
-        )
+        login_resp = auth_client.post("/api/auth/login", json={"password": "testpin"})
         cookies = {"gi_session": login_resp.cookies.get("gi_session")}
 
         # Try to change without current password
@@ -380,12 +358,8 @@ class TestSetPassword:
         )
         assert resp.status_code == 400
 
-    def test_login_no_password_set_returns_400(
-        self, noauth_client: TestClient
-    ) -> None:
-        resp = noauth_client.post(
-            "/api/auth/login", json={"password": "anything"}
-        )
+    def test_login_no_password_set_returns_400(self, noauth_client: TestClient) -> None:
+        resp = noauth_client.post("/api/auth/login", json={"password": "anything"})
         assert resp.status_code == 400
 
     def test_set_password_requires_auth_when_password_exists(
@@ -411,42 +385,28 @@ class TestRateLimiting:
     def setup_method(self) -> None:
         clear_all_rate_limits()
 
-    def test_rate_limit_after_max_attempts(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_rate_limit_after_max_attempts(self, auth_client: TestClient) -> None:
         # Make 5 failed attempts
         for _ in range(5):
-            auth_client.post(
-                "/api/auth/login", json={"password": "wrong"}
-            )
+            auth_client.post("/api/auth/login", json={"password": "wrong"})
 
         # 6th attempt should be rate-limited
-        resp = auth_client.post(
-            "/api/auth/login", json={"password": "wrong"}
-        )
+        resp = auth_client.post("/api/auth/login", json={"password": "wrong"})
         assert resp.status_code == 429
         assert "Too many failed attempts" in resp.json()["detail"]
 
-    def test_successful_login_resets_rate_limit(
-        self, auth_client: TestClient
-    ) -> None:
+    def test_successful_login_resets_rate_limit(self, auth_client: TestClient) -> None:
         # Make some failed attempts
         for _ in range(3):
-            auth_client.post(
-                "/api/auth/login", json={"password": "wrong"}
-            )
+            auth_client.post("/api/auth/login", json={"password": "wrong"})
 
         # Successful login should reset the counter
-        resp = auth_client.post(
-            "/api/auth/login", json={"password": "testpin"}
-        )
+        resp = auth_client.post("/api/auth/login", json={"password": "testpin"})
         assert resp.status_code == 200
 
         # Should be able to make failed attempts again without hitting rate limit
         for _ in range(3):
-            resp = auth_client.post(
-                "/api/auth/login", json={"password": "wrong"}
-            )
+            resp = auth_client.post("/api/auth/login", json={"password": "wrong"})
             assert resp.status_code == 401
 
     def teardown_method(self) -> None:

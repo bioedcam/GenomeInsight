@@ -118,9 +118,7 @@ def _write_config_toml(config_path: Path, content: dict) -> None:
     config_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _persist_auth_settings(
-    *, auth_enabled: bool, auth_password_hash: str
-) -> None:
+def _persist_auth_settings(*, auth_enabled: bool, auth_password_hash: str) -> None:
     """Write auth settings to config.toml and bust the settings cache."""
     settings = get_settings()
     config_path = settings.data_dir / "config.toml"
@@ -159,9 +157,7 @@ async def auth_status(request: Request) -> AuthStatusResponse:
     else:
         session_id = request.cookies.get("gi_session")
         if session_id:
-            authenticated = validate_session(
-                session_id, settings.session_timeout_hours
-            )
+            authenticated = validate_session(session_id, settings.session_timeout_hours)
 
     return AuthStatusResponse(
         auth_enabled=enabled,
@@ -174,9 +170,7 @@ async def auth_status(request: Request) -> AuthStatusResponse:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(
-    body: LoginRequest, request: Request, response: Response
-) -> LoginResponse:
+async def login(body: LoginRequest, request: Request, response: Response) -> LoginResponse:
     """Authenticate with PIN/password and set session cookie."""
     settings = get_settings()
     client_ip = request.client.host if request.client else "unknown"
@@ -250,12 +244,8 @@ async def set_password(
                 status_code=400,
                 detail="Current password required to change password.",
             )
-        if not verify_password(
-            body.current_password, settings.auth_password_hash
-        ):
-            raise HTTPException(
-                status_code=401, detail="Current password is incorrect."
-            )
+        if not verify_password(body.current_password, settings.auth_password_hash):
+            raise HTTPException(status_code=401, detail="Current password is incorrect.")
 
     # Hash and persist
     new_hash = hash_password(body.password)
@@ -285,9 +275,7 @@ async def set_password(
 
 
 @router.post("/remove-password", response_model=RemovePasswordResponse)
-async def remove_password(
-    body: LoginRequest, response: Response
-) -> RemovePasswordResponse:
+async def remove_password(body: LoginRequest, response: Response) -> RemovePasswordResponse:
     """Remove the password and disable authentication.
 
     Requires the current password for verification.
@@ -295,14 +283,10 @@ async def remove_password(
     settings = get_settings()
 
     if not settings.auth_password_hash:
-        raise HTTPException(
-            status_code=400, detail="No password is currently set."
-        )
+        raise HTTPException(status_code=400, detail="No password is currently set.")
 
     if not verify_password(body.password, settings.auth_password_hash):
-        raise HTTPException(
-            status_code=401, detail="Password is incorrect."
-        )
+        raise HTTPException(status_code=401, detail="Password is incorrect.")
 
     _persist_auth_settings(auth_enabled=False, auth_password_hash="")
     clear_all_sessions()
