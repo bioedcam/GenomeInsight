@@ -153,6 +153,10 @@ const SAMPLE = {
   db_path: '/tmp/sample_1.db',
   file_format: '23andme_v5',
   file_hash: 'abc123',
+  notes: null,
+  date_collected: null,
+  source: null,
+  extra: null,
   created_at: new Date().toISOString(),
   updated_at: null,
 }
