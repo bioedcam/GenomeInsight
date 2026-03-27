@@ -140,9 +140,9 @@ class TestDisclaimerLinks:
             urls = _extract_urls(text)
             for url in urls:
                 domain = urlparse(url).netloc
-                assert (
-                    domain not in _STALE_REDIRECT_DOMAINS
-                ), f"{name}: stale domain {domain} in {url}"
+                assert domain not in _STALE_REDIRECT_DOMAINS, (
+                    f"{name}: stale domain {domain} in {url}"
+                )
 
 
 # ── Global disclaimer topic coverage ──────────────────────────────────
