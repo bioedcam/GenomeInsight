@@ -23,7 +23,7 @@ export interface BackupExportResult {
 
 export interface BackupStatus {
   job_id: string
-  status: string
+  status: 'pending' | 'running' | 'complete' | 'failed'
   progress_pct: number
   message: string
   error: string | null

@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -22,15 +22,16 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/backup", tags=["backup"])
 
-# Reference DB filenames that can optionally be included in the archive
-_REFERENCE_DB_FILES = [
+# Reference DB filenames that can optionally be included in the archive.
+# Shared with the Huey task via import.
+REFERENCE_DB_FILES = (
     "clinvar.db",
     "vep_bundle.db",
     "gnomad_af.db",
     "dbnsfp.db",
     "encode_ccres.db",
     "reference.db",
-]
+)
 
 
 # ── Response models ──────────────────────────────────────────────────
@@ -96,11 +97,29 @@ def _collect_sample_files(data_dir: Path) -> list[Path]:
 def _collect_reference_files(data_dir: Path) -> list[Path]:
     """Collect existing reference DB files."""
     files = []
-    for name in _REFERENCE_DB_FILES:
+    for name in REFERENCE_DB_FILES:
         p = data_dir / name
         if p.exists():
             files.append(p)
     return files
+
+
+def _has_running_backup() -> bool:
+    """Check if a backup export is already running."""
+    import sqlalchemy as sa
+
+    from backend.db.connection import get_registry
+    from backend.db.tables import jobs
+
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(jobs.c.job_id).where(
+                jobs.c.job_type == "backup_export",
+                jobs.c.status.in_(["pending", "running"]),
+            )
+        ).fetchone()
+    return row is not None
 
 
 # ── GET /api/backup/estimate ─────────────────────────────────────────
@@ -146,26 +165,28 @@ async def backup_estimate() -> BackupEstimateResponse:
 
 @router.post("/export", response_model=BackupExportResponse)
 async def backup_export(
-    body: BackupExportRequest | None = None,
-    include_reference_dbs: bool = Query(default=False),
+    body: BackupExportRequest,
 ) -> BackupExportResponse:
     """Start a backup export as a background Huey task.
 
     Creates a .tar.gz archive containing sample DBs, config.toml,
     and optionally reference databases.
     """
-    # Support both JSON body and query param
-    include_refs = (body.include_reference_dbs if body else False) or include_reference_dbs
+    if _has_running_backup():
+        raise HTTPException(
+            status_code=409,
+            detail="A backup export is already in progress.",
+        )
 
     from backend.tasks.huey_tasks import create_backup_job, run_backup_export_task
 
     job_id = create_backup_job()
-    run_backup_export_task(job_id, include_refs)
+    run_backup_export_task(job_id, body.include_reference_dbs)
 
     logger.info(
         "backup_export_started",
         job_id=job_id,
-        include_reference_dbs=include_refs,
+        include_reference_dbs=body.include_reference_dbs,
     )
 
     return BackupExportResponse(
@@ -238,7 +259,11 @@ async def backup_download(filename: str) -> FileResponse:
         raise HTTPException(status_code=400, detail="Invalid backup filename.")
 
     settings = get_settings()
-    archive_path = settings.downloads_dir / filename
+    archive_path = (settings.downloads_dir / filename).resolve()
+
+    # Defense-in-depth: ensure resolved path stays within downloads_dir
+    if not str(archive_path).startswith(str(settings.downloads_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename.")
 
     if not archive_path.exists():
         raise HTTPException(status_code=404, detail="Backup file not found.")

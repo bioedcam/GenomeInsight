@@ -534,6 +534,10 @@ def run_backup_export_task(job_id: str, include_reference_dbs: bool = False) -> 
     """
     import tarfile
 
+    from backend.api.routes.backup import REFERENCE_DB_FILES
+
+    archive_path: Path | None = None
+
     try:
         _update_job(job_id, status="running", message="Preparing backup archive")
 
@@ -567,30 +571,22 @@ def run_backup_export_task(job_id: str, include_reference_dbs: bool = False) -> 
 
         # Optional reference DBs
         if include_reference_dbs:
-            ref_db_names = [
-                "clinvar.db",
-                "vep_bundle.db",
-                "gnomad_af.db",
-                "dbnsfp.db",
-                "encode_ccres.db",
-                "reference.db",
-            ]
-            for db_name in ref_db_names:
+            for db_name in REFERENCE_DB_FILES:
                 db_path = data_dir / db_name
                 if db_path.exists():
                     files_to_add.append((db_path, db_name))
 
         total_files = len(files_to_add)
         if total_files == 0:
+            # Create empty archive first, then mark complete
+            with tarfile.open(archive_path, "w:gz") as _tf:
+                pass
             _update_job(
                 job_id,
                 status="complete",
                 progress_pct=100.0,
                 message=f"Backup complete: {filename}",
             )
-            # Create empty archive
-            with tarfile.open(archive_path, "w:gz") as _tf:
-                pass
             logger.info("backup_export_empty", job_id=job_id, filename=filename)
             return
 
@@ -631,6 +627,12 @@ def run_backup_export_task(job_id: str, include_reference_dbs: bool = False) -> 
 
     except Exception as exc:
         logger.exception("backup_export_failed", job_id=job_id)
+        # Clean up partial archive on failure
+        if archive_path is not None and archive_path.exists():
+            try:
+                archive_path.unlink()
+            except OSError:
+                pass
         _update_job(
             job_id,
             status="failed",

@@ -36,7 +36,7 @@ _PATCHES = (
 
 
 def _make_client(settings: Settings):
-    """Context manager that yields a patched TestClient."""
+    """Return an ExitStack context manager that patches get_settings everywhere."""
     from contextlib import ExitStack
 
     stack = ExitStack()

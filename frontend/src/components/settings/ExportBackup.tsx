@@ -4,7 +4,7 @@
  * and triggers background export with progress polling.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Download, Archive, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { useBackupEstimate, useStartBackupExport, useBackupStatus } from '@/api/backup'
 
@@ -28,19 +28,19 @@ export default function ExportBackup() {
     jobStatus.data?.status !== 'complete' &&
     jobStatus.data?.status !== 'failed'
 
-  const handleExport = useCallback(() => {
+  function handleExport() {
     startExport.mutate(includeRefDbs, {
       onSuccess: (data) => {
         setActiveJobId(data.job_id)
       },
     })
-  }, [includeRefDbs, startExport])
+  }
 
-  const handleDownload = useCallback(() => {
+  function handleDownload() {
     if (jobStatus.data?.download_filename) {
       window.open(`/api/backup/download/${jobStatus.data.download_filename}`, '_blank')
     }
-  }, [jobStatus.data?.download_filename])
+  }
 
   // Reset job state when user starts a new export
   useEffect(() => {
