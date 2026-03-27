@@ -11,6 +11,7 @@ Validates that:
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
@@ -31,6 +32,9 @@ from backend.disclaimers import (
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 _URL_PATTERN = re.compile(r"https?://[^\s)>]+")
+
+# Known-stale domains that redirect or are no longer canonical
+_STALE_REDIRECT_DOMAINS = {"thefhfoundation.org"}
 
 
 def _extract_urls(text: str) -> list[str]:
@@ -132,13 +136,12 @@ class TestDisclaimerLinks:
 
     def test_no_redirect_domains(self) -> None:
         """Ensure no links point to known-stale domains that redirect."""
-        stale_domains = {"thefhfoundation.org"}
         for name, text in _all_disclaimer_texts():
             urls = _extract_urls(text)
             for url in urls:
                 domain = urlparse(url).netloc
                 assert (
-                    domain not in stale_domains
+                    domain not in _STALE_REDIRECT_DOMAINS
                 ), f"{name}: stale domain {domain} in {url}"
 
 
@@ -326,7 +329,7 @@ class TestCardiovascularDisclaimerTopics:
 class TestDisclaimerAcknowledgmentGate:
     """Unit-level validation of the acknowledgment gate state machine."""
 
-    def test_disclaimer_acceptance_persisted(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_disclaimer_acceptance_persisted(self, tmp_path: Path) -> None:
         """Acceptance state should be persisted and re-readable (T4-22j)."""
         import json
         from datetime import UTC, datetime
@@ -340,7 +343,7 @@ class TestDisclaimerAcknowledgmentGate:
         assert loaded["accepted_at"] == accepted_at
         assert loaded["version"] == "1.0"
 
-    def test_disclaimer_blocks_without_flag(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_disclaimer_blocks_without_flag(self, tmp_path: Path) -> None:
         """Without flag file, disclaimer should be considered unaccepted."""
         flag_path = tmp_path / ".disclaimer_accepted"
         assert not flag_path.exists()
