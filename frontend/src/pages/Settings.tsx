@@ -14,6 +14,7 @@ import UpdateManager from '@/components/settings/UpdateManager'
 import ExportBackup from '@/components/settings/ExportBackup'
 import NuclearDelete from '@/components/settings/NuclearDelete'
 import SystemHealth from '@/components/settings/SystemHealth'
+import SampleMetadataEditor from '@/components/settings/SampleMetadataEditor'
 import { useAppUpdate } from '@/api/updates'
 
 const NAV_ITEMS = [
@@ -59,6 +60,10 @@ function GeneralSettings() {
           Application preferences and data management.
         </p>
       </div>
+
+      <SampleMetadataEditor />
+
+      <hr className="border-border" />
 
       <ExportBackup />
 
