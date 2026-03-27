@@ -1,7 +1,7 @@
 /** React Query hooks for sample management and file ingestion (P1-13, P1-16). */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Sample, IngestResult } from "@/types/samples"
+import type { Sample, SampleUpdate, IngestResult } from "@/types/samples"
 
 export function useSamples() {
   return useQuery({
@@ -45,6 +45,36 @@ export function useIngestFile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["samples"] })
+    },
+  })
+}
+
+export function useUpdateSample() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      sampleId,
+      data,
+    }: {
+      sampleId: number
+      data: SampleUpdate
+    }): Promise<Sample> => {
+      const res = await fetch(`/api/samples/${sampleId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(text || "Failed to update sample")
+      }
+      return await res.json()
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["samples"] })
+      queryClient.invalidateQueries({
+        queryKey: ["samples", variables.sampleId],
+      })
     },
   })
 }
