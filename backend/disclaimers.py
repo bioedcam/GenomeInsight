@@ -148,7 +148,7 @@ and explain reproductive alternatives.
 **Resources:**
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/
 - ACOG Carrier Screening: https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2017/03/carrier-screening-for-genetic-conditions
-- MedlinePlus Genetics — Carrier Testing: https://medlineplus.gov/genetics/understanding/testing/carrier/\
+- MedlinePlus — Genetic Testing: https://medlineplus.gov/genetictesting.html\
 """
 
 # ── Per-gene carrier display notes ────────────────────────────────────
@@ -279,7 +279,7 @@ counselor, or medical geneticist for proper risk assessment and \
 management recommendations.
 
 **Resources:**
-- FH Foundation: https://thefhfoundation.org/
+- Family Heart Foundation: https://familyheart.org/
 - American Heart Association: https://www.heart.org/en/health-topics/cholesterol
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
 """
