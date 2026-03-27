@@ -173,6 +173,58 @@ describe("SampleMetadataEditor", () => {
     })
   })
 
+  it("calls update mutation with changed fields on save", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(SAMPLE_LIST),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(SAMPLE_DETAIL),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...SAMPLE_DETAIL, notes: "Updated note" }),
+      })
+      // React Query invalidation re-fetches
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(SAMPLE_LIST),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...SAMPLE_DETAIL, notes: "Updated note" }),
+      })
+
+    render(<SampleMetadataEditor />)
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-edit-1")).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId("sample-edit-1"))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-notes-input")).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId("sample-notes-input"), {
+      target: { value: "Updated note" },
+    })
+
+    fireEvent.click(screen.getByTestId("sample-save-btn"))
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/samples/1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.stringContaining("Updated note"),
+        })
+      )
+    })
+  })
+
   it("save button is enabled after making changes", async () => {
     mockFetch
       .mockResolvedValueOnce({

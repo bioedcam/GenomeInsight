@@ -93,21 +93,23 @@ def _enrich_with_sample_metadata(response: SampleResponse, registry: object) -> 
     if meta_row is None:
         return response
 
-    response.notes = meta_row.notes or ""
-    response.date_collected = str(meta_row.date_collected) if meta_row.date_collected else None
-    response.source = meta_row.source or ""
-
     # Parse extra JSON
     extra_raw = meta_row.extra
+    extra: dict = {}
     if extra_raw:
         try:
-            response.extra = json.loads(extra_raw) if isinstance(extra_raw, str) else extra_raw
+            extra = json.loads(extra_raw) if isinstance(extra_raw, str) else extra_raw
         except (json.JSONDecodeError, TypeError):
-            response.extra = {}
-    else:
-        response.extra = {}
+            extra = {}
 
-    return response
+    return response.model_copy(
+        update={
+            "notes": meta_row.notes if meta_row.notes else None,
+            "date_collected": str(meta_row.date_collected) if meta_row.date_collected else None,
+            "source": meta_row.source if meta_row.source else None,
+            "extra": extra,
+        }
+    )
 
 
 @router.get("")
@@ -164,7 +166,13 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
         if body.notes is not None:
             meta_updates["notes"] = body.notes
         if body.date_collected is not None:
-            meta_updates["date_collected"] = date.fromisoformat(body.date_collected)
+            try:
+                meta_updates["date_collected"] = date.fromisoformat(body.date_collected)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid date format: {body.date_collected}. Expected YYYY-MM-DD.",
+                ) from exc
         if body.source is not None:
             meta_updates["source"] = body.source
         if body.extra is not None:

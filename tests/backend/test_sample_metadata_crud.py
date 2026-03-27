@@ -178,6 +178,11 @@ class TestUpdateSampleMetadata:
         r = client.patch("/api/samples/999", json={"notes": "x"})
         assert r.status_code == 404
 
+    def test_update_invalid_date_format_returns_422(self, client):
+        sid = _create_sample(client)
+        r = client.patch(f"/api/samples/{sid}", json={"date_collected": "invalid-date"})
+        assert r.status_code == 422
+
     def test_update_extra_invalid_json_returns_422(self, client):
         sid = _create_sample(client)
         r = client.patch(f"/api/samples/{sid}", json={"extra": "not-a-dict"})

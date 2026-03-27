@@ -87,7 +87,10 @@ function ExtraFieldEditor({
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleAdd()
+            if (e.key === "Enter") {
+              e.preventDefault()
+              handleAdd()
+            }
           }}
           className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           data-testid="extra-new-value"
