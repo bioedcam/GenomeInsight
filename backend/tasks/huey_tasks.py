@@ -498,6 +498,149 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
         )
 
 
+def create_backup_job() -> str:
+    """Create a job record for a backup export task. Returns the job_id."""
+
+    from backend.db.connection import get_registry
+    from backend.db.tables import jobs
+
+    job_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    registry = get_registry()
+
+    with registry.reference_engine.begin() as conn:
+        conn.execute(
+            jobs.insert().values(
+                job_id=job_id,
+                sample_id=None,
+                job_type="backup_export",
+                status="pending",
+                progress_pct=0.0,
+                message="Queued for backup export",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    return job_id
+
+
+@huey.task()
+def run_backup_export_task(job_id: str, include_reference_dbs: bool = False) -> None:
+    """Huey background task: create a .tar.gz backup archive.
+
+    Archives sample DBs, config.toml, .disclaimer_accepted, and
+    optionally reference database files.
+    """
+    import tarfile
+
+    from backend.api.routes.backup import REFERENCE_DB_FILES
+
+    archive_path: Path | None = None
+
+    try:
+        _update_job(job_id, status="running", message="Preparing backup archive")
+
+        settings = get_settings()
+        data_dir = settings.data_dir
+        downloads_dir = settings.downloads_dir
+        downloads_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate timestamped filename
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        filename = f"genomeinsight_backup_{timestamp}.tar.gz"
+        archive_path = downloads_dir / filename
+
+        # Collect files to archive
+        files_to_add: list[tuple[Path, str]] = []
+
+        # Config files
+        config_path = data_dir / "config.toml"
+        if config_path.exists():
+            files_to_add.append((config_path, "config.toml"))
+
+        disclaimer_path = data_dir / ".disclaimer_accepted"
+        if disclaimer_path.exists():
+            files_to_add.append((disclaimer_path, ".disclaimer_accepted"))
+
+        # Sample DB files
+        samples_dir = data_dir / "samples"
+        if samples_dir.exists():
+            for sample_db in sorted(samples_dir.glob("sample_*.db")):
+                files_to_add.append((sample_db, f"samples/{sample_db.name}"))
+
+        # Optional reference DBs
+        if include_reference_dbs:
+            for db_name in REFERENCE_DB_FILES:
+                db_path = data_dir / db_name
+                if db_path.exists():
+                    files_to_add.append((db_path, db_name))
+
+        total_files = len(files_to_add)
+        if total_files == 0:
+            # Create empty archive first, then mark complete
+            with tarfile.open(archive_path, "w:gz") as _tf:
+                pass
+            _update_job(
+                job_id,
+                status="complete",
+                progress_pct=100.0,
+                message=f"Backup complete: {filename}",
+            )
+            logger.info("backup_export_empty", job_id=job_id, filename=filename)
+            return
+
+        _update_job(
+            job_id,
+            status="running",
+            progress_pct=5.0,
+            message=f"Archiving {total_files} file(s)",
+        )
+
+        with tarfile.open(archive_path, "w:gz") as tf:
+            for idx, (file_path, arcname) in enumerate(files_to_add):
+                tf.add(str(file_path), arcname=arcname)
+                pct = 5.0 + (idx + 1) / total_files * 90.0
+                _update_job(
+                    job_id,
+                    status="running",
+                    progress_pct=round(pct, 1),
+                    message=f"Archived {idx + 1}/{total_files}: {arcname}",
+                )
+
+        archive_size_mb = archive_path.stat().st_size / (1024 * 1024)
+        _update_job(
+            job_id,
+            status="complete",
+            progress_pct=100.0,
+            message=f"Backup complete: {filename}",
+        )
+
+        logger.info(
+            "backup_export_complete",
+            job_id=job_id,
+            filename=filename,
+            files_archived=total_files,
+            archive_size_mb=round(archive_size_mb, 1),
+            include_reference_dbs=include_reference_dbs,
+        )
+
+    except Exception as exc:
+        logger.exception("backup_export_failed", job_id=job_id)
+        # Clean up partial archive on failure
+        if archive_path is not None and archive_path.exists():
+            try:
+                archive_path.unlink()
+            except OSError:
+                pass
+        _update_job(
+            job_id,
+            status="failed",
+            message="Backup export failed",
+            error=str(exc),
+        )
+
+
 def create_database_update_job(db_name: str) -> str:
     """Create a job record for a database update task. Returns the job_id."""
 

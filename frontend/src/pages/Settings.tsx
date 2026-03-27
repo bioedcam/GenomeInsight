@@ -11,6 +11,7 @@ import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Settings2, RefreshCw, Activity, Info } from 'lucide-react'
 import UpdateManager from '@/components/settings/UpdateManager'
+import ExportBackup from '@/components/settings/ExportBackup'
 import NuclearDelete from '@/components/settings/NuclearDelete'
 import SystemHealth from '@/components/settings/SystemHealth'
 import PlaceholderPage from '@/components/PlaceholderPage'
@@ -58,6 +59,8 @@ function GeneralSettings() {
           Application preferences and data management.
         </p>
       </div>
+
+      <ExportBackup />
 
       <hr className="border-border" />
 
