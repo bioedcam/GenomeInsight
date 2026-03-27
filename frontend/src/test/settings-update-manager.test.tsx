@@ -129,6 +129,19 @@ function setupFetchMocks(options: {
           status: 200,
           json: async () => options.autoUpdateResponse ?? {},
         })
+      if (url.includes('/api/updates/app-update'))
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            update_available: false,
+            current_version: '0.1.0',
+            latest_version: '0.1.0',
+            release_url: null,
+            release_notes: null,
+            error: null,
+          }),
+        })
       if (url.includes('/api/updates/status'))
         return Promise.resolve(mockStatusResponse(options.statuses))
       if (url.includes('/api/updates/check'))
@@ -223,11 +236,13 @@ describe('Settings page', () => {
     expect(screen.getAllByText('System Health').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows placeholder for About tab', () => {
+  it('shows About page with version info', () => {
     setupFetchMocks()
     renderSettings(['/settings/about'])
-    // "About" appears in both nav and placeholder heading
-    expect(screen.getAllByText('About').length).toBeGreaterThanOrEqual(2)
+    // "About" in nav + "About GenomeInsight" in heading
+    expect(screen.getByText('About')).toBeDefined()
+    expect(screen.getByText('About GenomeInsight')).toBeDefined()
+    expect(screen.getByText('Current Version')).toBeDefined()
   })
 })
 

@@ -6,10 +6,10 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { useDatabaseStatuses, useUpdateCheck } from '@/api/updates'
+import { useAppUpdate, useDatabaseStatuses, useUpdateCheck } from '@/api/updates'
 import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
-import { Database, User } from 'lucide-react'
+import { ArrowUpCircle, Database, User } from 'lucide-react'
 import type { Sample } from '@/types/samples'
 
 interface StatusBarProps {
@@ -35,6 +35,7 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
   const navigate = useNavigate()
   const { data: statuses } = useDatabaseStatuses()
   const { data: updateCheck } = useUpdateCheck(true)
+  const { data: appUpdate } = useAppUpdate()
 
   // Build a set of db_names that have updates available
   const updatesAvailable = new Set(
@@ -82,6 +83,24 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
           </span>
         )}
       </div>
+
+      {/* App update indicator */}
+      {appUpdate?.update_available && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings/about')}
+          className={cn(
+            'flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400',
+            'hover:text-amber-700 dark:hover:text-amber-300 transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded',
+          )}
+          aria-label={`App update available: v${appUpdate.latest_version}`}
+          title={`GenomeInsight v${appUpdate.latest_version} available`}
+        >
+          <ArrowUpCircle className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">v{appUpdate.latest_version}</span>
+        </button>
+      )}
 
       {/* Right: Database version stamps + dots */}
       <button
