@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 GITHUB_REPO = "bioedcam/GenomeInsight"
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 REQUEST_TIMEOUT = 10.0  # seconds
+USER_AGENT = f"GenomeInsight/{VERSION}"
 
 
 @dataclass
@@ -43,7 +44,7 @@ def parse_version(version_str: str) -> Version | None:
         return None
 
 
-def check_app_update(current_version: str | None = None) -> AppUpdateInfo:
+async def check_app_update(current_version: str | None = None) -> AppUpdateInfo:
     """Check GitHub Releases for a newer GenomeInsight version.
 
     Args:
@@ -55,10 +56,13 @@ def check_app_update(current_version: str | None = None) -> AppUpdateInfo:
     current = current_version or VERSION
 
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            resp = client.get(
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            resp = await client.get(
                 RELEASES_URL,
-                headers={"Accept": "application/vnd.github+json"},
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": USER_AGENT,
+                },
             )
 
         if resp.status_code == 404:
@@ -111,6 +115,15 @@ def _compare_versions(current: str, release_data: dict[str, Any]) -> AppUpdateIn
             current_version=current,
             latest_version=tag or None,
             error=f"Could not parse version(s): current={current!r}, latest={tag!r}",
+        )
+
+    # Skip pre-releases — only notify for stable versions
+    if latest_ver.is_prerelease:
+        return AppUpdateInfo(
+            update_available=False,
+            current_version=current,
+            latest_version=str(latest_ver),
+            release_url=html_url,
         )
 
     return AppUpdateInfo(

@@ -6,7 +6,7 @@ the real GitHub API.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -66,10 +66,11 @@ class TestCompareVersions:
         info = _compare_versions("0.1.0", release)
         assert info.update_available is False
 
-    def test_prerelease_newer(self):
+    def test_prerelease_skipped(self):
         release = {"tag_name": "v0.2.0rc1", "html_url": "https://example.com", "body": ""}
         info = _compare_versions("0.1.0", release)
-        assert info.update_available is True
+        assert info.update_available is False
+        assert info.latest_version == "0.2.0rc1"
 
     def test_invalid_tag(self):
         release = {"tag_name": "broken", "html_url": "https://example.com", "body": ""}
@@ -84,104 +85,95 @@ class TestCompareVersions:
         assert len(info.release_notes) == 500
 
 
-# ── check_app_update (mocked HTTP) ───────────────────────────────────
+# ── check_app_update (mocked async HTTP) ─────────────────────────────
+
+
+def _make_mock_response(status_code: int, json_data: dict | None = None) -> MagicMock:
+    """Create a mock httpx.Response."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    if json_data is not None:
+        resp.json.return_value = json_data
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def _mock_async_client(mock_cls: MagicMock, resp: MagicMock | None = None, exc=None):
+    """Set up the AsyncClient mock to return resp or raise exc on .get()."""
+    mock_client = AsyncMock()
+    if exc:
+        mock_client.get.side_effect = exc
+    else:
+        mock_client.get.return_value = resp
+    mock_cls.return_value = mock_client
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = False
 
 
 class TestCheckAppUpdate:
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_update_available(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "tag_name": "v1.0.0",
-            "html_url": "https://github.com/bioedcam/GenomeInsight/releases/v1.0.0",
-            "body": "Release notes",
-        }
-        mock_resp.raise_for_status = MagicMock()
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_update_available(self, mock_cls):
+        resp = _make_mock_response(
+            200,
+            {
+                "tag_name": "v1.0.0",
+                "html_url": "https://github.com/bioedcam/GenomeInsight/releases/v1.0.0",
+                "body": "Release notes",
+            },
+        )
+        _mock_async_client(mock_cls, resp)
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is True
         assert info.latest_version == "1.0.0"
         assert info.current_version == "0.1.0"
         assert info.error is None
 
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_no_update(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "tag_name": "v0.1.0",
-            "html_url": "url",
-            "body": "",
-        }
-        mock_resp.raise_for_status = MagicMock()
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_no_update(self, mock_cls):
+        resp = _make_mock_response(200, {"tag_name": "v0.1.0", "html_url": "url", "body": ""})
+        _mock_async_client(mock_cls, resp)
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is False
 
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_404_no_releases(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_404_no_releases(self, mock_cls):
+        resp = _make_mock_response(404)
+        _mock_async_client(mock_cls, resp)
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is False
         assert info.error == "No releases found"
 
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_403_rate_limit(self, mock_client_cls):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_403_rate_limit(self, mock_cls):
+        resp = _make_mock_response(403)
+        _mock_async_client(mock_cls, resp)
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is False
         assert "rate limit" in (info.error or "").lower()
 
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_timeout(self, mock_client_cls):
-        mock_client = MagicMock()
-        mock_client.get.side_effect = httpx.TimeoutException("timeout")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_timeout(self, mock_cls):
+        _mock_async_client(mock_cls, exc=httpx.TimeoutException("timeout"))
 
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is False
         assert info.error == "Request timed out"
 
-    @patch("backend.utils.update_checker.httpx.Client")
-    def test_network_error(self, mock_client_cls):
-        mock_client = MagicMock()
-        mock_client.get.side_effect = httpx.ConnectError("refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_cls.return_value = mock_client
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_network_error(self, mock_cls):
+        _mock_async_client(mock_cls, exc=httpx.ConnectError("refused"))
 
-        info = check_app_update(current_version="0.1.0")
+        info = await check_app_update(current_version="0.1.0")
         assert info.update_available is False
         assert info.error is not None
 

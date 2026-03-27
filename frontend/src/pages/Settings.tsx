@@ -9,13 +9,12 @@
 
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Settings2, RefreshCw, Activity, Info } from 'lucide-react'
+import { Settings2, RefreshCw, Activity, Info, ArrowUpCircle, CheckCircle2, AlertCircle } from 'lucide-react'
 import UpdateManager from '@/components/settings/UpdateManager'
 import ExportBackup from '@/components/settings/ExportBackup'
 import NuclearDelete from '@/components/settings/NuclearDelete'
 import SystemHealth from '@/components/settings/SystemHealth'
 import { useAppUpdate } from '@/api/updates'
-import { ArrowUpCircle, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/settings/general', label: 'General', icon: Settings2 },
@@ -98,7 +97,7 @@ function AboutPage() {
           <div>
             <p className="text-sm font-medium text-foreground">Current Version</p>
             <p className="text-2xl font-bold text-foreground">
-              v{appUpdate?.current_version ?? '0.1.0'}
+              {appUpdate?.current_version ? `v${appUpdate.current_version}` : '...'}
             </p>
           </div>
 

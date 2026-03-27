@@ -224,7 +224,7 @@ async def check_app_update() -> AppUpdateResponse:
     """Check GitHub Releases API for a newer GenomeInsight version."""
     from backend.utils.update_checker import check_app_update as _check
 
-    info = _check()
+    info = await _check()
     return AppUpdateResponse(
         update_available=info.update_available,
         current_version=info.current_version,
