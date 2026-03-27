@@ -517,8 +517,12 @@ class TestSchemaMigration:
 
         with engine.connect() as conn:
             row = conn.execute(
-                sa.text("SELECT rsid, clinvar_significance_at_watch, notes FROM watched_variants")
+                sa.text(
+                    "SELECT rsid, clinvar_significance_at_watch, notes, watched_at "
+                    "FROM watched_variants"
+                )
             ).fetchone()
             assert row[0] == "rs80357906"
             assert row[1] == "Uncertain significance"
             assert row[2] == "BRCA2 VUS"
+            assert row[3] is not None, "watched_at should have a default timestamp"
