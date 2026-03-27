@@ -435,3 +435,90 @@ class TestSchemaMigration:
         cols_after = _get_columns(db_path, "annotated_variants")
         assert "chrom_grch38" in cols_after
         assert "pos_grch38" in cols_after
+
+    def _create_v6_sample_db(self, db_path: Path) -> sa.Engine:
+        """Create a sample DB at v6 (has liftover columns but no watched_variants table)."""
+        engine = sa.create_engine(f"sqlite:///{db_path}")
+        with engine.connect() as conn:
+            conn.execute(sa.text("PRAGMA journal_mode=WAL"))
+            conn.execute(
+                sa.text(
+                    """CREATE TABLE annotated_variants (
+                        rsid TEXT PRIMARY KEY,
+                        chrom TEXT NOT NULL,
+                        pos INTEGER NOT NULL,
+                        ref TEXT,
+                        alt TEXT,
+                        genotype TEXT,
+                        annotation_coverage INTEGER,
+                        chrom_grch38 TEXT,
+                        pos_grch38 INTEGER
+                    )"""
+                )
+            )
+            conn.execute(sa.text("PRAGMA user_version = 6"))
+            conn.commit()
+        return engine
+
+    def test_upgrade_v6_adds_watched_variants_table(self, tmp_path):
+        """v6 → v7 adds watched_variants table for VUS tracking (P4-21g)."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v6_sample_db(db_path)
+
+        tables_before = _get_tables(db_path)
+        assert "watched_variants" not in tables_before
+
+        updated = ensure_sample_schema_current(engine)
+        assert updated is True
+
+        tables_after = _get_tables(db_path)
+        assert "watched_variants" in tables_after
+
+    def test_upgrade_v6_watched_variants_columns(self, tmp_path):
+        """watched_variants table has correct columns after v6 → v7 upgrade."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v6_sample_db(db_path)
+
+        ensure_sample_schema_current(engine)
+
+        cols = _get_columns(db_path, "watched_variants")
+        assert "rsid" in cols
+        assert "watched_at" in cols
+        assert "clinvar_significance_at_watch" in cols
+        assert "notes" in cols
+
+    def test_upgrade_v6_stamps_v7(self, tmp_path):
+        """Schema version is bumped to 7 after upgrade."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v6_sample_db(db_path)
+
+        ensure_sample_schema_current(engine)
+
+        conn = sqlite3.connect(str(db_path))
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.close()
+        assert version == SAMPLE_SCHEMA_VERSION
+        assert version == 7
+
+    def test_watched_variants_insert_and_read(self, tmp_path):
+        """Can insert and query watched_variants after migration."""
+        db_path = tmp_path / "sample_001.db"
+        engine = self._create_v6_sample_db(db_path)
+        ensure_sample_schema_current(engine)
+
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO watched_variants (rsid, clinvar_significance_at_watch, notes) "
+                    "VALUES (:rsid, :sig, :notes)"
+                ),
+                {"rsid": "rs80357906", "sig": "Uncertain significance", "notes": "BRCA2 VUS"},
+            )
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                sa.text("SELECT rsid, clinvar_significance_at_watch, notes FROM watched_variants")
+            ).fetchone()
+            assert row[0] == "rs80357906"
+            assert row[1] == "Uncertain significance"
+            assert row[2] == "BRCA2 VUS"
