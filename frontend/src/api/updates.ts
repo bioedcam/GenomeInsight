@@ -55,12 +55,22 @@ export interface TriggerUpdateResponse {
   message: string
 }
 
+export interface AppUpdateInfo {
+  update_available: boolean
+  current_version: string
+  latest_version: string | null
+  release_url: string | null
+  release_notes: string | null
+  error: string | null
+}
+
 // ── Query keys ───────────────────────────────────────────────────────
 
 export const DB_STATUS_KEY = ['updates', 'status'] as const
 export const UPDATE_CHECK_KEY = ['updates', 'check'] as const
 export const UPDATE_HISTORY_KEY = ['updates', 'history'] as const
 export const REANNOTATION_PROMPTS_KEY = ['updates', 'prompts'] as const
+export const APP_UPDATE_KEY = ['updates', 'app'] as const
 
 // ── Fetchers ─────────────────────────────────────────────────────────
 
@@ -138,6 +148,15 @@ async function toggleAutoUpdate(dbName: string, enabled: boolean): Promise<void>
   }
 }
 
+async function fetchAppUpdate(): Promise<AppUpdateInfo> {
+  const res = await fetch('/api/updates/app-update')
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`App update check failed: ${res.status} ${text}`.trim())
+  }
+  return res.json()
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 
 /** Fetch per-DB version stamps and auto-update status. staleTime=1h. */
@@ -146,6 +165,17 @@ export function useDatabaseStatuses() {
     queryKey: DB_STATUS_KEY,
     queryFn: fetchDatabaseStatuses,
     staleTime: 60 * 60 * 1000, // 1 hour
+  })
+}
+
+/** Check for app updates via GitHub Releases. staleTime=1h. */
+export function useAppUpdate(enabled = true) {
+  return useQuery({
+    queryKey: APP_UPDATE_KEY,
+    queryFn: fetchAppUpdate,
+    staleTime: 60 * 60 * 1000, // 1 hour
+    enabled,
+    retry: false, // Don't retry on network failure — non-critical
   })
 }
 

@@ -14,7 +14,8 @@ import UpdateManager from '@/components/settings/UpdateManager'
 import ExportBackup from '@/components/settings/ExportBackup'
 import NuclearDelete from '@/components/settings/NuclearDelete'
 import SystemHealth from '@/components/settings/SystemHealth'
-import PlaceholderPage from '@/components/PlaceholderPage'
+import { useAppUpdate } from '@/api/updates'
+import { ArrowUpCircle, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/settings/general', label: 'General', icon: Settings2 },
@@ -79,13 +80,116 @@ function HealthPage() {
   return <SystemHealth />
 }
 
-function AboutPlaceholder() {
+function AboutPage() {
+  const { data: appUpdate, isLoading, refetch, isFetching } = useAppUpdate()
+
   return (
-    <PlaceholderPage
-      moduleName="About"
-      phase={4}
-      description="Version info, licenses, and update notifications."
-    />
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground mb-1">About GenomeInsight</h2>
+        <p className="text-sm text-muted-foreground">
+          Version information and update notifications.
+        </p>
+      </div>
+
+      {/* Current version */}
+      <div className="rounded-lg border bg-card p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Current Version</p>
+            <p className="text-2xl font-bold text-foreground">
+              v{appUpdate?.current_version ?? '0.1.0'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className={cn(
+              'rounded-md border px-3 py-1.5 text-sm transition-colors',
+              'hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+              isFetching && 'opacity-50 cursor-not-allowed',
+            )}
+          >
+            {isFetching ? 'Checking...' : 'Check for updates'}
+          </button>
+        </div>
+
+        {/* Update status */}
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Checking for updates...</p>
+        ) : appUpdate?.update_available ? (
+          <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3">
+            <ArrowUpCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Update available: v{appUpdate.latest_version}
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Upgrade via:{' '}
+                <code className="rounded bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 text-xs font-mono">
+                  pip install --upgrade genomeinsight
+                </code>
+              </p>
+              {appUpdate.release_url && (
+                <a
+                  href={appUpdate.release_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-amber-700 dark:text-amber-300 underline hover:no-underline"
+                >
+                  View release notes
+                </a>
+              )}
+            </div>
+          </div>
+        ) : appUpdate?.error ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Could not check for updates: {appUpdate.error}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>You are running the latest version.</span>
+          </div>
+        )}
+      </div>
+
+      {/* License */}
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-sm font-medium text-foreground mb-1">License</p>
+        <p className="text-sm text-muted-foreground">MIT License</p>
+      </div>
+
+      {/* Links */}
+      <div className="rounded-lg border bg-card p-4 space-y-2">
+        <p className="text-sm font-medium text-foreground mb-1">Resources</p>
+        <ul className="text-sm text-muted-foreground space-y-1">
+          <li>
+            <a
+              href="https://github.com/bioedcam/GenomeInsight"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline hover:text-foreground transition-colors"
+            >
+              GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://github.com/bioedcam/GenomeInsight/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline hover:text-foreground transition-colors"
+            >
+              Report an Issue
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
   )
 }
 
@@ -106,7 +210,7 @@ export default function Settings() {
             <Route path="general" element={<GeneralSettings />} />
             <Route path="updates" element={<UpdateManager />} />
             <Route path="health" element={<HealthPage />} />
-            <Route path="about" element={<AboutPlaceholder />} />
+            <Route path="about" element={<AboutPage />} />
           </Routes>
         </div>
       </div>

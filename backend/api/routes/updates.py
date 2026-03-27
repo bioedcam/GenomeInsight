@@ -1,7 +1,8 @@
-"""Update manager API routes (P4-16).
+"""Update manager API routes (P4-16, P4-21d).
 
 Endpoints for checking database updates, triggering updates,
-viewing update history, and managing re-annotation prompts.
+viewing update history, managing re-annotation prompts,
+and checking for app updates via GitHub Releases API.
 """
 
 from __future__ import annotations
@@ -207,6 +208,31 @@ async def list_reannotation_prompts(
     registry = get_registry()
     rows = get_active_prompts(registry.reference_engine, sample_id=sample_id)
     return [ReannotationPrompt(**r) for r in rows]
+
+
+class AppUpdateResponse(BaseModel):
+    update_available: bool
+    current_version: str
+    latest_version: str | None = None
+    release_url: str | None = None
+    release_notes: str | None = None
+    error: str | None = None
+
+
+@router.get("/app-update", response_model=AppUpdateResponse)
+async def check_app_update() -> AppUpdateResponse:
+    """Check GitHub Releases API for a newer GenomeInsight version."""
+    from backend.utils.update_checker import check_app_update as _check
+
+    info = _check()
+    return AppUpdateResponse(
+        update_available=info.update_available,
+        current_version=info.current_version,
+        latest_version=info.latest_version,
+        release_url=info.release_url,
+        release_notes=info.release_notes,
+        error=info.error,
+    )
 
 
 @router.post("/prompts/{prompt_id}/dismiss")
