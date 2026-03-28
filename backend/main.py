@@ -57,9 +57,9 @@ from backend.api.routes.sleep import router as sleep_router
 from backend.api.routes.tags import router as tags_router
 from backend.api.routes.traits import router as traits_router
 from backend.api.routes.updates import router as updates_router
-from backend.api.routes.watches import router as watches_router
 from backend.api.routes.variant_detail import router as variant_detail_router
 from backend.api.routes.variants import router as variants_router
+from backend.api.routes.watches import router as watches_router
 from backend.auth import AuthMiddleware
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
