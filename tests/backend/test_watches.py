@@ -205,10 +205,13 @@ class TestListWatched:
 
     def test_list_multiple(self, watches_client: TestClient):
         """GET returns all watched variants ordered by watched_at desc."""
+        import time
+
         watches_client.post(
             "/api/watches",
             json={"sample_id": 1, "rsid": "rs12345"},
         )
+        time.sleep(0.01)  # Ensure distinct timestamps
         watches_client.post(
             "/api/watches",
             json={"sample_id": 1, "rsid": "rs80357906"},
@@ -218,9 +221,9 @@ class TestListWatched:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 2
-        rsids = [d["rsid"] for d in data]
-        assert "rs12345" in rsids
-        assert "rs80357906" in rsids
+        # Most recent first (desc order)
+        assert data[0]["rsid"] == "rs80357906"
+        assert data[1]["rsid"] == "rs12345"
 
 
 class TestUpdateWatchNotes:

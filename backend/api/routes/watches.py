@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 
 from backend.db.connection import get_registry
 from backend.db.tables import annotated_variants, samples, watched_variants
@@ -129,24 +130,20 @@ def watch_variant(body: WatchCreate) -> WatchResponse:
 
     now = datetime.now(UTC)
 
-    with engine.begin() as conn:
-        # Check if already watched
-        existing = conn.execute(
-            sa.select(watched_variants.c.rsid).where(watched_variants.c.rsid == body.rsid)
-        ).fetchone()
-        if existing is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Variant {body.rsid} is already being watched.",
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                watched_variants.insert().values(
+                    rsid=body.rsid,
+                    watched_at=now,
+                    clinvar_significance_at_watch=clinvar_sig,
+                    notes=body.notes,
+                )
             )
-
-        conn.execute(
-            watched_variants.insert().values(
-                rsid=body.rsid,
-                watched_at=now,
-                clinvar_significance_at_watch=clinvar_sig,
-                notes=body.notes,
-            )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Variant {body.rsid} is already being watched.",
         )
 
     return WatchResponse(
