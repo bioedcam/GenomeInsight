@@ -344,6 +344,81 @@ class TestReannotationPrompts:
         ok = dismiss_prompt(reference_engine, 999)
         assert ok is False
 
+    def test_create_prompt_with_watched_data(self, reference_engine):
+        """T4-22m: Prompt stores watched variant reclassification details."""
+        watched = [
+            {
+                "rsid": "rs80357906",
+                "gene_symbol": "BRCA2",
+                "old_significance": "Uncertain_significance",
+                "new_significance": "Likely_pathogenic",
+            }
+        ]
+        _create_reannotation_prompt(
+            reference_engine,
+            sample_id=1,
+            db_name="clinvar",
+            db_version="20260315",
+            candidate_count=3,
+            watched_count=1,
+            watched_details=watched,
+        )
+
+        prompts = get_active_prompts(reference_engine)
+        assert len(prompts) == 1
+        assert prompts[0]["watched_count"] == 1
+        assert len(prompts[0]["watched_details"]) == 1
+        assert prompts[0]["watched_details"][0]["rsid"] == "rs80357906"
+        assert prompts[0]["watched_details"][0]["new_significance"] == "Likely_pathogenic"
+
+    def test_prompt_no_watched_data_defaults(self, reference_engine):
+        """T4-22n: Prompt without watched data has zero count and empty list."""
+        _create_reannotation_prompt(
+            reference_engine,
+            sample_id=1,
+            db_name="clinvar",
+            db_version="20260315",
+            candidate_count=3,
+        )
+
+        prompts = get_active_prompts(reference_engine)
+        assert len(prompts) == 1
+        assert prompts[0]["watched_count"] == 0
+        assert prompts[0]["watched_details"] == []
+
+    def test_update_prompt_with_watched_data(self, reference_engine):
+        """Updating a prompt replaces watched data."""
+        _create_reannotation_prompt(
+            reference_engine,
+            sample_id=1,
+            db_name="clinvar",
+            db_version="20260301",
+            candidate_count=2,
+        )
+        watched = [
+            {
+                "rsid": "rs80357906",
+                "gene_symbol": "BRCA2",
+                "old_significance": "Uncertain_significance",
+                "new_significance": "Likely_pathogenic",
+            }
+        ]
+        _create_reannotation_prompt(
+            reference_engine,
+            sample_id=1,
+            db_name="clinvar",
+            db_version="20260315",
+            candidate_count=5,
+            watched_count=1,
+            watched_details=watched,
+        )
+
+        prompts = get_active_prompts(reference_engine)
+        assert len(prompts) == 1
+        assert prompts[0]["candidate_count"] == 5
+        assert prompts[0]["watched_count"] == 1
+        assert prompts[0]["watched_details"][0]["rsid"] == "rs80357906"
+
     def test_filter_by_sample_id(self, reference_engine):
         _create_reannotation_prompt(
             reference_engine,
@@ -496,6 +571,109 @@ class TestPrecheck:
         assert result.candidate_count == 1
         assert len(result.watched_reclassified) == 1
         assert result.watched_reclassified[0]["rsid"] == "rs80357906"
+        assert result.watched_reclassified[0]["new_significance"] == "Likely_pathogenic"
+
+    def test_precheck_watched_no_significance_change(self, reference_engine, sample_engine):
+        """T4-22n: Pre-check does NOT upgrade banner when watched variant has no change."""
+        create_sample_tables(sample_engine)
+        with sample_engine.begin() as conn:
+            conn.execute(
+                annotated_variants.insert(),
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "chrom": "17",
+                        "pos": 43091983,
+                        "clinvar_significance": "Uncertain_significance",
+                        "gene_symbol": "BRCA2",
+                        "annotation_coverage": 2,
+                    },
+                ],
+            )
+            conn.execute(
+                watched_variants.insert(),
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "clinvar_significance_at_watch": "Uncertain_significance",
+                    },
+                ],
+            )
+
+        # Significance stays the same
+        old_sigs = {"rs80357906": "Uncertain_significance"}
+        new_sigs = {"rs80357906": "Uncertain_significance"}
+
+        result = _precheck_clinvar(
+            sample_engine,
+            reference_engine,
+            sample_id=1,
+            sample_name="Test",
+            old_significances=old_sigs,
+            new_significances=new_sigs,
+        )
+
+        assert result.candidate_count == 0
+        assert len(result.watched_reclassified) == 0
+
+    def test_precheck_watched_direct_query_reclassification(
+        self, reference_engine, sample_engine
+    ):
+        """T4-22m variant: Watched variant reclassification detected via direct query path."""
+        create_sample_tables(sample_engine)
+        with sample_engine.begin() as conn:
+            conn.execute(
+                annotated_variants.insert(),
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "chrom": "17",
+                        "pos": 43091983,
+                        "clinvar_significance": "Uncertain_significance",
+                        "gene_symbol": "BRCA2",
+                        "annotation_coverage": 2,
+                    },
+                ],
+            )
+            conn.execute(
+                watched_variants.insert(),
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "clinvar_significance_at_watch": "Uncertain_significance",
+                    },
+                ],
+            )
+
+        # Seed reference DB with updated ClinVar significance
+        with reference_engine.begin() as conn:
+            conn.execute(
+                clinvar_variants.insert(),
+                [
+                    {
+                        "rsid": "rs80357906",
+                        "chrom": "17",
+                        "pos": 43091983,
+                        "ref": "A",
+                        "alt": "G",
+                        "significance": "Likely_pathogenic",
+                        "review_stars": 2,
+                    },
+                ],
+            )
+
+        # Call without precomputed dicts (direct query path)
+        result = _precheck_clinvar(
+            sample_engine,
+            reference_engine,
+            sample_id=1,
+            sample_name="Test",
+        )
+
+        assert result.candidate_count == 1
+        assert len(result.watched_reclassified) == 1
+        assert result.watched_reclassified[0]["rsid"] == "rs80357906"
+        assert result.watched_reclassified[0]["old_significance"] == "Uncertain_significance"
         assert result.watched_reclassified[0]["new_significance"] == "Likely_pathogenic"
 
     def test_precheck_direct_query(self, reference_engine, sample_engine):

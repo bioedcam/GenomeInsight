@@ -293,6 +293,13 @@ reannotation_prompts = sa.Table(
     sa.Column("db_name", sa.Text, nullable=False),
     sa.Column("db_version", sa.Text, nullable=False),
     sa.Column("candidate_count", sa.Integer, server_default="0"),
+    sa.Column("watched_count", sa.Integer, server_default="0"),
+    sa.Column(
+        "watched_details",
+        sa.Text,
+        server_default="[]",
+        comment="JSON array of watched variant reclassifications",
+    ),
     sa.Column("dismissed", sa.Boolean, server_default=sa.text("0")),
     sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
 )
