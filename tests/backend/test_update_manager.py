@@ -616,9 +616,7 @@ class TestPrecheck:
         assert result.candidate_count == 0
         assert len(result.watched_reclassified) == 0
 
-    def test_precheck_watched_direct_query_reclassification(
-        self, reference_engine, sample_engine
-    ):
+    def test_precheck_watched_direct_query_reclassification(self, reference_engine, sample_engine):
         """T4-22m variant: Watched variant reclassification detected via direct query path."""
         create_sample_tables(sample_engine)
         with sample_engine.begin() as conn:
