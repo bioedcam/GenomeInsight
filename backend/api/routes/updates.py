@@ -55,12 +55,21 @@ class UpdateHistoryEntry(BaseModel):
     duration_seconds: int | None
 
 
+class WatchedReclassification(BaseModel):
+    rsid: str
+    gene_symbol: str | None = None
+    old_significance: str
+    new_significance: str
+
+
 class ReannotationPrompt(BaseModel):
     id: int
     sample_id: int
     db_name: str
     db_version: str
     candidate_count: int
+    watched_count: int = 0
+    watched_details: list[WatchedReclassification] = []
     created_at: str | None
 
 

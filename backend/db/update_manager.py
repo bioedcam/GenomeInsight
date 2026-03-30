@@ -14,6 +14,7 @@ Scheduler behaviour (§2.20):
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -511,7 +512,7 @@ def _precheck_clinvar(
 
     result.candidate_count = len(result.reclassified_variants)
 
-    # Check watched variants for reclassification
+    # Check watched variants for reclassification (P4-21i)
     try:
         with sample_engine.connect() as conn:
             watched_rows = conn.execute(
@@ -521,24 +522,45 @@ def _precheck_clinvar(
                 )
             ).fetchall()
 
-        if watched_rows and new_significances is not None:
+        if watched_rows:
+            # Build a lookup for current ClinVar significances
+            if new_significances is not None:
+                sig_lookup = new_significances
+            else:
+                # Fallback: query reference DB for watched variant rsids
+                watched_rsids = [wr.rsid for wr in watched_rows]
+                sig_lookup = {}
+                with reference_engine.connect() as conn:
+                    for i in range(0, len(watched_rsids), 500):
+                        batch = watched_rsids[i : i + 500]
+                        rows = conn.execute(
+                            sa.select(
+                                clinvar_variants.c.rsid,
+                                clinvar_variants.c.significance,
+                            ).where(clinvar_variants.c.rsid.in_(batch))
+                        ).fetchall()
+                        for r in rows:
+                            sig_lookup[r.rsid] = r.significance
+
+            # Build gene symbol lookup from reclassified list and sample rows
+            gene_symbols: dict[str, str | None] = {}
+            for rv in result.reclassified_variants:
+                gene_symbols[rv["rsid"]] = rv.get("gene_symbol")
+            for sr in sample_rows:
+                if sr.rsid not in gene_symbols:
+                    gene_symbols[sr.rsid] = sr.gene_symbol
+
             for wr in watched_rows:
-                new_sig = new_significances.get(wr.rsid)
+                new_sig = sig_lookup.get(wr.rsid)
                 if (
                     new_sig is not None
                     and wr.clinvar_significance_at_watch is not None
                     and new_sig != wr.clinvar_significance_at_watch
                 ):
-                    # Find gene symbol from reclassified list or sample rows
-                    gene = None
-                    for rv in result.reclassified_variants:
-                        if rv["rsid"] == wr.rsid:
-                            gene = rv.get("gene_symbol")
-                            break
                     result.watched_reclassified.append(
                         {
                             "rsid": wr.rsid,
-                            "gene_symbol": gene,
+                            "gene_symbol": gene_symbols.get(wr.rsid),
                             "old_significance": wr.clinvar_significance_at_watch,
                             "new_significance": new_sig,
                         }
@@ -585,7 +607,7 @@ def run_precheck_all_samples(
                 new_significances=new_significances,
             )
 
-            if pre_check.candidate_count > 0:
+            if pre_check.candidate_count > 0 or pre_check.watched_reclassified:
                 results.append(pre_check)
                 _create_reannotation_prompt(
                     engine,
@@ -593,6 +615,8 @@ def run_precheck_all_samples(
                     db_name=db_name,
                     db_version=db_version,
                     candidate_count=pre_check.candidate_count,
+                    watched_count=len(pre_check.watched_reclassified),
+                    watched_details=pre_check.watched_reclassified,
                 )
         except Exception as exc:
             logger.warning(
@@ -614,8 +638,16 @@ def _create_reannotation_prompt(
     db_name: str,
     db_version: str,
     candidate_count: int,
+    watched_count: int = 0,
+    watched_details: list[dict] | None = None,
 ) -> None:
-    """Create or update a re-annotation prompt for a sample."""
+    """Create or update a re-annotation prompt for a sample.
+
+    When watched variants have been reclassified, ``watched_count``
+    and ``watched_details`` upgrade the banner to include a
+    watched-variant callout (P4-21i).
+    """
+    details_json = json.dumps(watched_details or [])
     with engine.begin() as conn:
         # Check for existing undismissed prompt
         existing = conn.execute(
@@ -633,6 +665,8 @@ def _create_reannotation_prompt(
                 .values(
                     db_version=db_version,
                     candidate_count=candidate_count,
+                    watched_count=watched_count,
+                    watched_details=details_json,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -643,9 +677,22 @@ def _create_reannotation_prompt(
                     db_name=db_name,
                     db_version=db_version,
                     candidate_count=candidate_count,
+                    watched_count=watched_count,
+                    watched_details=details_json,
                     dismissed=False,
                 )
             )
+
+
+def _safe_parse_json_list(value: str | None) -> list:
+    """Parse a JSON array string, returning [] on any failure."""
+    if not value:
+        return []
+    try:
+        result = json.loads(value)
+        return result if isinstance(result, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 def get_active_prompts(
@@ -668,6 +715,8 @@ def get_active_prompts(
             "db_name": row.db_name,
             "db_version": row.db_version,
             "candidate_count": row.candidate_count,
+            "watched_count": row.watched_count or 0,
+            "watched_details": _safe_parse_json_list(row.watched_details),
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in rows
