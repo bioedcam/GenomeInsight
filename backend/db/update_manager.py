@@ -684,6 +684,17 @@ def _create_reannotation_prompt(
             )
 
 
+def _safe_parse_json_list(value: str | None) -> list:
+    """Parse a JSON array string, returning [] on any failure."""
+    if not value:
+        return []
+    try:
+        result = json.loads(value)
+        return result if isinstance(result, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 def get_active_prompts(
     engine: Engine,
     *,
@@ -705,9 +716,7 @@ def get_active_prompts(
             "db_version": row.db_version,
             "candidate_count": row.candidate_count,
             "watched_count": row.watched_count or 0,
-            "watched_details": json.loads(row.watched_details)
-            if row.watched_details
-            else [],
+            "watched_details": _safe_parse_json_list(row.watched_details),
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in rows
