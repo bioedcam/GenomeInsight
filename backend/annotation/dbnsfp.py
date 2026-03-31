@@ -38,6 +38,8 @@ import httpx
 import sqlalchemy as sa
 import structlog
 
+from backend.annotation.sqlite_limits import SQLITE_MAX_VARIABLE_NUMBER as _SQLITE_VAR_LIMIT
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
@@ -55,8 +57,11 @@ DBNSFP_PREBUILT_URL = "https://github.com/GenomeInsight/data/releases/download/v
 
 # Batch sizes
 BATCH_SIZE = 10_000
-LOOKUP_BATCH_SIZE = 500  # stay under SQLite 999-variable limit
-POSITION_LOOKUP_BATCH_SIZE = 249  # 4 params per position → 249 × 4 = 996 < 999
+# Default lookup batch sizes; upgraded at module load when SQLite supports
+# a higher SQLITE_MAX_VARIABLE_NUMBER (typically 32766 on Linux vs 999 on
+# macOS system SQLite).  Larger batches reduce round-trip overhead.
+LOOKUP_BATCH_SIZE = max(500, _SQLITE_VAR_LIMIT - 10)
+POSITION_LOOKUP_BATCH_SIZE = max(249, (_SQLITE_VAR_LIMIT - 10) // 4)
 
 # Chromosomes we accept (matching 23andMe scope)
 VALID_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT"}
@@ -158,6 +163,16 @@ CREATE TABLE IF NOT EXISTS dbnsfp_scores (
 CREATE_INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_dbnsfp_rsid ON dbnsfp_scores (rsid)",
     "CREATE INDEX IF NOT EXISTS idx_dbnsfp_chrom_pos ON dbnsfp_scores (chrom, pos)",
+    # Covering index for rsid lookups (P4-22): includes all score columns so
+    # the query can be satisfied entirely from the index without hitting the
+    # main table.  This eliminates random I/O on the ~1.5 GB main table for
+    # the primary (rsid-based) lookup path.
+    (
+        "CREATE INDEX IF NOT EXISTS idx_dbnsfp_rsid_covering ON dbnsfp_scores "
+        "(rsid, chrom, pos, ref, alt, cadd_phred, sift_score, sift_pred, "
+        "polyphen2_hsvar_score, polyphen2_hsvar_pred, revel, mutpred2, vest4, "
+        "metasvm, metalr, gerp_rs, phylop, mpc, primateai)"
+    ),
 ]
 
 

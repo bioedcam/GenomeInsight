@@ -563,6 +563,25 @@ def run_benchmark(num_variants: int = 600_000) -> dict:
     print(f"  Annotation pipeline:    {t_annotation:>10.2f}s  ({rate:,.0f} var/s)")
     print()
 
+    # Per-source timing breakdown (P4-22 bottleneck identification)
+    print("  Per-source timing (cumulative across batches, wall-clock per thread):")
+    print(f"    VEP lookup:           {engine_result.timing_vep_s:>10.2f}s")
+    print(f"    ClinVar lookup:       {engine_result.timing_clinvar_s:>10.2f}s")
+    print(f"    gnomAD lookup:        {engine_result.timing_gnomad_s:>10.2f}s")
+    print(f"    dbNSFP lookup:        {engine_result.timing_dbnsfp_s:>10.2f}s")
+    print(f"    Gene-phenotype:       {engine_result.timing_gene_phenotype_s:>10.2f}s")
+    print(f"    Merge + conflict:     {engine_result.timing_merge_s:>10.2f}s")
+    print(f"    Bulk upsert:          {engine_result.timing_upsert_s:>10.2f}s")
+    print()
+
+    results["timing_vep_s"] = engine_result.timing_vep_s
+    results["timing_clinvar_s"] = engine_result.timing_clinvar_s
+    results["timing_gnomad_s"] = engine_result.timing_gnomad_s
+    results["timing_dbnsfp_s"] = engine_result.timing_dbnsfp_s
+    results["timing_gene_phenotype_s"] = engine_result.timing_gene_phenotype_s
+    results["timing_merge_s"] = engine_result.timing_merge_s
+    results["timing_upsert_s"] = engine_result.timing_upsert_s
+
     # Performance targets
     annotation_target = 120.0  # 2 minutes
     annotation_limit = 300.0  # 5 minutes

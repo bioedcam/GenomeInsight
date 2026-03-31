@@ -20,6 +20,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -83,6 +84,14 @@ class AnnotationEngineResult:
     rows_written: int = 0
     batches_processed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Per-source cumulative timing (seconds) for bottleneck identification (P4-22)
+    timing_vep_s: float = 0.0
+    timing_clinvar_s: float = 0.0
+    timing_gnomad_s: float = 0.0
+    timing_dbnsfp_s: float = 0.0
+    timing_gene_phenotype_s: float = 0.0
+    timing_merge_s: float = 0.0
+    timing_upsert_s: float = 0.0
 
     @property
     def total_matched(self) -> int:
@@ -519,11 +528,12 @@ def _bulk_upsert(
     all_keys = {"rsid", "chrom", "pos", "genotype", "annotation_coverage"}
     all_keys.update(_UPSERT_COLUMNS)
 
-    # Compute batch size to stay under SQLite's SQLITE_MAX_VARIABLE_NUMBER.
+    # Compute batch size using the detected SQLITE_MAX_VARIABLE_NUMBER.
     # macOS system SQLite defaults to 999; Linux builds typically allow 32766.
-    # Use 999 as a safe floor to ensure cross-platform compatibility.
+    from backend.annotation.sqlite_limits import SQLITE_MAX_VARIABLE_NUMBER
+
     num_cols = len(all_keys)
-    upsert_batch_size = max(1, 999 // num_cols)
+    upsert_batch_size = max(1, SQLITE_MAX_VARIABLE_NUMBER // num_cols)
     normalised = [{k: row.get(k) for k in all_keys} for row in rows]
 
     with sample_engine.begin() as conn:
@@ -558,6 +568,22 @@ def _bulk_upsert(
             written += len(batch)
 
     return written
+
+
+# ── Timed lookup wrapper (P4-22) ────────────────────────────────────────
+
+
+def _timed_lookup(
+    fn: Callable,
+    *args: object,
+    source_timings: dict[str, float],
+    source_name: str,
+) -> dict:
+    """Execute a source lookup function and record wall-clock time."""
+    t0 = time.perf_counter()
+    res = fn(*args)
+    source_timings[source_name] = time.perf_counter() - t0
+    return res
 
 
 # ── Engine availability checks ───────────────────────────────────────────
@@ -633,37 +659,77 @@ def run_annotation(
     dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp")
 
     # 4. Process in batches
+    # Reuse a single ThreadPoolExecutor across all batches to avoid
+    # repeated thread creation/teardown overhead (P4-22 optimization).
     total_written = 0
 
-    for batch_start in range(0, len(raw_rows), batch_size):
-        batch_rows = raw_rows[batch_start : batch_start + batch_size]
-        batch_rsids = [r.rsid for r in batch_rows]
-        raw_by_rsid = {r.rsid: r for r in batch_rows}
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+        for batch_start in range(0, len(raw_rows), batch_size):
+            batch_rows = raw_rows[batch_start : batch_start + batch_size]
+            batch_rsids = [r.rsid for r in batch_rows]
+            raw_by_rsid = {r.rsid: r for r in batch_rows}
 
-        # 5. Concurrent lookups across annotation sources
-        vep_data: dict[str, dict] = {}
-        clinvar_data: dict[str, dict] = {}
-        gnomad_data: dict[str, dict] = {}
-        dbnsfp_data: dict[str, dict] = {}
+            # 5. Concurrent lookups across annotation sources
+            vep_data: dict[str, dict] = {}
+            clinvar_data: dict[str, dict] = {}
+            gnomad_data: dict[str, dict] = {}
+            dbnsfp_data: dict[str, dict] = {}
 
-        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-            futures = {}
+            # Per-source timing: each future records its own wall-clock time.
+            # Since sources run concurrently, we track per-source time for
+            # bottleneck identification (P4-22).
+            futures: dict = {}
+            source_timings: dict[str, float] = {}
 
             if vep_engine is not None:
-                futures[executor.submit(_lookup_vep, batch_rsids, raw_by_rsid, vep_engine)] = "vep"
+                futures[
+                    executor.submit(
+                        _timed_lookup,
+                        _lookup_vep,
+                        batch_rsids,
+                        raw_by_rsid,
+                        vep_engine,
+                        source_timings=source_timings,
+                        source_name="vep",
+                    )
+                ] = "vep"
 
             futures[
-                executor.submit(_lookup_clinvar, batch_rsids, raw_by_rsid, reference_engine)
+                executor.submit(
+                    _timed_lookup,
+                    _lookup_clinvar,
+                    batch_rsids,
+                    raw_by_rsid,
+                    reference_engine,
+                    source_timings=source_timings,
+                    source_name="clinvar",
+                )
             ] = "clinvar"
 
             if gnomad_engine is not None:
                 futures[
-                    executor.submit(_lookup_gnomad, batch_rsids, raw_by_rsid, gnomad_engine)
+                    executor.submit(
+                        _timed_lookup,
+                        _lookup_gnomad,
+                        batch_rsids,
+                        raw_by_rsid,
+                        gnomad_engine,
+                        source_timings=source_timings,
+                        source_name="gnomad",
+                    )
                 ] = "gnomad"
 
             if dbnsfp_engine is not None:
                 futures[
-                    executor.submit(_lookup_dbnsfp, batch_rsids, raw_by_rsid, dbnsfp_engine)
+                    executor.submit(
+                        _timed_lookup,
+                        _lookup_dbnsfp,
+                        batch_rsids,
+                        raw_by_rsid,
+                        dbnsfp_engine,
+                        source_timings=source_timings,
+                        source_name="dbnsfp",
+                    )
                 ] = "dbnsfp"
 
             for future in as_completed(futures):
@@ -686,46 +752,58 @@ def run_annotation(
                     )
                     result.errors.append(msg)
 
-        # 5b. Gene-phenotype lookup (depends on VEP gene_symbol results)
-        gene_phenotype_data: dict[str, dict] = {}
-        if vep_data:
-            try:
-                gene_phenotype_data = _lookup_gene_phenotype(vep_data, reference_engine)
-            except Exception as exc:
-                msg = f"gene_phenotype lookup failed: {exc}"
-                logger.warning(
-                    "annotation_source_error",
-                    extra={"source": "gene_phenotype", "error": str(exc)},
-                )
-                result.errors.append(msg)
+            # Accumulate per-source timings
+            result.timing_vep_s += source_timings.get("vep", 0.0)
+            result.timing_clinvar_s += source_timings.get("clinvar", 0.0)
+            result.timing_gnomad_s += source_timings.get("gnomad", 0.0)
+            result.timing_dbnsfp_s += source_timings.get("dbnsfp", 0.0)
 
-        # 6. Merge results and compute bitmask
-        merged = _merge_annotations(
-            batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data, gene_phenotype_data
-        )
+            # 5b. Gene-phenotype lookup (depends on VEP gene_symbol results)
+            gene_phenotype_data: dict[str, dict] = {}
+            if vep_data:
+                try:
+                    t_gp = time.perf_counter()
+                    gene_phenotype_data = _lookup_gene_phenotype(vep_data, reference_engine)
+                    result.timing_gene_phenotype_s += time.perf_counter() - t_gp
+                except Exception as exc:
+                    msg = f"gene_phenotype lookup failed: {exc}"
+                    logger.warning(
+                        "annotation_source_error",
+                        extra={"source": "gene_phenotype", "error": str(exc)},
+                    )
+                    result.errors.append(msg)
 
-        # 6b. Ensemble pathogenicity flag (P2-13)
-        apply_ensemble_pathogenic(merged)
+            # 6. Merge results and compute bitmask
+            t_merge = time.perf_counter()
+            merged = _merge_annotations(
+                batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data, gene_phenotype_data
+            )
 
-        # 6c. Evidence conflict detection (P2-07)
-        apply_evidence_conflicts(merged)
+            # 6b. Ensemble pathogenicity flag (P2-13)
+            apply_ensemble_pathogenic(merged)
 
-        # 7. Bulk upsert
-        written = _bulk_upsert(sample_engine, merged)
-        total_written += written
+            # 6c. Evidence conflict detection (P2-07)
+            apply_evidence_conflicts(merged)
+            result.timing_merge_s += time.perf_counter() - t_merge
 
-        # Update per-source match counts
-        result.vep_matched += len(vep_data)
-        result.clinvar_matched += len(clinvar_data)
-        result.gnomad_matched += len(gnomad_data)
-        result.dbnsfp_matched += len(dbnsfp_data)
-        result.gene_phenotype_matched += len(gene_phenotype_data)
-        result.batches_processed += 1
+            # 7. Bulk upsert
+            t_upsert = time.perf_counter()
+            written = _bulk_upsert(sample_engine, merged)
+            result.timing_upsert_s += time.perf_counter() - t_upsert
+            total_written += written
 
-        # 8. Progress callback
-        variants_done = min(batch_start + batch_size, len(raw_rows))
-        if progress_callback is not None:
-            progress_callback(variants_done, len(raw_rows))
+            # Update per-source match counts
+            result.vep_matched += len(vep_data)
+            result.clinvar_matched += len(clinvar_data)
+            result.gnomad_matched += len(gnomad_data)
+            result.dbnsfp_matched += len(dbnsfp_data)
+            result.gene_phenotype_matched += len(gene_phenotype_data)
+            result.batches_processed += 1
+
+            # 8. Progress callback
+            variants_done = min(batch_start + batch_size, len(raw_rows))
+            if progress_callback is not None:
+                progress_callback(variants_done, len(raw_rows))
 
     result.rows_written = total_written
 
@@ -744,6 +822,13 @@ def run_annotation(
             "written": result.rows_written,
             "batches": result.batches_processed,
             "errors": result.errors,
+            "timing_vep_s": round(result.timing_vep_s, 3),
+            "timing_clinvar_s": round(result.timing_clinvar_s, 3),
+            "timing_gnomad_s": round(result.timing_gnomad_s, 3),
+            "timing_dbnsfp_s": round(result.timing_dbnsfp_s, 3),
+            "timing_gene_phenotype_s": round(result.timing_gene_phenotype_s, 3),
+            "timing_merge_s": round(result.timing_merge_s, 3),
+            "timing_upsert_s": round(result.timing_upsert_s, 3),
         },
     )
 

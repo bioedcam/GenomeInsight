@@ -36,6 +36,8 @@ import httpx
 import sqlalchemy as sa
 import structlog
 
+from backend.annotation.sqlite_limits import SQLITE_MAX_VARIABLE_NUMBER as _SQLITE_VAR_LIMIT
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
@@ -52,7 +54,10 @@ GNOMAD_VCF_URL = (
 
 # Batch sizes
 BATCH_SIZE = 10_000
-LOOKUP_BATCH_SIZE = 500  # stay under SQLite 999-variable limit
+# Default lookup batch sizes; upgraded at module load when SQLite supports
+# a higher SQLITE_MAX_VARIABLE_NUMBER.
+LOOKUP_BATCH_SIZE = max(500, _SQLITE_VAR_LIMIT - 10)
+POSITION_LOOKUP_BATCH_SIZE = max(250, (_SQLITE_VAR_LIMIT - 10) // 4)
 
 # Chromosomes we accept (matching 23andMe scope)
 VALID_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT"}
@@ -784,8 +789,8 @@ def lookup_gnomad_by_positions(
     results: dict[tuple[str, int, str, str], GnomADAnnotation] = {}
 
     with gnomad_engine.connect() as conn:
-        for i in range(0, len(positions), 250):
-            batch = positions[i : i + 250]
+        for i in range(0, len(positions), POSITION_LOOKUP_BATCH_SIZE):
+            batch = positions[i : i + POSITION_LOOKUP_BATCH_SIZE]
 
             # Build OR conditions for (chrom, pos, ref, alt) tuples
             conditions = []
