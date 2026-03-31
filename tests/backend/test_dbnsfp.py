@@ -540,7 +540,9 @@ class TestConstants:
 
     def test_batch_sizes(self):
         assert BATCH_SIZE == 10_000
-        assert LOOKUP_BATCH_SIZE == 500
+        # LOOKUP_BATCH_SIZE is dynamically computed from SQLITE_MAX_VARIABLE_NUMBER
+        # (P4-22 optimization) — at least 500, but may be higher on Linux.
+        assert LOOKUP_BATCH_SIZE >= 500
 
     def test_fields_tuple(self):
         assert len(DBNSFP_FIELDS) == 14

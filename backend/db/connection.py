@@ -50,12 +50,20 @@ class DBRegistry:
         return self._settings
 
     @staticmethod
-    def _create_engine(db_path: Path, *, wal: bool = True) -> sa.Engine:
+    def _create_engine(
+        db_path: Path,
+        *,
+        wal: bool = True,
+        read_optimized: bool = False,
+    ) -> sa.Engine:
         """Create a SQLAlchemy engine for a SQLite database.
 
         Args:
             db_path: Path to the SQLite file.
             wal: Whether to enable WAL journal mode.
+            read_optimized: Whether to apply aggressive read-performance
+                PRAGMAs (larger cache, mmap, temp_store in memory).
+                Use for large read-only reference databases.
 
         Returns:
             Configured SQLAlchemy Engine.
@@ -64,10 +72,17 @@ class DBRegistry:
             f"sqlite:///{db_path}",
             pool_pre_ping=True,
         )
-        if wal:
-            with engine.connect() as conn:
+        with engine.connect() as conn:
+            if wal:
                 conn.execute(sa.text("PRAGMA journal_mode=WAL"))
-                conn.commit()
+            if read_optimized:
+                # 64 MB page cache (negative = KiB)
+                conn.execute(sa.text("PRAGMA cache_size=-65536"))
+                # 256 MB memory-mapped I/O for large reference DBs
+                conn.execute(sa.text("PRAGMA mmap_size=268435456"))
+                # Keep temp tables/indexes in memory
+                conn.execute(sa.text("PRAGMA temp_store=MEMORY"))
+            conn.commit()
         return engine
 
     @property
@@ -75,7 +90,9 @@ class DBRegistry:
         """Lazy-loaded VEP bundle engine (read-only, ~500 MB)."""
         if self._vep_engine is None:
             self._vep_engine = self._create_engine(
-                self._settings.vep_bundle_db_path, wal=self._settings.wal_mode
+                self._settings.vep_bundle_db_path,
+                wal=self._settings.wal_mode,
+                read_optimized=True,
             )
         return self._vep_engine
 
@@ -84,7 +101,9 @@ class DBRegistry:
         """Lazy-loaded gnomAD engine (read-only, ~2 GB)."""
         if self._gnomad_engine is None:
             self._gnomad_engine = self._create_engine(
-                self._settings.gnomad_db_path, wal=self._settings.wal_mode
+                self._settings.gnomad_db_path,
+                wal=self._settings.wal_mode,
+                read_optimized=True,
             )
         return self._gnomad_engine
 
@@ -93,7 +112,9 @@ class DBRegistry:
         """Lazy-loaded dbNSFP engine (read-only, ~1.5 GB)."""
         if self._dbnsfp_engine is None:
             self._dbnsfp_engine = self._create_engine(
-                self._settings.dbnsfp_db_path, wal=self._settings.wal_mode
+                self._settings.dbnsfp_db_path,
+                wal=self._settings.wal_mode,
+                read_optimized=True,
             )
         return self._dbnsfp_engine
 
