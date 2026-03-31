@@ -28,6 +28,7 @@ import {
   ErrorEmpty,
 } from "./EmptyStates"
 import VariantDetailSidePanel from "@/components/variant-detail/VariantDetailSidePanel"
+import WatchingSidebar from "./WatchingSidebar"
 
 interface VariantTableProps {
   sampleId: number | null
@@ -300,92 +301,104 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         onToggleGRCh38={handleToggleGRCh38}
       />
 
-      <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-card border-b border-border">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap"
-                    style={{ width: header.getSize() }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {status === "pending" ? (
-              <tr>
-                <td colSpan={table.getAllColumns().length} className="text-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                  <p className="text-sm text-muted-foreground mt-2">Loading variants...</p>
-                </td>
-              </tr>
-            ) : allRows.length === 0 ? (
-              <tr>
-                <td colSpan={table.getAllColumns().length}>
-                  {isPreAnnotation ? (
-                    <PreAnnotationEmpty
-                      totalVariants={totalVariants ?? 0}
-                      onShowUnannotated={() => setShowUnannotated(true)}
-                    />
-                  ) : (
-                    <NoMatchEmpty
-                      searchQuery={searchQuery}
-                      hasActiveFilter={!!activeFilter}
-                      onClearSearch={() => setSearchQuery("")}
-                      onClearFilters={() => setActiveFilter(undefined)}
-                      onApplyFilter={(f) => {
-                        setActiveFilter(f)
-                        setShowUnannotated(true)
-                      }}
-                    />
-                  )}
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className={`border-b border-border/50 hover:bg-accent/50 transition-colors cursor-pointer ${
-                    row.original.rsid === selectedRsid ? "bg-accent" : ""
-                  }`}
-                  onClick={() => setSelectedRsid(row.original.rsid)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-3 py-1.5 whitespace-nowrap"
-                      style={{ width: cell.column.getSize() }}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left sidebar: Watching section (P4-21k) */}
+        <aside className="w-64 shrink-0 border-r border-border overflow-y-auto bg-card" aria-label="Variant table sidebar">
+          <WatchingSidebar
+            sampleId={sampleId}
+            onSelectVariant={setSelectedRsid}
+            selectedRsid={selectedRsid}
+          />
+        </aside>
+
+        {/* Main table area */}
+        <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 z-10 bg-card border-b border-border">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap"
+                      style={{ width: header.getSize() }}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </thead>
+            <tbody>
+              {status === "pending" ? (
+                <tr>
+                  <td colSpan={table.getAllColumns().length} className="text-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                    <p className="text-sm text-muted-foreground mt-2">Loading variants...</p>
+                  </td>
+                </tr>
+              ) : allRows.length === 0 ? (
+                <tr>
+                  <td colSpan={table.getAllColumns().length}>
+                    {isPreAnnotation ? (
+                      <PreAnnotationEmpty
+                        totalVariants={totalVariants ?? 0}
+                        onShowUnannotated={() => setShowUnannotated(true)}
+                      />
+                    ) : (
+                      <NoMatchEmpty
+                        searchQuery={searchQuery}
+                        hasActiveFilter={!!activeFilter}
+                        onClearSearch={() => setSearchQuery("")}
+                        onClearFilters={() => setActiveFilter(undefined)}
+                        onApplyFilter={(f) => {
+                          setActiveFilter(f)
+                          setShowUnannotated(true)
+                        }}
+                      />
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-border/50 hover:bg-accent/50 transition-colors cursor-pointer ${
+                      row.original.rsid === selectedRsid ? "bg-accent" : ""
+                    }`}
+                    onClick={() => setSelectedRsid(row.original.rsid)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className="px-3 py-1.5 whitespace-nowrap"
+                        style={{ width: cell.column.getSize() }}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
 
-        {/* Infinite scroll sentinel */}
-        <div ref={sentinelRef} className="h-10 flex items-center justify-center">
-          {isFetchingNextPage && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading more...
-            </div>
-          )}
-          {!hasNextPage && allRows.length > 0 && !isFetching && (
-            <p className="text-xs text-muted-foreground">All variants loaded</p>
-          )}
-        </div>
-      </section>
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="h-10 flex items-center justify-center">
+            {isFetchingNextPage && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading more...
+              </div>
+            )}
+            {!hasNextPage && allRows.length > 0 && !isFetching && (
+              <p className="text-xs text-muted-foreground">All variants loaded</p>
+            )}
+          </div>
+        </section>
+      </div>
 
       {/* Variant detail side panel (P2-21) */}
       <VariantDetailSidePanel

@@ -111,6 +111,7 @@ class TestWatchVariant:
         data = resp.json()
         assert data["rsid"] == "rs12345"
         assert data["clinvar_significance_at_watch"] == "Uncertain_significance"
+        assert data["clinvar_significance_current"] == "Uncertain_significance"
         assert data["notes"] == "track this VUS"
         assert data["watched_at"]  # non-empty
 
@@ -224,6 +225,68 @@ class TestListWatched:
         # Most recent first (desc order)
         assert data[0]["rsid"] == "rs80357906"
         assert data[1]["rsid"] == "rs12345"
+
+    def test_list_includes_current_clinvar_significance(self, watches_client: TestClient):
+        """GET returns clinvar_significance_current from annotated_variants (P4-21k)."""
+        watches_client.post(
+            "/api/watches",
+            json={"sample_id": 1, "rsid": "rs12345"},
+        )
+
+        resp = watches_client.get("/api/watches?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        # Current significance matches what's in annotated_variants
+        assert data[0]["clinvar_significance_current"] == "Uncertain_significance"
+        # At-watch snapshot also matches (no change since just watched)
+        assert data[0]["clinvar_significance_at_watch"] == "Uncertain_significance"
+
+    def test_list_detects_reclassification(self, watches_client: TestClient):
+        """GET shows different at_watch vs current significance after DB update (P4-21k)."""
+        # Watch variant — snapshots current ClinVar significance
+        watches_client.post(
+            "/api/watches",
+            json={"sample_id": 1, "rsid": "rs12345"},
+        )
+
+        # Simulate a ClinVar reclassification by directly updating annotated_variants
+        from backend.db.connection import get_registry
+        from backend.db.tables import annotated_variants as av
+
+        registry = get_registry()
+        with registry.reference_engine.connect() as conn:
+            row = conn.execute(sa.select(samples.c.db_path).where(samples.c.id == 1)).fetchone()
+
+        sample_db_path = registry.settings.data_dir / row.db_path
+        sample_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+        with sample_engine.begin() as conn:
+            conn.execute(
+                av.update().where(av.c.rsid == "rs12345").values(clinvar_significance="Pathogenic")
+            )
+        sample_engine.dispose()
+
+        # Now list should show different at_watch vs current
+        resp = watches_client.get("/api/watches?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["clinvar_significance_at_watch"] == "Uncertain_significance"
+        assert data[0]["clinvar_significance_current"] == "Pathogenic"
+
+    def test_list_unannotated_watched_variant(self, watches_client: TestClient):
+        """GET returns null current significance for watched variant not in annotated_variants."""
+        watches_client.post(
+            "/api/watches",
+            json={"sample_id": 1, "rsid": "rs000000"},
+        )
+
+        resp = watches_client.get("/api/watches?sample_id=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["clinvar_significance_at_watch"] is None
+        assert data[0]["clinvar_significance_current"] is None
 
 
 class TestUpdateWatchNotes:
