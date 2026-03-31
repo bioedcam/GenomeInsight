@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlalchemy as sa
+from sqlalchemy import event
 
 from backend.config import Settings, get_settings
 
@@ -72,17 +73,23 @@ class DBRegistry:
             f"sqlite:///{db_path}",
             pool_pre_ping=True,
         )
-        with engine.connect() as conn:
+
+        # Use an event listener to ensure PRAGMAs are applied to every
+        # new DBAPI connection (not just the first one from the pool).
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN001
+            cursor = dbapi_connection.cursor()
             if wal:
-                conn.execute(sa.text("PRAGMA journal_mode=WAL"))
+                cursor.execute("PRAGMA journal_mode=WAL")
             if read_optimized:
                 # 64 MB page cache (negative = KiB)
-                conn.execute(sa.text("PRAGMA cache_size=-65536"))
+                cursor.execute("PRAGMA cache_size=-65536")
                 # 256 MB memory-mapped I/O for large reference DBs
-                conn.execute(sa.text("PRAGMA mmap_size=268435456"))
+                cursor.execute("PRAGMA mmap_size=268435456")
                 # Keep temp tables/indexes in memory
-                conn.execute(sa.text("PRAGMA temp_store=MEMORY"))
-            conn.commit()
+                cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.close()
+
         return engine
 
     @property

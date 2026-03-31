@@ -20,20 +20,18 @@ def _detect_max_variable_number() -> int:
     (or 999 as a safe fallback).
     """
     try:
-        conn = sqlite3.connect(":memory:")
-        # Linux SQLite is typically compiled with 32766; try that first.
-        for candidate in (32766, 9999, 999):
-            try:
-                placeholders = ",".join("?" for _ in range(candidate))
-                conn.execute(
-                    f"SELECT 1 WHERE 1 IN ({placeholders})",  # noqa: S608
-                    list(range(candidate)),
-                )
-                conn.close()
-                return candidate
-            except sqlite3.OperationalError:
-                continue
-        conn.close()
+        with sqlite3.connect(":memory:") as conn:
+            # Linux SQLite is typically compiled with 32766; try that first.
+            for candidate in (32766, 9999, 999):
+                try:
+                    placeholders = ",".join("?" for _ in range(candidate))
+                    conn.execute(
+                        f"SELECT 1 WHERE 1 IN ({placeholders})",  # noqa: S608
+                        list(range(candidate)),
+                    )
+                    return candidate
+                except sqlite3.OperationalError:
+                    continue
     except Exception:
         pass
     return 999

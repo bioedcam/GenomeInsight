@@ -570,6 +570,22 @@ def _bulk_upsert(
     return written
 
 
+# ── Timed lookup wrapper (P4-22) ────────────────────────────────────────
+
+
+def _timed_lookup(
+    fn: Callable,
+    *args: object,
+    source_timings: dict[str, float],
+    source_name: str,
+) -> dict:
+    """Execute a source lookup function and record wall-clock time."""
+    t0 = time.perf_counter()
+    res = fn(*args)
+    source_timings[source_name] = time.perf_counter() - t0
+    return res
+
+
 # ── Engine availability checks ───────────────────────────────────────────
 
 
@@ -665,12 +681,6 @@ def run_annotation(
             futures: dict = {}
             source_timings: dict[str, float] = {}
 
-            def _timed_lookup(fn, *args, source_name: str):  # noqa: ANN001, ANN202
-                t0 = time.perf_counter()
-                res = fn(*args)
-                source_timings[source_name] = time.perf_counter() - t0
-                return res
-
             if vep_engine is not None:
                 futures[
                     executor.submit(
@@ -679,6 +689,7 @@ def run_annotation(
                         batch_rsids,
                         raw_by_rsid,
                         vep_engine,
+                        source_timings=source_timings,
                         source_name="vep",
                     )
                 ] = "vep"
@@ -690,6 +701,7 @@ def run_annotation(
                     batch_rsids,
                     raw_by_rsid,
                     reference_engine,
+                    source_timings=source_timings,
                     source_name="clinvar",
                 )
             ] = "clinvar"
@@ -702,6 +714,7 @@ def run_annotation(
                         batch_rsids,
                         raw_by_rsid,
                         gnomad_engine,
+                        source_timings=source_timings,
                         source_name="gnomad",
                     )
                 ] = "gnomad"
@@ -714,6 +727,7 @@ def run_annotation(
                         batch_rsids,
                         raw_by_rsid,
                         dbnsfp_engine,
+                        source_timings=source_timings,
                         source_name="dbnsfp",
                     )
                 ] = "dbnsfp"

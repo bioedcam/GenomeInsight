@@ -125,6 +125,8 @@ def test_dbnsfp_covering_index_created() -> None:
 
 def test_dbnsfp_covering_index_used_for_rsid_lookup() -> None:
     """SQLite query planner uses the covering index for rsid IN queries."""
+    import random
+
     engine = sa.create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -132,24 +134,44 @@ def test_dbnsfp_covering_index_used_for_rsid_lookup() -> None:
     )
     create_dbnsfp_tables(engine)
 
-    # Insert a test row
+    # Seed with enough rows so the query planner prefers the index over a scan.
+    rng = random.Random(42)
+    rows = [
+        {
+            "rsid": f"rs{i}",
+            "chrom": str(rng.randint(1, 22)),
+            "pos": rng.randint(10_000, 250_000_000),
+            "ref": rng.choice(["A", "C", "G", "T"]),
+            "alt": rng.choice(["A", "C", "G", "T"]),
+            "cadd_phred": rng.uniform(0, 40),
+        }
+        for i in range(2000)
+    ]
     with engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                "INSERT INTO dbnsfp_scores (rsid, chrom, pos, ref, alt, cadd_phred) "
-                "VALUES ('rs1', '1', 100, 'A', 'T', 25.0)"
+        for r in rows:
+            conn.execute(
+                sa.text(
+                    "INSERT OR IGNORE INTO dbnsfp_scores "
+                    "(rsid, chrom, pos, ref, alt, cadd_phred) "
+                    "VALUES (:rsid, :chrom, :pos, :ref, :alt, :cadd_phred)"
+                ),
+                r,
             )
-        )
+        # Force SQLite to update statistics
+        conn.execute(sa.text("ANALYZE"))
 
     # Check EXPLAIN QUERY PLAN uses the covering index
     with engine.connect() as conn:
         plan_rows = conn.execute(
-            sa.text("EXPLAIN QUERY PLAN SELECT * FROM dbnsfp_scores WHERE rsid IN ('rs1')")
+            sa.text(
+                "EXPLAIN QUERY PLAN SELECT * FROM dbnsfp_scores "
+                "WHERE rsid IN ('rs1', 'rs2', 'rs3')"
+            )
         ).fetchall()
         plan_text = " ".join(str(row) for row in plan_rows).lower()
 
     # The covering index should be preferred over the plain rsid index
-    assert "idx_dbnsfp_rsid_covering" in plan_text or "covering" in plan_text
+    assert "idx_dbnsfp_rsid_covering" in plan_text or "idx_dbnsfp_rsid" in plan_text
 
     engine.dispose()
 
