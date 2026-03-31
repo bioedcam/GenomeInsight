@@ -6,6 +6,7 @@ export interface WatchedVariant {
   rsid: string
   watched_at: string
   clinvar_significance_at_watch: string | null
+  clinvar_significance_current: string | null
   notes: string | null
 }
 
