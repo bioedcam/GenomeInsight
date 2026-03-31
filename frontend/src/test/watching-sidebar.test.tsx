@@ -199,7 +199,7 @@ describe("WatchingSidebar", () => {
     renderWithProviders(<WatchingSidebar sampleId={1} />)
 
     await user.click(screen.getByLabelText("Unwatch rs12345"))
-    expect(mockUnwatchMutate).toHaveBeenCalledWith("rs12345")
+    expect(mockUnwatchMutate).toHaveBeenCalledWith("rs12345", expect.objectContaining({ onSettled: expect.any(Function) }))
   })
 
   it("collapses and expands when header is clicked", async () => {

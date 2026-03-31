@@ -52,6 +52,7 @@ export default function WatchingSidebar({
   const unwatchMutation = useUnwatchVariant(sampleId)
   const [sortMode, setSortMode] = useState<SortMode>("watched_at")
   const [expanded, setExpanded] = useState(true)
+  const [pendingUnwatch, setPendingUnwatch] = useState<string | null>(null)
 
   const sortedVariants = useMemo(() => {
     if (!watchedVariants?.length) return []
@@ -188,11 +189,14 @@ export default function WatchingSidebar({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          unwatchMutation.mutate(v.rsid)
+                          setPendingUnwatch(v.rsid)
+                          unwatchMutation.mutate(v.rsid, {
+                            onSettled: () => setPendingUnwatch(null),
+                          })
                         }}
                         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
                         aria-label={`Unwatch ${v.rsid}`}
-                        disabled={unwatchMutation.isPending}
+                        disabled={pendingUnwatch === v.rsid}
                       >
                         <EyeOff className="h-3 w-3" />
                       </button>
