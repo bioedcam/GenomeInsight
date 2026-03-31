@@ -28,6 +28,9 @@ export function useWatchVariant(sampleId: number | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (rsid: string) => {
+      if (sampleId == null) {
+        throw new Error("Cannot watch variant without a sample")
+      }
       const res = await fetch("/api/watches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,6 +53,9 @@ export function useUnwatchVariant(sampleId: number | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (rsid: string) => {
+      if (sampleId == null) {
+        throw new Error("Cannot unwatch variant without a sample")
+      }
       const res = await fetch(
         `/api/watches/${encodeURIComponent(rsid)}?sample_id=${sampleId}`,
         { method: "DELETE" },
