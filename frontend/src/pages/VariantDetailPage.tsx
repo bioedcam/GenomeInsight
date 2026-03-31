@@ -32,6 +32,7 @@ import type {
 } from "@/types/variant-detail"
 import { IgvBrowser } from "@/components/igv-browser"
 import { buildDefaultTracks } from "@/components/igv-browser/tracks"
+import WatchButton from "@/components/variant-detail/WatchButton"
 import { cn } from "@/lib/utils"
 
 /* ------------------------------------------------------------------ */
@@ -752,6 +753,9 @@ export default function VariantDetailPage() {
                 <span className="px-2 py-0.5 text-xs font-medium rounded bg-primary/10 text-primary">
                   MANE Select
                 </span>
+              )}
+              {sampleId != null && (
+                <WatchButton rsid={variant.rsid} sampleId={sampleId} compact />
               )}
             </div>
             <p className="text-sm text-muted-foreground mt-0.5 truncate">

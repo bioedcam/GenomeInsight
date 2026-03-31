@@ -18,6 +18,7 @@ import {
 
 import { useVariantDetail } from "@/api/variant-detail"
 import type { VariantDetail, EvidenceConflictDetail } from "@/types/variant-detail"
+import WatchButton from "@/components/variant-detail/WatchButton"
 import { cn } from "@/lib/utils"
 
 interface VariantDetailSidePanelProps {
@@ -322,8 +323,8 @@ function PanelContent({
         )}
       </div>
 
-      {/* Footer with link to full detail page */}
-      <div className="p-4 border-t border-border">
+      {/* Footer with link to full detail page + watch button */}
+      <div className="p-4 border-t border-border space-y-2">
         <Link
           to={`/variants/${encodeURIComponent(variant.rsid)}?sample_id=${sampleId}`}
           className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -331,6 +332,7 @@ function PanelContent({
           Open full detail
           <ExternalLink className="h-3.5 w-3.5" />
         </Link>
+        <WatchButton rsid={variant.rsid} sampleId={sampleId} />
       </div>
     </>
   )
