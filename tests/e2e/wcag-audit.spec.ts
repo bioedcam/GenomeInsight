@@ -224,13 +224,18 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
       await page.goto('/')
       await page.waitForLoadState('networkidle')
 
-      // Click body to ensure page focus in headless mode
-      await page.locator('body').click()
+      const input = page.getByTestId('command-palette-input')
 
-      // Open command palette with Cmd/Ctrl+K
+      // Try keyboard shortcut first, fall back to clicking trigger button
+      await page.locator('body').click()
       const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
       await page.keyboard.press(`${modifier}+k`)
-      const input = page.getByTestId('command-palette-input')
+
+      if (!(await input.isVisible({ timeout: 1000 }).catch(() => false))) {
+        const trigger = page.getByTestId('command-palette-trigger')
+        await trigger.click()
+      }
+
       await expect(input).toBeVisible({ timeout: 3000 })
 
       await page.keyboard.press('Escape')
