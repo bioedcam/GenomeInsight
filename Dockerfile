@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir .
 COPY --chown=appuser:appuser frontend/ frontend/
 RUN cd frontend && npm install && npm run build
 
+# Create data directory owned by non-root user
+RUN mkdir -p /data && chown appuser:appuser /data
+
 # Switch to non-root user
 USER appuser
 
