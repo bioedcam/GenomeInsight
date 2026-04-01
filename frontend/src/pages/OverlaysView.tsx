@@ -14,12 +14,14 @@ import {
   Play,
   FileText,
   Loader2,
-  AlertCircle,
   CheckCircle2,
   Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId, formatNumber } from "@/lib/format"
+import PageEmpty from "@/components/ui/PageEmpty"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
 import {
   useOverlays,
   useUploadOverlay,
@@ -41,12 +43,7 @@ export default function OverlaysView() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Annotation Overlays</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
-            Select a sample from the top nav to manage annotation overlays.
-          </p>
-        </div>
+        <PageEmpty icon={Layers} title="Select a sample from the top nav to manage annotation overlays." />
       </div>
     )
   }
@@ -257,12 +254,7 @@ function OverlayList({
   const applyMutation = useApplyOverlay()
 
   if (overlaysQuery.isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground p-4">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading overlays...
-      </div>
-    )
+    return <PageLoading message="Loading overlays..." />
   }
 
   const overlays = overlaysQuery.data?.items ?? []
@@ -400,19 +392,15 @@ function OverlayResults({
   const resultsQuery = useOverlayResults(overlayId, sampleId)
 
   if (resultsQuery.isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground p-4">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading results...
-      </div>
-    )
+    return <PageLoading message="Loading results..." />
   }
 
   if (resultsQuery.isError) {
     return (
-      <div className="rounded-lg border border-destructive/50 p-4 text-sm text-destructive">
-        Failed to load overlay results: {resultsQuery.error.message}
-      </div>
+      <PageError
+        message={resultsQuery.error instanceof Error ? resultsQuery.error.message : "An unexpected error occurred."}
+        onRetry={() => resultsQuery.refetch()}
+      />
     )
   }
 

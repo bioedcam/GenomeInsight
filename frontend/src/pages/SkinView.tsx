@@ -14,8 +14,6 @@ import { useState } from "react"
 import { useSearchParams, Link } from "react-router-dom"
 import {
   Sun,
-  Loader2,
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
   ExternalLink,
@@ -28,6 +26,9 @@ import type { CrossModuleItem, InsufficientDataItem, MC1RAggregateItem } from "@
 import PathwayCard from "@/components/skin/PathwayCard"
 import PathwayDetailPanel from "@/components/skin/PathwayDetailPanel"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 
 /** Map target_module to route path for cross-module links. */
 const MODULE_ROUTES: Record<string, string> = {
@@ -226,13 +227,7 @@ export default function SkinView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Gene Skin</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Sun className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view skin results.
-          </p>
-        </div>
+        <PageEmpty icon={Sun} title="Select a sample to view skin results." />
       </div>
     )
   }
@@ -259,28 +254,15 @@ export default function SkinView() {
 
       {/* Loading state */}
       {pathwaysQuery.isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading skin data..." />
       )}
 
       {/* Error state */}
       {pathwaysQuery.isError && !pathwaysQuery.isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">
-                Failed to load skin data
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {pathwaysQuery.error instanceof Error
-                  ? pathwaysQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={pathwaysQuery.error instanceof Error ? pathwaysQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { pathwaysQuery.refetch(); }}
+        />
       )}
 
       {/* Main content */}
@@ -351,12 +333,7 @@ export default function SkinView() {
 
           {/* Empty state */}
           {pathwaysQuery.data && pathwaysQuery.data.items.length === 0 && (
-            <div className="rounded-lg border bg-card p-8 text-center">
-              <Sun className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">
-                No skin results yet. Run annotation to generate pathway scores.
-              </p>
-            </div>
+            <PageEmpty icon={Sun} title="No skin results yet." description="Run annotation to generate pathway scores." />
           )}
         </>
       )}

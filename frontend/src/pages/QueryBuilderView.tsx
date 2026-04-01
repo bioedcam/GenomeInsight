@@ -13,6 +13,9 @@ import { type RuleGroupType } from "react-querybuilder"
 import { Filter, Play, Loader2, AlertCircle, RotateCcw, Terminal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
+import PageEmpty from "@/components/ui/PageEmpty"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
 import { useQueryFields, useRunQuery, useExportQuery } from "@/api/query-builder"
 import type { QueryResultPage, QueryExportFormat, RuleGroupModel, SavedQuery } from "@/types/query-builder"
 import QueryBuilderPanel from "@/components/query-builder/QueryBuilderPanel"
@@ -65,12 +68,7 @@ export default function QueryBuilderView() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Query Builder</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Filter className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to build queries against annotated variants.
-          </p>
-        </div>
+        <PageEmpty icon={Filter} title="Select a sample to build queries against annotated variants." />
       </div>
     )
   }
@@ -201,23 +199,14 @@ export default function QueryBuilderView() {
             <div className="space-y-4">
               {/* Query builder */}
               {fieldsQuery.isLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
+                <PageLoading message="Loading field metadata..." />
               )}
 
               {fieldsQuery.isError && (
-                <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium text-destructive">Failed to load field metadata</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {fieldsQuery.error instanceof Error ? fieldsQuery.error.message : "Unknown error"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <PageError
+                  message={fieldsQuery.error instanceof Error ? fieldsQuery.error.message : "Failed to load field metadata."}
+                  onRetry={() => fieldsQuery.refetch()}
+                />
               )}
 
               {fieldsQuery.data && (

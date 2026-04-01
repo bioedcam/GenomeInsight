@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Search, Loader2, AlertCircle } from "lucide-react"
+import { Search, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
 import { useRareVariantFindings, useRareVariantSearch } from "@/api/rare-variants"
@@ -20,6 +20,9 @@ import FilterPanel from "@/components/rare-variants/FilterPanel"
 import ResultsTable from "@/components/rare-variants/ResultsTable"
 import SearchSummary from "@/components/rare-variants/SearchSummary"
 import VariantDetailPanel from "@/components/rare-variants/VariantDetailPanel"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 
 export default function RareVariantsView() {
   const [searchParams] = useSearchParams()
@@ -46,13 +49,7 @@ export default function RareVariantsView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Rare Variant Finder</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Search className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to search for rare variants.
-          </p>
-        </div>
+        <PageEmpty icon={Search} title="Select a sample to search for rare variants." />
       </div>
     )
   }
@@ -116,26 +113,15 @@ export default function RareVariantsView() {
 
       {/* Loading state (initial findings load) */}
       {isLoading && !hasSearchResult && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading rare variant data..." />
       )}
 
       {/* Error state (findings load) */}
       {hasError && !isLoading && !hasSearchResult && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load rare variant data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {findingsQuery.error instanceof Error
-                  ? findingsQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={findingsQuery.error instanceof Error ? findingsQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { findingsQuery.refetch(); }}
+        />
       )}
 
       {/* Search results */}
@@ -249,15 +235,11 @@ export default function RareVariantsView() {
 
       {/* Empty state: no findings and no search */}
       {!isLoading && !hasError && !hasSearchResult && !hasFindingsOnly && (
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Search className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            No rare variant findings yet.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            Use the filters above to search for rare variants, or run the annotation pipeline to generate automatic findings.
-          </p>
-        </div>
+        <PageEmpty
+          icon={Search}
+          title="No rare variant findings yet."
+          description="Use the filters above to search for rare variants, or run the annotation pipeline to generate automatic findings."
+        />
       )}
 
       {/* Variant detail slide-in panel */}

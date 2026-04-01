@@ -15,6 +15,7 @@ import { useSamples } from '@/api/samples'
 import { useTotalVariantCount, useQCStats } from '@/api/variants'
 import { parseSampleId } from '@/lib/format'
 import { Upload } from 'lucide-react'
+import PageLoading from '@/components/ui/PageLoading'
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
@@ -29,11 +30,7 @@ export default function Dashboard() {
   // ── Loading state: avoid flash of upload prompt ───────────
 
   if (isLoading && activeSampleId) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    )
+    return <PageLoading message="Loading dashboard..." />
   }
 
   // ── No active sample: show upload prompt ──────────────────

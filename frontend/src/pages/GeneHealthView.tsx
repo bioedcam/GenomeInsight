@@ -13,8 +13,6 @@ import { useState } from "react"
 import { useSearchParams, Link } from "react-router-dom"
 import {
   Activity,
-  Loader2,
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
 } from "lucide-react"
@@ -25,6 +23,9 @@ import type { CrossModuleItem } from "@/types/gene-health"
 import PathwayCard from "@/components/gene-health/PathwayCard"
 import PathwayDetailPanel from "@/components/gene-health/PathwayDetailPanel"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 
 /** Map target_module to route path for cross-module links. */
 const MODULE_ROUTES: Record<string, string> = {
@@ -92,13 +93,7 @@ export default function GeneHealthView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Gene Health</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view gene health results.
-          </p>
-        </div>
+        <PageEmpty icon={Activity} title="Select a sample to view gene health results." />
       </div>
     )
   }
@@ -137,28 +132,15 @@ export default function GeneHealthView() {
 
       {/* Loading state */}
       {pathwaysQuery.isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading gene health data..." />
       )}
 
       {/* Error state */}
       {pathwaysQuery.isError && !pathwaysQuery.isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">
-                Failed to load gene health data
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {pathwaysQuery.error instanceof Error
-                  ? pathwaysQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={pathwaysQuery.error instanceof Error ? pathwaysQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { pathwaysQuery.refetch(); }}
+        />
       )}
 
       {/* Main content */}
@@ -207,12 +189,7 @@ export default function GeneHealthView() {
 
           {/* Empty state */}
           {pathwaysQuery.data && pathwaysQuery.data.items.length === 0 && (
-            <div className="rounded-lg border bg-card p-8 text-center">
-              <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">
-                No gene health results yet. Run annotation to generate disease risk assessments.
-              </p>
-            </div>
+            <PageEmpty icon={Activity} title="No gene health results yet." description="Run annotation to generate disease risk assessments." />
           )}
         </>
       )}

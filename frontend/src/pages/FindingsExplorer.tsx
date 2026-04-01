@@ -10,8 +10,6 @@ import { useState, useMemo } from "react"
 import { useSearchParams, Link } from "react-router-dom"
 import {
   ClipboardList,
-  Loader2,
-  AlertCircle,
   Star,
   Filter,
   Pill,
@@ -27,6 +25,9 @@ import {
 import { parseSampleId } from "@/lib/format"
 import { useFindings, useFindingsSummary } from "@/api/findings"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import type { Finding, FindingSummaryItem } from "@/types/findings"
 
 // ── Module metadata ──────────────────────────────────────────────────
@@ -290,12 +291,7 @@ export default function FindingsExplorer() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">All Findings</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view analysis findings.
-          </p>
-        </div>
+        <PageEmpty icon={ClipboardList} title="Select a sample to view analysis findings." />
       </div>
     )
   }
@@ -305,12 +301,7 @@ export default function FindingsExplorer() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">All Findings</h1>
-        <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">
-            Loading findings...
-          </span>
-        </div>
+        <PageLoading message="Loading findings..." />
       </div>
     )
   }
@@ -320,12 +311,10 @@ export default function FindingsExplorer() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">All Findings</h1>
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
-          <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
-          <p className="text-sm text-destructive">
-            {findingsQuery.error?.message ?? "Failed to load findings."}
-          </p>
-        </div>
+        <PageError
+          message={findingsQuery.error?.message ?? "Failed to load findings."}
+          onRetry={() => findingsQuery.refetch()}
+        />
       </div>
     )
   }

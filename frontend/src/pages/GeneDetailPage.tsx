@@ -14,8 +14,6 @@ import { useState } from "react"
 import { useParams, useSearchParams, Link } from "react-router-dom"
 import {
   ArrowLeft,
-  Loader2,
-  AlertCircle,
   Dna,
   Globe,
   BookOpen,
@@ -28,6 +26,9 @@ import {
 
 import { useGeneDetail } from "@/api/gene-detail"
 import { parseSampleId } from "@/lib/format"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import { cn } from "@/lib/utils"
 import { NightingaleViewer, PopulationAFChart } from "@/components/gene-detail"
 import type { GeneVariantSummary, PubMedArticle } from "@/types/gene-detail"
@@ -126,54 +127,38 @@ export default function GeneDetailPage() {
 
   const [selectedVariantRsid, setSelectedVariantRsid] = useState<string | null>(null)
 
-  const { data, isLoading, isError, error } = useGeneDetail(symbol ?? null, sampleId)
+  const { data, isLoading, isError, error, refetch } = useGeneDetail(symbol ?? null, sampleId)
 
   // No sample selected
   if (sampleId == null) {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Gene Detail</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Dna className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view gene details.
-          </p>
-        </div>
+        <PageEmpty icon={Dna} title="Select a sample to view gene details." />
       </div>
     )
   }
 
   // Loading
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <PageLoading message="Loading gene detail..." />
   }
 
   // Error
   if (isError || !data) {
     return (
-      <div className="p-6">
+      <div className="p-6 space-y-4">
         <Link
           to={`/variants?sample_id=${sampleId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Variant Explorer
         </Link>
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load gene detail</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {error instanceof Error ? error.message : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={error instanceof Error ? error.message : "An unexpected error occurred."}
+          onRetry={() => refetch()}
+        />
       </div>
     )
   }

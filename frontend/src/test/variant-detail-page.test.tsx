@@ -170,7 +170,7 @@ describe("VariantDetailPage (P2-21a)", () => {
     renderPage("rs100")
 
     await waitFor(() => {
-      expect(screen.getByText("Failed to load variant")).toBeInTheDocument()
+      expect(screen.getByText("Failed to load data")).toBeInTheDocument()
     })
     expect(screen.getByText(/Back to Variant Explorer/)).toBeInTheDocument()
   })

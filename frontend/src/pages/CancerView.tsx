@@ -14,9 +14,12 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { ShieldAlert, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { ShieldAlert, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import { useCancerVariants, useCancerPRS, useCancerDisclaimer } from "@/api/cancer"
 import type { CancerVariant } from "@/types/cancer"
 import VariantCard from "@/components/cancer/VariantCard"
@@ -50,12 +53,7 @@ export default function CancerView() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Cancer Predisposition</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <ShieldAlert className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view cancer predisposition results.
-          </p>
-        </div>
+        <PageEmpty icon={ShieldAlert} title="Select a sample to view cancer predisposition results." />
       </div>
     )
   }
@@ -110,29 +108,23 @@ export default function CancerView() {
       )}
 
       {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
+      {isLoading && <PageLoading message="Loading cancer data..." />}
 
       {/* Error state */}
       {hasError && !isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load cancer data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {variantsQuery.error instanceof Error
-                  ? variantsQuery.error.message
-                  : prsQuery.error instanceof Error
-                    ? prsQuery.error.message
-                    : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={
+            variantsQuery.error instanceof Error
+              ? variantsQuery.error.message
+              : prsQuery.error instanceof Error
+                ? prsQuery.error.message
+                : "An unexpected error occurred."
+          }
+          onRetry={() => {
+            variantsQuery.refetch()
+            prsQuery.refetch()
+          }}
+        />
       )}
 
       {/* Main content */}
@@ -162,15 +154,11 @@ export default function CancerView() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <ShieldAlert className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">
-                  No pathogenic or likely pathogenic variants found in the cancer gene panel.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This does not eliminate cancer risk. Consult a genetic counselor for comprehensive assessment.
-                </p>
-              </div>
+              <PageEmpty
+                icon={ShieldAlert}
+                title="No pathogenic or likely pathogenic variants found in the cancer gene panel."
+                description="This does not eliminate cancer risk. Consult a genetic counselor for comprehensive assessment."
+              />
             )}
           </section>
 
@@ -208,12 +196,11 @@ export default function CancerView() {
           {prsQuery.data && prsQuery.data.items.length === 0 && (
             <section aria-label="Cancer polygenic risk scores">
               <h2 className="text-lg font-semibold mb-3">Polygenic Risk Scores</h2>
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <ShieldAlert className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">
-                  No PRS results yet. Run annotation to compute polygenic risk scores.
-                </p>
-              </div>
+              <PageEmpty
+                icon={ShieldAlert}
+                title="No PRS results yet."
+                description="Run annotation to compute polygenic risk scores."
+              />
             </section>
           )}
         </>

@@ -10,7 +10,6 @@ import { useState, useMemo, useRef, useCallback } from "react"
 import { useParams, useSearchParams, Link } from "react-router-dom"
 import {
   ArrowLeft,
-  Loader2,
   MapPin,
   Dna,
   Shield,
@@ -24,6 +23,8 @@ import {
 } from "lucide-react"
 
 import { useVariantDetail } from "@/api/variant-detail"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
 import type {
   VariantDetail,
   TranscriptAnnotation,
@@ -678,7 +679,7 @@ export default function VariantDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>("overview")
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-  const { data: variant, isLoading, error } = useVariantDetail(rsid ?? null, sampleId)
+  const { data: variant, isLoading, error, refetch } = useVariantDetail(rsid ?? null, sampleId)
 
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     const count = TABS.length
@@ -700,31 +701,22 @@ export default function VariantDetailPage() {
   }, [])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-40px)]">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-sm text-muted-foreground mt-3">Loading variant detail...</p>
-        </div>
-      </div>
-    )
+    return <PageLoading message="Loading variant detail..." />
   }
 
   if (error || !variant) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-40px)]">
-        <div className="text-center max-w-md">
-          <p className="text-lg font-medium text-destructive mb-2">Failed to load variant</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            {error?.message ?? `Variant ${rsid ?? "unknown"} not found.`}
-          </p>
-          <Link
-            to={sampleId != null ? `/variants?sample_id=${sampleId}` : "/variants"}
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Variant Explorer
-          </Link>
-        </div>
+      <div className="p-6 max-w-2xl mx-auto space-y-4">
+        <PageError
+          message={error?.message ?? `Variant ${rsid ?? "unknown"} not found.`}
+          onRetry={() => refetch()}
+        />
+        <Link
+          to={sampleId != null ? `/variants?sample_id=${sampleId}` : "/variants"}
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Variant Explorer
+        </Link>
       </div>
     )
   }

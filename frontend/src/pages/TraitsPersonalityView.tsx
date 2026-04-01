@@ -14,7 +14,6 @@ import { useSearchParams, Link } from "react-router-dom"
 import {
   Fingerprint,
   Loader2,
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
   FlaskConical,
@@ -28,6 +27,9 @@ import PathwayDetailPanel from "@/components/traits/PathwayDetailPanel"
 import TraitsPRSGaugeCard from "@/components/traits/TraitsPRSGaugeCard"
 import BigFiveRadarChart from "@/components/traits/BigFiveRadarChart"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 
 /** Map target module to route path for cross-module links. */
 const MODULE_ROUTES: Record<string, string> = {
@@ -121,13 +123,7 @@ export default function TraitsPersonalityView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Traits & Personality</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Fingerprint className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view traits & personality results.
-          </p>
-        </div>
+        <PageEmpty icon={Fingerprint} title="Select a sample to view traits & personality results." />
       </div>
     )
   }
@@ -186,30 +182,15 @@ export default function TraitsPersonalityView() {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading traits data..." />
       )}
 
       {/* Error state */}
       {isError && !isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">
-                Failed to load traits data
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {pathwaysQuery.error instanceof Error
-                  ? pathwaysQuery.error.message
-                  : prsQuery.error instanceof Error
-                    ? prsQuery.error.message
-                    : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={pathwaysQuery.error instanceof Error ? pathwaysQuery.error.message : prsQuery.error instanceof Error ? prsQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { pathwaysQuery.refetch(); prsQuery.refetch(); }}
+        />
       )}
 
       {/* Main content */}
@@ -276,12 +257,7 @@ export default function TraitsPersonalityView() {
             pathwaysQuery.data.items.length === 0 &&
             prsQuery.data &&
             prsQuery.data.items.length === 0 && (
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <Fingerprint className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">
-                  No traits results yet. Run annotation to generate trait associations.
-                </p>
-              </div>
+              <PageEmpty icon={Fingerprint} title="No traits results yet." description="Run annotation to generate trait associations." />
             )}
         </>
       )}

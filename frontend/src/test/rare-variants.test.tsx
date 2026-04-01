@@ -257,7 +257,6 @@ describe("RareVariantsView", () => {
 
   it("shows empty state when no sample selected", () => {
     render(<RareVariantsView />)
-    expect(screen.getByText("Rare Variant Finder")).toBeInTheDocument()
     expect(screen.getByText("Select a sample to search for rare variants.")).toBeInTheDocument()
   })
 
@@ -294,7 +293,7 @@ describe("RareVariantsView", () => {
       wrapper: createWrapper(["/?sample_id=1"]),
     })
     await waitFor(() => {
-      expect(screen.getByText("Failed to load rare variant data")).toBeInTheDocument()
+      expect(screen.getByText("Failed to load data")).toBeInTheDocument()
     })
   })
 

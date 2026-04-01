@@ -82,7 +82,7 @@ describe("ReportBuilder", () => {
   it("shows loading state while fetching", () => {
     mockFetch.mockImplementation(() => new Promise(() => {})) // never resolves
     renderWithRoute(<ReportBuilder />, ["/reports?sample_id=1"])
-    expect(screen.getByText("Loading findings…")).toBeInTheDocument()
+    expect(screen.getByText("Loading findings...")).toBeInTheDocument()
   })
 
   it("renders module selection cards after loading", async () => {
