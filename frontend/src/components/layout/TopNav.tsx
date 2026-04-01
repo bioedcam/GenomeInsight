@@ -3,36 +3,11 @@ import { Link } from 'react-router-dom'
 import { Dna, Sun, Moon, Monitor, Search } from 'lucide-react'
 import SampleSwitcher from './SampleSwitcher'
 import CommandPalette from '@/components/CommandPalette'
-
-type Theme = 'light' | 'dark' | 'system'
-
-function getSystemTheme(): 'light' | 'dark' {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-function applyTheme(theme: Theme) {
-  const resolved = theme === 'system' ? getSystemTheme() : theme
-  document.documentElement.classList.toggle('dark', resolved === 'dark')
-}
+import { useThemeContext } from '@/lib/ThemeContext'
 
 export default function TopNav() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem('gi-theme')
-    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
-  })
+  const { theme, cycleTheme } = useThemeContext()
   const [paletteOpen, setPaletteOpen] = useState(false)
-
-  useEffect(() => {
-    applyTheme(theme)
-    localStorage.setItem('gi-theme', theme)
-
-    if (theme === 'system') {
-      const mql = window.matchMedia('(prefers-color-scheme: dark)')
-      const handler = () => applyTheme('system')
-      mql.addEventListener('change', handler)
-      return () => mql.removeEventListener('change', handler)
-    }
-  }, [theme])
 
   // Global Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -45,11 +20,6 @@ export default function TopNav() {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  const cycleTheme = () => {
-    const order: Theme[] = ['light', 'dark', 'system']
-    setTheme(order[(order.indexOf(theme) + 1) % 3])
-  }
 
   const openPalette = useCallback(() => setPaletteOpen(true), [])
 
@@ -82,13 +52,14 @@ export default function TopNav() {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
-      {/* Dark mode toggle */}
+      {/* Dark mode toggle (P4-26a) */}
       <button
         type="button"
         onClick={cycleTheme}
         className="p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
         aria-label={`Theme: ${theme}`}
         title={`Theme: ${theme}`}
+        data-testid="theme-toggle"
       >
         <ThemeIcon className="h-4 w-4" />
       </button>

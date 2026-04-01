@@ -6,12 +6,16 @@
 
 import Plot from 'react-plotly.js'
 import type { ChromosomeQCStats } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 interface ChromosomeBarChartProps {
   data: ChromosomeQCStats[]
 }
 
 export default function ChromosomeBarChart({ data }: ChromosomeBarChartProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
   const chroms = data.map((d) => `chr${d.chrom}`)
 
   return (
@@ -53,12 +57,13 @@ export default function ChromosomeBarChart({ data }: ChromosomeBarChartProps) {
         yaxis: {
           title: { text: 'Count' },
           gridwidth: 1,
+          gridcolor: pt.gridColor,
         },
         margin: { t: 40, b: 60, l: 60, r: 20 },
         legend: { orientation: 'h', y: -0.25 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 300,
       }}
       config={{ responsive: true, displayModeBar: false }}

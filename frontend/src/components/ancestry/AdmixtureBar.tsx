@@ -7,12 +7,16 @@
 
 import Plot from "react-plotly.js"
 import { POPULATION_COLORS, POPULATION_LABELS } from "./constants"
+import { useThemeContext } from "@/lib/ThemeContext"
+import { getPlotlyTheme } from "@/lib/plotly-theme"
 
 interface AdmixtureBarProps {
   admixture_fractions: Record<string, number>
 }
 
 export default function AdmixtureBar({ admixture_fractions }: AdmixtureBarProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
   // Sort populations by fraction descending
   const sorted = Object.entries(admixture_fractions)
     .filter(([, frac]) => frac > 0.001)
@@ -63,9 +67,9 @@ export default function AdmixtureBar({ admixture_fractions }: AdmixtureBarProps)
             fixedrange: true,
           },
           margin: { t: 10, b: 60, l: 10, r: 20 },
-          paper_bgcolor: "transparent",
-          plot_bgcolor: "transparent",
-          font: { color: "#64748B" },
+          paper_bgcolor: pt.paper_bgcolor,
+          plot_bgcolor: pt.plot_bgcolor,
+          font: pt.font,
           height: 120,
         }}
         config={{ responsive: true, displayModeBar: false }}

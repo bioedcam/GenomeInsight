@@ -7,6 +7,8 @@
 
 import Plot from 'react-plotly.js'
 import type { ChromosomeQCStats } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 interface HeterozygosityHistogramProps {
   data: ChromosomeQCStats[]
@@ -17,6 +19,9 @@ export default function HeterozygosityHistogram({
   data,
   overallRate,
 }: HeterozygosityHistogramProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   // Compute per-chromosome heterozygosity rates (exclude chromosomes with 0 called)
   const filtered = data.filter((d) => d.het_count + d.hom_count > 0)
 
@@ -61,6 +66,7 @@ export default function HeterozygosityHistogram({
           title: { text: 'Het Rate' },
           range: [0, Math.max(...rates, 0.5) * 1.1],
           gridwidth: 1,
+          gridcolor: pt.gridColor,
         },
         shapes: [
           {
@@ -83,9 +89,9 @@ export default function HeterozygosityHistogram({
           },
         ],
         margin: { t: 40, b: 60, l: 60, r: 20 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 300,
         showlegend: false,
       }}

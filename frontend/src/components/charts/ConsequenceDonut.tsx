@@ -8,6 +8,8 @@
 
 import Plot from 'react-plotly.js'
 import type { ConsequenceCount } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 /** Impact tier → color mapping (consistent with density histogram). */
 const TIER_COLORS: Record<string, string> = {
@@ -30,6 +32,9 @@ interface ConsequenceDonutProps {
 }
 
 export default function ConsequenceDonut({ items, total }: ConsequenceDonutProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   if (items.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
@@ -63,7 +68,7 @@ export default function ConsequenceDonut({ items, total }: ConsequenceDonutProps
           {
             text: `${total.toLocaleString()}`,
             showarrow: false,
-            font: { size: 16, color: '#64748B' },
+            font: { size: 16, color: pt.annotationColor },
           },
         ],
         showlegend: true,
@@ -74,9 +79,9 @@ export default function ConsequenceDonut({ items, total }: ConsequenceDonutProps
           font: { size: 10 },
         },
         margin: { t: 40, b: 20, l: 20, r: 120 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 300,
       }}
       config={{ responsive: true, displayModeBar: false }}

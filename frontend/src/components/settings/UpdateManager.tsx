@@ -230,7 +230,7 @@ function DatabaseRow({
         >
           <span
             className={cn(
-              'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+              'inline-block h-4 w-4 rounded-full bg-white dark:bg-foreground shadow transition-transform',
               'translate-y-0.5',
               status.auto_update ? 'translate-x-4' : 'translate-x-0.5',
             )}
