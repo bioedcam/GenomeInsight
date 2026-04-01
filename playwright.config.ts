@@ -19,16 +19,7 @@ export default defineConfig({
     },
     {
       name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox'],
-        launchOptions: {
-          firefoxUserPrefs: {
-            // Enable Tab navigation to all interactive elements (links, buttons, etc.)
-            // Firefox on Linux defaults to form-elements-only Tab focus
-            'accessibility.tabfocus': 7,
-          },
-        },
-      },
+      use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',

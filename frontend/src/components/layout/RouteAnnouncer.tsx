@@ -36,7 +36,10 @@ function getPageTitle(pathname: string): string {
     "/login": "Login",
   }
 
-  return routes[pathname] ?? "Page"
+  // Check exact match first, then try parent path for nested routes (e.g. /settings/updates → Settings)
+  if (routes[pathname]) return routes[pathname]
+  const parent = pathname.split("/").slice(0, 2).join("/")
+  return routes[parent] ?? "Page"
 }
 
 export default function RouteAnnouncer() {
