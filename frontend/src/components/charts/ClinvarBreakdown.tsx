@@ -9,6 +9,8 @@
 
 import Plot from 'react-plotly.js'
 import type { ClinvarSignificanceCount } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 /** ClinVar significance → color mapping by clinical impact. */
 const SIGNIFICANCE_COLORS: Record<string, string> = {
@@ -47,6 +49,9 @@ interface ClinvarBreakdownProps {
 }
 
 export default function ClinvarBreakdown({ items, total }: ClinvarBreakdownProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   if (items.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
@@ -77,13 +82,13 @@ export default function ClinvarBreakdown({ items, total }: ClinvarBreakdownProps
       layout={{
         title: { text: `ClinVar Significance (${total.toLocaleString()} total)`, font: { size: 14 } },
         margin: { t: 40, b: 40, l: 200, r: 20 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 300,
         xaxis: {
           title: { text: 'Variant count' },
-          gridcolor: 'rgba(100,116,139,0.15)',
+          gridcolor: pt.gridColor,
         },
         yaxis: {
           automargin: true,

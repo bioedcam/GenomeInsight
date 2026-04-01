@@ -7,6 +7,8 @@
 
 import Plot from 'react-plotly.js'
 import type { DensityBin } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 /** Consequence tier colors — medical teal palette. */
 const TIER_COLORS = {
@@ -21,6 +23,9 @@ interface VariantDensityHistogramProps {
 }
 
 export default function VariantDensityHistogram({ bins }: VariantDensityHistogramProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   if (bins.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
@@ -106,12 +111,13 @@ export default function VariantDensityHistogram({ bins }: VariantDensityHistogra
         yaxis: {
           title: { text: 'Variant Count' },
           gridwidth: 1,
+          gridcolor: pt.gridColor,
         },
         margin: { t: 40, b: 60, l: 60, r: 20 },
         legend: { orientation: 'h', y: -0.25 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 300,
         shapes: chromBoundaries.map((x) => ({
           type: 'line' as const,
@@ -120,7 +126,7 @@ export default function VariantDensityHistogram({ bins }: VariantDensityHistogra
           y0: 0,
           y1: 1,
           yref: 'paper' as const,
-          line: { color: '#CBD5E1', width: 1, dash: 'dot' as const },
+          line: { color: isDark ? '#475569' : '#CBD5E1', width: 1, dash: 'dot' as const },
         })),
       }}
       config={{ responsive: true, displayModeBar: false }}

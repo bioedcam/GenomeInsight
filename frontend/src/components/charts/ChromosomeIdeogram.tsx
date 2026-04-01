@@ -8,6 +8,8 @@
 
 import Plot from 'react-plotly.js'
 import type { DensityBin } from '@/types/variants'
+import { useThemeContext } from '@/lib/ThemeContext'
+import { getPlotlyTheme } from '@/lib/plotly-theme'
 
 /** GRCh37 chromosome sizes in base pairs. */
 const CHROM_SIZES_GRCH37: Record<string, number> = {
@@ -57,6 +59,9 @@ interface ChromosomeIdeogramProps {
 }
 
 export default function ChromosomeIdeogram({ bins }: ChromosomeIdeogramProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   if (bins.length === 0) {
     return (
       <div className="flex items-center justify-center h-[500px] text-muted-foreground text-sm">
@@ -130,7 +135,7 @@ export default function ChromosomeIdeogram({ bins }: ChromosomeIdeogramProps) {
       x1: chromBins - 0.5,
       y0: rowIdx - 0.5,
       y1: rowIdx + 0.5,
-      line: { color: '#CBD5E1', width: 1 },
+      line: { color: isDark ? '#475569' : '#CBD5E1', width: 1 },
       fillcolor: 'rgba(0,0,0,0)',
       layer: 'above' as const,
     }
@@ -188,9 +193,9 @@ export default function ChromosomeIdeogram({ bins }: ChromosomeIdeogramProps) {
           dtick: 1,
         },
         margin: { t: 40, b: 50, l: 55, r: 80 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { color: '#64748B' },
+        paper_bgcolor: pt.paper_bgcolor,
+        plot_bgcolor: pt.plot_bgcolor,
+        font: pt.font,
         height: 600,
         shapes: shapes as Plotly.Shape[],
       }}

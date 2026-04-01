@@ -10,12 +10,16 @@
 import Plot from "react-plotly.js"
 import type { PCACoordinatesResponse } from "@/types/ancestry"
 import { POPULATION_COLORS, POPULATION_LABELS } from "./constants"
+import { useThemeContext } from "@/lib/ThemeContext"
+import { getPlotlyTheme } from "@/lib/plotly-theme"
 
 interface PCAScatterProps {
   pcaData: PCACoordinatesResponse
 }
 
 export default function PCAScatter({ pcaData }: PCAScatterProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
   const traces: Plotly.Data[] = []
 
   // Reference population samples (PC1 vs PC2)
@@ -52,12 +56,12 @@ export default function PCAScatter({ pcaData }: PCAScatterProps) {
       name: "Centroids",
       text: centroidPops.map((p) => POPULATION_LABELS[p] ?? p),
       textposition: "top center",
-      textfont: { size: 9, color: "#64748B" },
+      textfont: { size: 9, color: pt.annotationColor },
       marker: {
         symbol: "diamond",
         size: 10,
         color: centroidPops.map((p) => POPULATION_COLORS[p] ?? "#94A3B8"),
-        line: { width: 1, color: "#1E293B" },
+        line: { width: 1, color: isDark ? "#94A3B8" : "#1E293B" },
       },
       hovertemplate: "%{text}<br>PC1: %{x:.4f}<br>PC2: %{y:.4f}<extra>Centroid</extra>",
       showlegend: false,
@@ -77,7 +81,7 @@ export default function PCAScatter({ pcaData }: PCAScatterProps) {
         symbol: "star",
         size: 16,
         color: "#0D9488",
-        line: { width: 2, color: "#FFFFFF" },
+        line: { width: 2, color: isDark ? "#1E293B" : "#FFFFFF" },
       },
       hovertemplate: `Your sample<br>PC1: %{x:.4f}<br>PC2: %{y:.4f}<br>Top: ${userLabel}<extra></extra>`,
     })
@@ -104,9 +108,9 @@ export default function PCAScatter({ pcaData }: PCAScatterProps) {
             font: { size: 10 },
           },
           margin: { t: 20, b: 50, l: 60, r: 140 },
-          paper_bgcolor: "transparent",
-          plot_bgcolor: "transparent",
-          font: { color: "#64748B" },
+          paper_bgcolor: pt.paper_bgcolor,
+          plot_bgcolor: pt.plot_bgcolor,
+          font: pt.font,
           height: 450,
           hovermode: "closest",
         }}

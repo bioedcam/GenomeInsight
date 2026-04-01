@@ -7,6 +7,8 @@
 
 import Plot from "react-plotly.js"
 import type { PopulationAFSummary } from "@/types/gene-detail"
+import { useThemeContext } from "@/lib/ThemeContext"
+import { getPlotlyTheme } from "@/lib/plotly-theme"
 
 const POPULATIONS = [
   { key: "gnomad_af_global" as const, label: "Global", color: "#0D9488" },
@@ -24,6 +26,9 @@ interface PopulationAFChartProps {
 }
 
 export default function PopulationAFChart({ data, selectedVariant }: PopulationAFChartProps) {
+  const { isDark } = useThemeContext()
+  const pt = getPlotlyTheme(isDark)
+
   if (data.length === 0) {
     return (
       <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -76,9 +81,9 @@ export default function PopulationAFChart({ data, selectedVariant }: PopulationA
             autorange: true,
           },
           yaxis: { autorange: "reversed" },
-          paper_bgcolor: "rgba(0,0,0,0)",
-          plot_bgcolor: "rgba(0,0,0,0)",
-          font: { size: 11 },
+          paper_bgcolor: pt.paper_bgcolor,
+          plot_bgcolor: pt.plot_bgcolor,
+          font: { ...pt.font, size: 11 },
         }}
         config={{ displayModeBar: false, responsive: true }}
         style={{ width: "100%" }}
