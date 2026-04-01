@@ -99,11 +99,11 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
   test.describe('axe-core dark mode compliance', () => {
     // Test a representative subset in dark mode for contrast
     const darkModePages = [
-      APP_PAGES[0],  // Dashboard
-      APP_PAGES[2],  // Variant Explorer
-      APP_PAGES[3],  // Pharmacogenomics
-      APP_PAGES[21], // Settings
-    ]
+      APP_PAGES.find(p => p.path === '/'),
+      APP_PAGES.find(p => p.path === '/variants'),
+      APP_PAGES.find(p => p.path === '/pharmacogenomics'),
+      APP_PAGES.find(p => p.path === '/settings'),
+    ].filter((p): p is (typeof APP_PAGES)[number] => p !== undefined)
 
     for (const page of darkModePages) {
       test(`${page.title} passes axe-core in dark mode`, async ({ page: p }) => {
@@ -207,7 +207,8 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
       await page.waitForLoadState('networkidle')
 
       // Open command palette with Cmd/Ctrl+K
-      await page.keyboard.press('Control+k')
+      const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+      await page.keyboard.press(`${modifier}+k`)
       const input = page.getByTestId('command-palette-input')
       await expect(input).toBeVisible()
 
@@ -297,9 +298,9 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
       const announcer = page.locator('[aria-live="polite"]')
       await expect(announcer).toBeAttached()
 
-      // Navigate to another page
-      await page.goto('/settings')
-      await page.waitForLoadState('networkidle')
+      // Navigate via client-side routing (click sidebar link)
+      await page.locator('nav[aria-label="Main navigation"] a[href="/settings"]').click()
+      await page.waitForURL('/settings')
 
       const text = await announcer.textContent()
       expect(text).toContain('Navigated to Settings')

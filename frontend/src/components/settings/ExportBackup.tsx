@@ -81,7 +81,7 @@ export default function ExportBackup() {
 
       {/* Include reference DBs checkbox */}
       {estimate.data && estimate.data.reference_db_count > 0 && (
-        <label htmlFor="include-ref-dbs" className="flex items-start gap-3 cursor-pointer" aria-label="Include reference databases">
+        <label htmlFor="include-ref-dbs" className="flex items-start gap-3 cursor-pointer">
           <input
             id="include-ref-dbs"
             type="checkbox"
@@ -90,6 +90,7 @@ export default function ExportBackup() {
             disabled={isExporting}
             className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
             data-testid="include-ref-dbs-checkbox"
+            aria-label="Include reference databases"
           />
           <div>
             <span className="text-sm font-medium text-foreground">

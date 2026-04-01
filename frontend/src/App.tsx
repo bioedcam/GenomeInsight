@@ -34,8 +34,8 @@ import Login from '@/pages/Login'
 export default function App() {
   return (
     <ErrorBoundary>
-    <RouteAnnouncer />
-    <Routes>
+      <RouteAnnouncer />
+      <Routes>
       {/* Full-screen pages (no sidebar/nav, no auth guard) */}
       <Route path="/setup" element={<SetupWizard />} />
       <Route path="/login" element={<Login />} />
@@ -71,7 +71,7 @@ export default function App() {
           <Route path="/settings/*" element={<Settings />} />
         </Route>
       </Route>
-    </Routes>
+      </Routes>
     </ErrorBoundary>
   )
 }
