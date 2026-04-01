@@ -473,13 +473,17 @@ class TestAuthSecurity:
         """Sessions expire after the configured timeout."""
         import time
 
-        from backend.auth import _sessions, create_session, validate_session
+        from backend.auth import (
+            _set_session_timestamp,
+            create_session,
+            validate_session,
+        )
 
         session_id = create_session()
         assert validate_session(session_id, timeout_hours=4)
 
-        # Simulate expiration by manipulating timestamp
-        _sessions[session_id] = time.time() - (5 * 3600)  # 5 hours ago
+        # Simulate expiration via test helper
+        _set_session_timestamp(session_id, time.time() - (5 * 3600))
         assert not validate_session(session_id, timeout_hours=4)
 
     def test_rate_limiting(self) -> None:

@@ -78,6 +78,12 @@ def _get_session_count() -> int:
     return len(_sessions)
 
 
+def _set_session_timestamp(session_id: str, timestamp: float) -> None:
+    """Override the last-active timestamp for a session (for testing)."""
+    if session_id in _sessions:
+        _sessions[session_id] = timestamp
+
+
 # ── Rate limiting ─────────────────────────────────────────────────────
 
 # Track failed login attempts per IP: {ip: (fail_count, first_fail_time)}
