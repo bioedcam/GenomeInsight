@@ -81,8 +81,9 @@ export default function ExportBackup() {
 
       {/* Include reference DBs checkbox */}
       {estimate.data && estimate.data.reference_db_count > 0 && (
-        <label className="flex items-start gap-3 cursor-pointer">
+        <label htmlFor="include-ref-dbs" className="flex items-start gap-3 cursor-pointer" aria-label="Include reference databases">
           <input
+            id="include-ref-dbs"
             type="checkbox"
             checked={includeRefDbs}
             onChange={(e) => setIncludeRefDbs(e.target.checked)}

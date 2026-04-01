@@ -181,9 +181,9 @@ export default function NightingaleViewer({
       >
         {/* Navigation ruler */}
         <div className="mb-1">
-          <label className="text-xs text-muted-foreground block mb-0.5">
+          <span className="text-xs text-muted-foreground block mb-0.5">
             Position (aa)
-          </label>
+          </span>
           <nightingale-navigation
             length={seqLength}
             height="40"
@@ -195,9 +195,9 @@ export default function NightingaleViewer({
         {/* Domain track */}
         {domains.length > 0 && (
           <div className="mb-1">
-            <label className="text-xs text-muted-foreground block mb-0.5">
+            <span className="text-xs text-muted-foreground block mb-0.5">
               Domains
-            </label>
+            </span>
             <nightingale-track
               ref={domainTrackRef}
               length={seqLength}
@@ -212,9 +212,9 @@ export default function NightingaleViewer({
         {/* Feature track */}
         {features.length > 0 && (
           <div className="mb-1">
-            <label className="text-xs text-muted-foreground block mb-0.5">
+            <span className="text-xs text-muted-foreground block mb-0.5">
               Features
-            </label>
+            </span>
             <nightingale-track
               ref={featureTrackRef}
               length={seqLength}
@@ -227,9 +227,9 @@ export default function NightingaleViewer({
 
         {/* Variant track */}
         <div>
-          <label className="text-xs text-muted-foreground block mb-0.5">
+          <span className="text-xs text-muted-foreground block mb-0.5">
             Your Variants
-          </label>
+          </span>
           <nightingale-track
             ref={variantTrackRef}
             length={seqLength}

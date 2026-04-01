@@ -4,7 +4,7 @@
  * Full-screen page shown when auth is enabled and the user
  * does not have a valid session. Redirects to "/" on success.
  */
-import { useState, type FormEvent } from "react"
+import { useState, useRef, useEffect, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
 import { useLogin, useAuthStatus } from "@/api/auth"
 import { Shield, AlertCircle, Dna } from "lucide-react"
@@ -15,6 +15,11 @@ export default function Login() {
   const loginMutation = useLogin()
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const passwordRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    passwordRef.current?.focus()
+  }, [])
 
   // If auth is not enabled, redirect to dashboard
   if (authStatus && !authStatus.auth_enabled) {
@@ -80,7 +85,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Enter your password"
-                  autoFocus
+                  ref={passwordRef}
                   autoComplete="current-password"
                 />
               </div>

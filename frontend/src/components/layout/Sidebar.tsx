@@ -64,7 +64,7 @@ export default function Sidebar() {
       )}
     >
       <div className="flex-1 py-2 overflow-y-auto">
-        <nav className="flex flex-col gap-0.5 px-2">
+        <nav aria-label="Main navigation" className="flex flex-col gap-0.5 px-2">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -81,8 +81,9 @@ export default function Sidebar() {
               }
               title={label}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
               {!collapsed && <span>{label}</span>}
+              {collapsed && <span className="sr-only">{label}</span>}
             </NavLink>
           ))}
         </nav>
