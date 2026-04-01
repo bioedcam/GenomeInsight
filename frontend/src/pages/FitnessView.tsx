@@ -38,6 +38,7 @@ export default function FitnessView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Gene Fitness</h1>
         <PageEmpty icon={Dumbbell} title="Select a sample to view fitness results." />
       </div>
     )

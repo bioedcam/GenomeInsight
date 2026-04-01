@@ -58,6 +58,7 @@ export default function SleepView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Gene Sleep</h1>
         <PageEmpty icon={Moon} title="Select a sample to view sleep results." />
       </div>
     )

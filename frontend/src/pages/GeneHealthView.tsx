@@ -93,6 +93,7 @@ export default function GeneHealthView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Gene Health</h1>
         <PageEmpty icon={Activity} title="Select a sample to view gene health results." />
       </div>
     )

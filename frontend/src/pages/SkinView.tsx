@@ -227,6 +227,7 @@ export default function SkinView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Gene Skin</h1>
         <PageEmpty icon={Sun} title="Select a sample to view skin results." />
       </div>
     )

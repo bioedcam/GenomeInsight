@@ -319,6 +319,7 @@ export default function AllergyView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Gene Allergy & Immune Sensitivities</h1>
         <PageEmpty icon={Flower2} title="Select a sample to view allergy & immune sensitivity results." />
       </div>
     )

@@ -49,6 +49,7 @@ export default function MethylationView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">MTHFR & Methylation</h1>
         <PageEmpty icon={FlaskConical} title="Select a sample to view methylation pathway results." />
       </div>
     )

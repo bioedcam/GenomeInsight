@@ -123,6 +123,7 @@ export default function TraitsPersonalityView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Traits & Personality</h1>
         <PageEmpty icon={Fingerprint} title="Select a sample to view traits & personality results." />
       </div>
     )
