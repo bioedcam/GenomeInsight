@@ -49,9 +49,10 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
   // Third-party component selectors excluded from axe scans
   // (IGV.js, Nightingale, Monaco Editor render their own DOM we cannot control)
   const THIRD_PARTY_EXCLUDES = [
-    '.igv-container',        // IGV.js genome browser
-    'nightingale-manager',   // Nightingale protein viewer
-    '.monaco-editor',        // Monaco SQL editor
+    '.igv-container',                // IGV.js genome browser (class)
+    '[data-testid="igv-container"]', // IGV.js genome browser (testid)
+    'nightingale-manager',           // Nightingale protein viewer
+    '.monaco-editor',                // Monaco SQL editor
   ]
 
   // ── axe-core scans for all app pages ─────────────────────
