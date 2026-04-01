@@ -119,9 +119,10 @@ function UploadPanel() {
       </h2>
 
       {/* Drop zone */}
-      <div
+      <button
+        type="button"
         className={cn(
-          "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
+          "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors w-full bg-transparent",
           dragOver
             ? "border-teal-500 bg-teal-50 dark:bg-teal-950/20"
             : "border-muted-foreground/25 hover:border-muted-foreground/50"
@@ -155,7 +156,7 @@ function UploadPanel() {
             if (file) handleFileSelect(file)
           }}
         />
-      </div>
+      </button>
 
       {/* Preview error */}
       {previewMutation.isError && (
@@ -280,9 +281,17 @@ function OverlayList({
                 ? "border-teal-500 ring-1 ring-teal-500"
                 : "hover:border-muted-foreground/50"
             )}
+            role="button"
+            tabIndex={0}
             onClick={() =>
               onSelect(selectedOverlay?.id === overlay.id ? null : overlay)
             }
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onSelect(selectedOverlay?.id === overlay.id ? null : overlay)
+              }
+            }}
           >
             <div className="flex items-center justify-between">
               <h3 className="font-medium truncate">{overlay.name}</h3>

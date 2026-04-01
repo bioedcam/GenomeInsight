@@ -80,8 +80,9 @@ export default function StorageStep({ onNext, onBack }: StorageStepProps) {
           <div className="rounded-lg border bg-card p-4 space-y-4">
             <div className="space-y-3">
               {/* Default path option */}
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label htmlFor="storage-path-default" className="flex items-start gap-3 cursor-pointer" aria-label="Default location">
                 <input
+                  id="storage-path-default"
                   type="radio"
                   name="storage-path"
                   checked={!useCustomPath}
@@ -101,8 +102,9 @@ export default function StorageStep({ onNext, onBack }: StorageStepProps) {
               </label>
 
               {/* Custom path option */}
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label htmlFor="storage-path-custom" className="flex items-start gap-3 cursor-pointer" aria-label="Custom location">
                 <input
+                  id="storage-path-custom"
                   type="radio"
                   name="storage-path"
                   checked={useCustomPath}

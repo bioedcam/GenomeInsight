@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
 import AuthGuard from '@/components/AuthGuard'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
+import RouteAnnouncer from '@/components/layout/RouteAnnouncer'
 import Dashboard from '@/pages/Dashboard'
 import VariantExplorer from '@/pages/VariantExplorer'
 import VariantDetailPage from '@/pages/VariantDetailPage'
@@ -33,7 +34,8 @@ import Login from '@/pages/Login'
 export default function App() {
   return (
     <ErrorBoundary>
-    <Routes>
+      <RouteAnnouncer />
+      <Routes>
       {/* Full-screen pages (no sidebar/nav, no auth guard) */}
       <Route path="/setup" element={<SetupWizard />} />
       <Route path="/login" element={<Login />} />
@@ -69,7 +71,7 @@ export default function App() {
           <Route path="/settings/*" element={<Settings />} />
         </Route>
       </Route>
-    </Routes>
+      </Routes>
     </ErrorBoundary>
   )
 }

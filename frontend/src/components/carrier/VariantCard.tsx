@@ -49,23 +49,16 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
   const hasCancerCrossLink = variant.cross_links.includes("cancer")
 
   return (
-    <article
+    <button
+      type="button"
       className={cn(
-        "rounded-lg border p-4 cursor-pointer transition-all",
+        "w-full text-left rounded-lg border p-4 cursor-pointer transition-all",
         "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         config.bg,
         config.border,
         selected && "ring-2 ring-primary",
       )}
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      tabIndex={0}
-      role="button"
       aria-label={`${variant.gene_symbol} ${variant.rsid} — carrier, ${variant.clinvar_significance}`}
       data-testid="carrier-variant-card"
     >
@@ -154,6 +147,6 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
           </div>
         </div>
       )}
-    </article>
+    </button>
   )
 }

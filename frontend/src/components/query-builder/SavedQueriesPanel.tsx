@@ -138,7 +138,12 @@ export default function SavedQueriesPanel({
                 if (e.key === "Escape") setShowSaveInput(false)
               }}
               data-testid="query-name-input"
-              autoFocus
+              ref={(el) => {
+                if (el && !el.dataset.focused) {
+                  el.focus()
+                  el.dataset.focused = 'true'
+                }
+              }}
             />
             <button
               type="button"

@@ -44,9 +44,9 @@ function ExtraFieldEditor({
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-foreground">
+      <span className="block text-sm font-medium text-foreground">
         Custom Fields
-      </label>
+      </span>
       {entries.length > 0 && (
         <div className="space-y-1.5">
           {entries.map(([key, value]) => (
@@ -215,9 +215,9 @@ function SampleEditForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-1">
+          <span className="block text-sm font-medium text-muted-foreground mb-1">
             Format
-          </label>
+          </span>
           <p className="text-sm text-foreground py-2">
             {formatFileFormat(sample.file_format)}
           </p>

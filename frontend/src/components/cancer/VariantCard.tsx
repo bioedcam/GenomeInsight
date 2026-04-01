@@ -57,23 +57,21 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
   const hasCrossLink = variant.cross_links.includes("carrier")
 
   return (
-    <article
+    <div
       className={cn(
-        "rounded-lg border p-4 cursor-pointer transition-all",
-        "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "w-full text-left rounded-lg border p-4 transition-all",
         config.bg,
         config.border,
         selected && "ring-2 ring-primary",
       )}
+    >
+    <button
+      type="button"
+      className={cn(
+        "w-full text-left cursor-pointer",
+        "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-md",
+      )}
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      tabIndex={0}
-      role="button"
       aria-label={`${variant.gene_symbol} ${variant.rsid} — ${variant.clinvar_significance}`}
       data-testid="cancer-variant-card"
     >
@@ -147,6 +145,8 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
         </span>
       </div>
 
+    </button>
+
       {/* BRCA1/2 cross-link banner (P3-18) */}
       {hasCrossLink && (
         <div
@@ -163,7 +163,6 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
               <Link
                 to={`/carrier-status?sample_id=${sampleId}`}
                 className="font-medium underline hover:no-underline text-blue-700 dark:text-blue-400"
-                onClick={(e) => e.stopPropagation()}
               >
                 View Carrier Status
               </Link>
@@ -171,6 +170,6 @@ export default function VariantCard({ variant, onClick, selected, sampleId }: Va
           </div>
         </div>
       )}
-    </article>
+    </div>
   )
 }

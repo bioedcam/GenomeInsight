@@ -374,8 +374,9 @@ function SchemaTableItem({
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
         <Table2 className="h-3 w-3 shrink-0 text-primary" />
-        <span
-          className="font-mono font-medium truncate cursor-pointer hover:text-primary"
+        <button
+          type="button"
+          className="font-mono font-medium truncate cursor-pointer hover:text-primary bg-transparent border-none p-0 text-left text-inherit text-xs"
           onClick={(e) => {
             e.stopPropagation()
             onInsertTable(table.name)
@@ -383,7 +384,7 @@ function SchemaTableItem({
           title={`Click to insert "${table.name}" into editor`}
         >
           {table.name}
-        </span>
+        </button>
         <span className="text-muted-foreground ml-auto shrink-0">
           {table.columns.length}
         </span>

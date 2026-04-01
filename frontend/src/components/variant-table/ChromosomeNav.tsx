@@ -45,24 +45,24 @@ export default function ChromosomeNav({
 
   if (isLoading) {
     return (
-      <nav
+      <div
         className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto"
         aria-label="Chromosome navigation"
         role="toolbar"
       >
         <span className="text-xs text-muted-foreground mr-2 shrink-0">Chr</span>
         {CHROMOSOMES.map((chrom) => (
-          <div
+          <span
             key={chrom}
-            className="h-7 w-7 rounded bg-muted animate-pulse shrink-0"
+            className="h-7 w-7 rounded bg-muted animate-pulse shrink-0 inline-block"
           />
         ))}
-      </nav>
+      </div>
     )
   }
 
   return (
-    <nav
+    <div
       className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto"
       aria-label="Chromosome navigation"
       role="toolbar"
@@ -111,6 +111,6 @@ export default function ChromosomeNav({
           </button>
         )
       })}
-    </nav>
+    </div>
   )
 }

@@ -133,30 +133,28 @@ export default function WatchingSidebar({
               </div>
 
               {/* Watched variant list */}
-              <ul className="space-y-1" role="list" aria-label="Watched variants">
+              <ul className="space-y-1" aria-label="Watched variants">
                 {sortedVariants.map((v) => {
                   const reclassified = isReclassified(v)
                   return (
                     <li
                       key={v.rsid}
                       className={cn(
-                        "group flex items-start gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-colors",
-                        selectedRsid === v.rsid
-                          ? "bg-accent"
-                          : "hover:bg-accent/50",
+                        "group relative rounded-md text-xs transition-colors",
                         reclassified && "ring-1 ring-amber-300 dark:ring-amber-700",
                       )}
-                      onClick={() => onSelectVariant?.(v.rsid)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          onSelectVariant?.(v.rsid)
-                        }
-                      }}
-                      aria-label={`${v.rsid}${reclassified ? " — reclassified" : ""}`}
                     >
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex items-start gap-2 px-2 py-1.5 w-full text-left cursor-pointer transition-colors rounded-md bg-transparent border-none text-inherit text-xs",
+                          selectedRsid === v.rsid
+                            ? "bg-accent"
+                            : "hover:bg-accent/50",
+                        )}
+                        onClick={() => onSelectVariant?.(v.rsid)}
+                        aria-label={`${v.rsid}${reclassified ? " — reclassified" : ""}`}
+                      >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono font-medium truncate">{v.rsid}</span>
@@ -184,6 +182,7 @@ export default function WatchingSidebar({
                           {formatDate(v.watched_at)}
                         </div>
                       </div>
+                      </button>
                       {/* Unwatch button on hover */}
                       <button
                         type="button"
@@ -194,13 +193,14 @@ export default function WatchingSidebar({
                             onSettled: () => setPendingUnwatch(null),
                           })
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-destructive/10 focus:bg-destructive/10 text-muted-foreground hover:text-destructive focus:text-destructive transition-all"
                         aria-label={`Unwatch ${v.rsid}`}
                         disabled={pendingUnwatch === v.rsid}
                       >
                         <EyeOff className="h-3 w-3" />
                       </button>
                     </li>
+
                   )
                 })}
               </ul>

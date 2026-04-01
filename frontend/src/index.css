@@ -83,6 +83,24 @@
   --color-sidebar-ring: hsl(168 75% 42%);
 }
 
+/* Focus visible ring for keyboard navigation (P4-26c WCAG 2.1 AA) */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference (P4-26c WCAG 2.1 AA) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Slide-in drawer animation (P2-21) */
 @keyframes slide-in-from-right {
   from { transform: translateX(100%); }

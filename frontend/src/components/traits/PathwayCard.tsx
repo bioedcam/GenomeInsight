@@ -54,23 +54,16 @@ export default function PathwayCard({ pathway, onClick, selected }: PathwayCardP
   const description = PATHWAY_DESCRIPTIONS[pathway.pathway_id] || ""
 
   return (
-    <article
+    <button
+      type="button"
       className={cn(
-        "rounded-lg border p-4 cursor-pointer transition-all",
+        "w-full text-left rounded-lg border p-4 cursor-pointer transition-all",
         "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         config.bg,
         config.border,
         selected && "ring-2 ring-primary",
       )}
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      tabIndex={0}
-      role="button"
       aria-label={`${pathway.pathway_name} — ${config.label}`}
       data-selected={selected || undefined}
     >
@@ -112,6 +105,6 @@ export default function PathwayCard({ pathway, onClick, selected }: PathwayCardP
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
       </div>
-    </article>
+    </button>
   )
 }
