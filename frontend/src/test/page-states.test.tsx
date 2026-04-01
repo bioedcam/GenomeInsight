@@ -100,9 +100,9 @@ describe("PageEmpty", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument()
   })
 
-  it("has status role for accessibility", () => {
+  it("has region role for accessibility", () => {
     render(<PageEmpty icon={Heart} title="No results" />)
-    expect(screen.getByRole("status")).toBeInTheDocument()
+    expect(screen.getByRole("region")).toBeInTheDocument()
   })
 })
 

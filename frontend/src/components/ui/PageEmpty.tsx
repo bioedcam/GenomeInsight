@@ -25,7 +25,7 @@ export default function PageEmpty({
   return (
     <div
       className="rounded-lg border bg-card p-8 text-center"
-      role="status"
+      role="region"
       aria-label={title}
     >
       <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
