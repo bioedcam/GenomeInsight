@@ -1,5 +1,6 @@
 /** Tests for shared page state components (P4-26b). */
 
+import type React from "react"
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "./test-utils"
 import { Heart } from "lucide-react"
@@ -122,7 +123,7 @@ describe("ErrorBoundary", () => {
     console.error = originalError
   })
 
-  function ThrowingComponent({ message }: { message: string }): JSX.Element {
+  function ThrowingComponent({ message }: { message: string }): React.ReactNode {
     throw new Error(message)
   }
 
