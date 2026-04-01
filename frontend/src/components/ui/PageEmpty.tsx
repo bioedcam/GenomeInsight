@@ -31,7 +31,7 @@ export default function PageEmpty({
       <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
       <p className="text-muted-foreground">{title}</p>
       {description && (
-        <p className="text-sm text-muted-foreground/80 mt-1">{description}</p>
+        <p className="text-sm text-muted-foreground mt-1">{description}</p>
       )}
       {action && (
         <button
