@@ -2,32 +2,97 @@
 
 ## Pre-release WSL2 Verification
 
-Run these checks on a WSL2 environment before each release.
+Run these checks on a WSL2 (Ubuntu 22.04+) environment before each release.
+WSL2 is not testable in GitHub Actions CI, so this checklist must be completed
+manually before tagging a release.
 
-### Environment Setup
+**Tested on:** _________________ (date)
+**WSL2 distro/version:** _________________ (e.g., Ubuntu 24.04)
+**Windows version:** _________________ (e.g., Windows 11 23H2)
 
-- [ ] Python 3.12+ available
-- [ ] Node 20+ available
-- [ ] `pip install -e ".[dev]"` succeeds
-- [ ] `cd frontend && npm install` succeeds
+---
 
-### Backend
+### 1. Environment Prerequisites
 
-- [ ] `make test-backend` passes
-- [ ] `make run-api` starts without errors
-- [ ] Health endpoint responds: `curl http://localhost:8000/api/health`
+- [ ] WSL2 kernel is 5.15+ (`uname -r`)
+- [ ] systemd is enabled (`systemctl --user is-system-running` returns running/degraded)
+- [ ] Python 3.12+ available (`python3 --version`)
+- [ ] Node 20+ available (`node --version`)
+- [ ] npm available (`npm --version`)
+- [ ] curl available (`curl --version`)
 
-### Frontend
+### 2. Installation
 
-- [ ] `make test-frontend` passes
-- [ ] `make run-frontend` starts without errors
-- [ ] Browser can access http://localhost:5173
+- [ ] `pip install -e ".[dev]"` succeeds without errors
+- [ ] `cd frontend && npm install` succeeds without errors
+- [ ] `genomeinsight-setup --help` prints usage
 
-### E2E
+### 3. Data Directory
 
+- [ ] `genomeinsight-setup install --skip-pip --skip-frontend` creates `~/.genomeinsight/`
+- [ ] `~/.genomeinsight/samples/` exists
+- [ ] `~/.genomeinsight/downloads/` exists
+- [ ] `~/.genomeinsight/logs/` exists
+
+### 4. Backend
+
+- [ ] `make test-backend` passes (all tests green)
+- [ ] `make run-api` starts uvicorn without errors
+- [ ] Health endpoint responds: `curl -s http://localhost:8000/api/health` returns 200
+- [ ] Platform detected as `wsl2` (check startup logs)
+
+### 5. Frontend
+
+- [ ] `make test-frontend` passes (all tests green)
+- [ ] `make build-frontend` produces `frontend/dist/index.html`
+- [ ] `make run-frontend` starts Vite dev server without errors
+- [ ] Browser (Windows) can access http://localhost:5173
+
+### 6. systemd Services
+
+- [ ] Units install: `systemctl --user enable genomeinsight-api genomeinsight-huey`
+- [ ] Units start: `systemctl --user start genomeinsight-api genomeinsight-huey`
+- [ ] API service active: `systemctl --user is-active genomeinsight-api` returns active
+- [ ] Huey service active: `systemctl --user is-active genomeinsight-huey` returns active
+- [ ] Health check after service start: `curl -s http://localhost:8000/api/health`
+- [ ] Units stop: `systemctl --user stop genomeinsight-api genomeinsight-huey`
+- [ ] Units uninstall: `genomeinsight-setup uninstall` succeeds
+
+### 7. systemd Not Available (Fallback)
+
+If systemd is not enabled in WSL2:
+
+- [ ] Installer prints helpful message about enabling systemd
+- [ ] Manual start works: `uvicorn backend.main:app --host 127.0.0.1 --port 8000 &`
+- [ ] Manual huey works: `huey_consumer backend.tasks.huey_tasks.huey -w 1 &`
+
+### 8. Docker (Inside WSL2)
+
+- [ ] Docker engine available (`docker --version`)
+- [ ] `docker compose build` succeeds
+- [ ] `docker compose up -d` starts both services
+- [ ] `curl -s http://localhost:8000/api/health` returns 200
+- [ ] `docker compose ps` shows both api and huey running
+- [ ] `docker compose down -v` cleans up
+
+### 9. E2E Tests
+
+- [ ] `npx playwright install --with-deps chromium` installs browser
 - [ ] `make test-e2e` passes (Chromium)
 
-### Services
+### 10. Cross-Platform-Specific Checks
 
-- [ ] systemd units install: `systemctl --user enable genomeinsight-api`
-- [ ] systemd units start: `systemctl --user start genomeinsight-api`
+- [ ] File paths use forward slashes (no Windows backslash issues)
+- [ ] SQLite databases create and open correctly in `~/.genomeinsight/`
+- [ ] WAL mode works (no locking issues with WSL2 filesystem)
+- [ ] No permission errors on file creation/deletion in home directory
+- [ ] localhost binding works from both WSL2 and Windows browser
+
+---
+
+### Sign-off
+
+- [ ] All checks above pass
+- **Tester:** _________________
+- **Date:** _________________
+- **Release version:** _________________

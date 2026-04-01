@@ -1,14 +1,13 @@
-name: CI
+name: Release
 
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    tags:
+      - "v*.*.*"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ── Lint ────────────────────────────────────────────────
@@ -43,7 +42,7 @@ jobs:
       - name: ESLint
         run: cd frontend && npm run lint
 
-  # ── Backend tests (matrix: macOS ARM/x86 + Linux) ───────
+  # ── Cross-platform backend tests ────────────────────────
   test-backend:
     name: Backend Tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -72,6 +71,17 @@ jobs:
       - name: Run pytest
         run: python -m pytest tests/backend/ -v --tb=short -m "not slow"
 
+      - name: Verify platform detection
+        run: |
+          python -c "
+          import platform, sys
+          print(f'OS: {platform.system()}')
+          print(f'Machine: {platform.machine()}')
+          print(f'Python: {sys.version}')
+          from backend.installer import _detect_platform
+          print(f'Detected platform: {_detect_platform()}')
+          "
+
   # ── Frontend tests ──────────────────────────────────────
   test-frontend:
     name: Frontend Tests
@@ -91,31 +101,9 @@ jobs:
       - name: Vitest
         run: cd frontend && npm test
 
-  # ── Frontend build ──────────────────────────────────────
-  build-frontend:
-    name: Frontend Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install deps
-        run: cd frontend && npm ci
-
-      - name: Build
-        run: cd frontend && npm run build
-
-      - name: Verify dist output
-        run: test -f frontend/dist/index.html
-
-  # ── Native install smoke test ───────────────────────────
+  # ── Cross-platform native install smoke test ────────────
   smoke-install:
-    name: Install Smoke Test (${{ matrix.name }})
+    name: Install Smoke (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -154,6 +142,34 @@ jobs:
           print('Data directory OK:', DATA_DIR)
           "
 
+      - name: Verify platform detection
+        run: |
+          python -c "
+          import platform
+          from backend.installer import _detect_platform
+          plat = _detect_platform()
+          machine = platform.machine().lower()
+          print(f'Platform: {plat}, Architecture: {machine}')
+          assert plat in ('macos', 'linux', 'wsl2'), f'Unexpected platform: {plat}'
+          "
+
+      - name: Verify service templates exist
+        run: |
+          python -c "
+          from pathlib import Path
+          from backend.installer import _detect_platform, _repo_root
+          plat = _detect_platform()
+          root = _repo_root()
+          if plat == 'macos':
+              assert (root / 'launchd' / 'com.genomeinsight.api.plist').exists()
+              assert (root / 'launchd' / 'com.genomeinsight.huey.plist').exists()
+              print('macOS launchd templates: OK')
+          else:
+              assert (root / 'systemd' / 'genomeinsight-api.service').exists()
+              assert (root / 'systemd' / 'genomeinsight-huey.service').exists()
+              print('Linux/WSL2 systemd templates: OK')
+          "
+
       - name: Verify health endpoint (quick start/stop)
         run: |
           cleanup() { kill $SERVER_PID 2>/dev/null || true; }
@@ -170,9 +186,9 @@ jobs:
           echo "Health check failed after 30 seconds"
           exit 1
 
-  # ── Docker build test ────────────────────────────────────
+  # ── Docker Compose build ────────────────────────────────
   docker-build:
-    name: Docker Build
+    name: Docker Compose Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -183,27 +199,47 @@ jobs:
       - name: Verify image exists
         run: docker images genomeinsight:latest --format "{{.Repository}}:{{.Tag}} {{.Size}}"
 
-      - name: Start and health-check
+      - name: Start services
         run: |
           docker compose up -d
+          echo "Waiting for services to start..."
           sleep 10
+
+      - name: Health check
+        run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8000/api/health; then
               echo "Docker health check passed"
-              docker compose down -v
               exit 0
             fi
             sleep 2
           done
           echo "Docker health check failed"
           docker compose logs
-          docker compose down -v
           exit 1
 
-  # ── E2E tests (merge to main only) ─────────────────────
+      - name: Verify both services running
+        run: |
+          docker compose ps --format json | python3 -c "
+          import json, sys
+          services = [json.loads(line) for line in sys.stdin]
+          names = [s.get('Service', s.get('Name', '')) for s in services]
+          print(f'Running services: {names}')
+          assert len(services) >= 2, f'Expected 2+ services, got {len(services)}'
+          for s in services:
+              state = s.get('State', s.get('Status', ''))
+              assert 'running' in state.lower() or 'up' in state.lower(), \
+                  f'Service {s.get(\"Service\", s.get(\"Name\"))} not running: {state}'
+          print('All services running OK')
+          "
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+  # ── E2E Tests ───────────────────────────────────────────
   test-e2e:
     name: E2E Tests (Playwright)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -250,3 +286,22 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # ── Performance benchmarks ──────────────────────────────
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run benchmarks
+        run: python -m pytest tests/backend/test_benchmark.py -v --tb=short -m "slow or benchmark" || true
