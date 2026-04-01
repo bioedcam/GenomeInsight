@@ -46,7 +46,7 @@ export default function ChromosomeNav({
   if (isLoading) {
     return (
       <div
-        className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto"
+        className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto" tabIndex={0}
         aria-label="Chromosome navigation"
         role="toolbar"
       >
@@ -63,7 +63,7 @@ export default function ChromosomeNav({
 
   return (
     <div
-      className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto"
+      className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-card overflow-x-auto" tabIndex={0}
       aria-label="Chromosome navigation"
       role="toolbar"
     >
@@ -96,7 +96,7 @@ export default function ChromosomeNav({
                 ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                 : hasData
                   ? "bg-background border border-input text-foreground hover:bg-accent hover:text-accent-foreground"
-                  : "bg-muted/50 text-muted-foreground/40 cursor-not-allowed border border-transparent",
+                  : "bg-muted/50 text-muted-foreground/70 cursor-not-allowed border border-transparent",
             )}
           >
             <span>{chrom}</span>

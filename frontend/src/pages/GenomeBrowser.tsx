@@ -88,7 +88,8 @@ export default function GenomeBrowser() {
           </button>
         </form>
       </div>
-      <div className="flex-1 overflow-auto p-4">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region must be keyboard-accessible (axe: scrollable-region-focusable) */}
+      <div className="flex-1 overflow-auto p-4" role="region" aria-label="Genome browser" tabIndex={0}>
         <IgvBrowser
           ref={browserRef}
           locus={locusParam}

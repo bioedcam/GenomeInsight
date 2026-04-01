@@ -30,9 +30,9 @@ function EmptyWrapper({
       role="status"
       aria-label={title}
     >
-      <div className="mb-4 text-muted-foreground/60">{icon}</div>
+      <div className="mb-4 text-muted-foreground">{icon}</div>
       <p className="text-lg font-medium text-muted-foreground">{title}</p>
-      <p className="text-sm text-muted-foreground/80 mt-1 max-w-md">{description}</p>
+      <p className="text-sm text-muted-foreground mt-1 max-w-md">{description}</p>
       {children && <div className="mt-4">{children}</div>}
     </div>
   )
