@@ -303,7 +303,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: Watching section (P4-21k) */}
-        <aside className="w-64 shrink-0 border-r border-border overflow-y-auto bg-card" aria-label="Variant table sidebar">
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region must be keyboard-accessible (axe: scrollable-region-focusable) */}
+        <aside className="w-64 shrink-0 border-r border-border overflow-y-auto bg-card" aria-label="Variant table sidebar" tabIndex={0}>
           <WatchingSidebar
             sampleId={sampleId}
             onSelectVariant={setSelectedRsid}
@@ -312,7 +313,8 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
         </aside>
 
         {/* Main table area */}
-        <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table">
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region must be keyboard-accessible (axe: scrollable-region-focusable) */}
+        <section ref={tableContainerRef} className="flex-1 overflow-auto" aria-label="Variant table" tabIndex={0}>
           <table className="w-full text-sm border-collapse">
             <thead className="sticky top-0 z-10 bg-card border-b border-border">
               {table.getHeaderGroups().map((headerGroup) => (

@@ -67,6 +67,10 @@ export default function DisclaimerStep({ onAccepted }: DisclaimerStepProps) {
       {/* Disclaimer text in scrollable container */}
       <div
         onScroll={handleScroll}
+        role="region"
+        aria-label="Disclaimer text"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region must be keyboard-accessible (axe: scrollable-region-focusable)
+        tabIndex={0}
         className={cn(
           'max-h-80 overflow-y-auto rounded-lg border bg-card p-5 text-sm leading-relaxed text-foreground/90',
           'scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent',

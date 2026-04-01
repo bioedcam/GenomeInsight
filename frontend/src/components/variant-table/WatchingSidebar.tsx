@@ -178,7 +178,7 @@ export default function WatchingSidebar({
                             <span>{formatSignificance(v.clinvar_significance_current)}</span>
                           )}
                         </div>
-                        <div className="text-muted-foreground/70 mt-0.5">
+                        <div className="text-muted-foreground mt-0.5">
                           {formatDate(v.watched_at)}
                         </div>
                       </div>

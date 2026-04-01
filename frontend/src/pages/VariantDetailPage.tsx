@@ -364,7 +364,7 @@ function ProteinTab({ variant, sampleId }: { variant: VariantDetail; sampleId: n
       )}
       {variant.gene_symbol ? (
         <div className="rounded-lg border bg-card p-6 text-center">
-          <FlaskConical className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
+          <FlaskConical className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
           <h3 className="text-base font-medium text-foreground mb-2">
             Protein Domain Visualization
           </h3>
@@ -497,7 +497,7 @@ function ClinicalTab({ variant }: { variant: VariantDetail }) {
 function LiteratureTab({ variant }: { variant: VariantDetail }) {
   return (
     <div className="text-center py-12" data-testid="tab-literature">
-      <BookOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+      <BookOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
       <h3 className="text-lg font-medium text-foreground mb-2">Literature</h3>
       <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
         PubMed literature search with cache-first fetching will be available in Phase 3.
