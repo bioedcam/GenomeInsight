@@ -49,6 +49,7 @@ export default function RareVariantsView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Rare Variants</h1>
         <PageEmpty icon={Search} title="Select a sample to search for rare variants." />
       </div>
     )

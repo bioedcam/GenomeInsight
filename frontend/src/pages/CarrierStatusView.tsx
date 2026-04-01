@@ -46,6 +46,7 @@ export default function CarrierStatusView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Carrier Status</h1>
         <PageEmpty icon={Heart} title="Select a sample to view carrier status results." />
       </div>
     )

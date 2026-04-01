@@ -35,6 +35,7 @@ export default function AncestryView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Ancestry</h1>
         <PageEmpty icon={Globe} title="Select a sample to view ancestry results." />
       </div>
     )
