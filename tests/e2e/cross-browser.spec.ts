@@ -160,7 +160,8 @@ test.describe('P4-26d: Cross-browser — client-side navigation', () => {
     const subset = ['/variants', '/pharmacogenomics', '/settings', '/findings']
     for (const path of subset) {
       const response = await page.goto(path)
-      expect(response?.status(), `${path} returned ${response?.status()}`).toBeLessThan(400)
+      expect(response, `Navigation to ${path} failed`).not.toBeNull()
+      expect(response!.status(), `${path} returned ${response!.status()}`).toBeLessThan(400)
       await page.waitForLoadState('networkidle')
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     }
@@ -252,11 +253,11 @@ test.describe('P4-26d: Cross-browser — interactive elements', () => {
     const toggleBtn = page.locator('[aria-label="Toggle sidebar"], [data-testid="sidebar-toggle"]')
     if (await toggleBtn.isVisible()) {
       await toggleBtn.click()
-      // Wait for transition
-      await page.waitForTimeout(300)
+      // Wait for animation to settle
+      await page.evaluate(() => new Promise(requestAnimationFrame))
 
       await toggleBtn.click()
-      await page.waitForTimeout(300)
+      await page.evaluate(() => new Promise(requestAnimationFrame))
 
       // Page should still be functional
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
