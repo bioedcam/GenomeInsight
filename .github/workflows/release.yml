@@ -54,7 +54,7 @@ jobs:
             name: Linux x86_64
           - os: macos-latest
             name: macOS ARM64
-          - os: macos-13
+          - os: macos-15-intel
             name: macOS x86_64
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
             name: Linux x86_64
           - os: macos-latest
             name: macOS ARM64
-          - os: macos-13
+          - os: macos-15-intel
             name: macOS x86_64
     steps:
       - uses: actions/checkout@v4

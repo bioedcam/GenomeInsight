@@ -259,11 +259,11 @@ class TestPackageBuild:
         # Allow both 0 (argparse help) and 2 (missing required subcommand)
         assert result.returncode in (0, 2)
 
-    def test_entry_point_importable(self):
-        """Verify the console_scripts entry point function exists."""
-        from backend.installer import main
-
-        assert callable(main)
+    def test_entry_point_registered_in_pyproject(self):
+        """Verify the console_scripts entry point is declared in pyproject.toml."""
+        content = (_repo_root() / "pyproject.toml").read_text()
+        assert "genomeinsight-setup" in content
+        assert "backend.installer:main" in content
 
 
 # ── Architecture detection ────────────────────────────────
