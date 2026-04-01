@@ -11,7 +11,10 @@
  */
 
 import { useSearchParams } from "react-router-dom"
-import { Globe, Loader2, AlertCircle } from "lucide-react"
+import { Globe, Loader2 } from "lucide-react"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
 import { useAncestryFindings, useHaplogroups, usePCACoordinates } from "@/api/ancestry"
@@ -32,13 +35,7 @@ export default function AncestryView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Ancestry</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view ancestry results.
-          </p>
-        </div>
+        <PageEmpty icon={Globe} title="Select a sample to view ancestry results." />
       </div>
     )
   }
@@ -68,39 +65,24 @@ export default function AncestryView() {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading ancestry data..." />
       )}
 
       {/* Error state */}
       {hasError && !isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load ancestry data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {findingsQuery.error instanceof Error
-                  ? findingsQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={findingsQuery.error instanceof Error ? findingsQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { findingsQuery.refetch(); }}
+        />
       )}
 
       {/* No results yet */}
       {!isLoading && !hasError && !findingsQuery.data && (
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Ancestry inference has not been run for this sample.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            Run the annotation pipeline to generate ancestry results.
-          </p>
-        </div>
+        <PageEmpty
+          icon={Globe}
+          title="No ancestry results yet."
+          description="Run the annotation pipeline to generate ancestry results."
+        />
       )}
 
       {/* Main content */}

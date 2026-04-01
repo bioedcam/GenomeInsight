@@ -14,8 +14,6 @@ import { useState } from "react"
 import { useSearchParams, Link } from "react-router-dom"
 import {
   Flower2,
-  Loader2,
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
   ExternalLink,
@@ -34,6 +32,9 @@ import type {
 import PathwayCard from "@/components/allergy/PathwayCard"
 import PathwayDetailPanel from "@/components/allergy/PathwayDetailPanel"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 
 /** Map target_module to route path for cross-module links. */
 const MODULE_ROUTES: Record<string, string> = {
@@ -318,13 +319,7 @@ export default function AllergyView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Gene Allergy & Immune Sensitivities</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Flower2 className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view allergy & immune sensitivity results.
-          </p>
-        </div>
+        <PageEmpty icon={Flower2} title="Select a sample to view allergy & immune sensitivity results." />
       </div>
     )
   }
@@ -359,28 +354,15 @@ export default function AllergyView() {
 
       {/* Loading state */}
       {pathwaysQuery.isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading allergy data..." />
       )}
 
       {/* Error state */}
       {pathwaysQuery.isError && !pathwaysQuery.isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">
-                Failed to load allergy data
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {pathwaysQuery.error instanceof Error
-                  ? pathwaysQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={pathwaysQuery.error instanceof Error ? pathwaysQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { pathwaysQuery.refetch(); }}
+        />
       )}
 
       {/* Main content */}
@@ -464,12 +446,7 @@ export default function AllergyView() {
 
           {/* Empty state */}
           {pathwaysQuery.data && pathwaysQuery.data.items.length === 0 && (
-            <div className="rounded-lg border bg-card p-8 text-center">
-              <Flower2 className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">
-                No allergy results yet. Run annotation to generate pathway scores.
-              </p>
-            </div>
+            <PageEmpty icon={Flower2} title="No allergy results yet." description="Run annotation to generate pathway scores." />
           )}
         </>
       )}

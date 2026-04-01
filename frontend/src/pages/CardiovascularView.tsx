@@ -12,9 +12,12 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { HeartPulse, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { HeartPulse, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import {
   useCardiovascularVariants,
   useFHStatus,
@@ -52,12 +55,7 @@ export default function CardiovascularView() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Cardiovascular</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <HeartPulse className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view cardiovascular results.
-          </p>
-        </div>
+        <PageEmpty icon={HeartPulse} title="Select a sample to view cardiovascular results." />
       </div>
     )
   }
@@ -112,29 +110,23 @@ export default function CardiovascularView() {
       )}
 
       {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
+      {isLoading && <PageLoading message="Loading cardiovascular data..." />}
 
       {/* Error state */}
       {hasError && !isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load cardiovascular data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {variantsQuery.error instanceof Error
-                  ? variantsQuery.error.message
-                  : fhStatusQuery.error instanceof Error
-                    ? fhStatusQuery.error.message
-                    : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={
+            variantsQuery.error instanceof Error
+              ? variantsQuery.error.message
+              : fhStatusQuery.error instanceof Error
+                ? fhStatusQuery.error.message
+                : "An unexpected error occurred."
+          }
+          onRetry={() => {
+            variantsQuery.refetch()
+            fhStatusQuery.refetch()
+          }}
+        />
       )}
 
       {/* Main content */}
@@ -176,15 +168,11 @@ export default function CardiovascularView() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <HeartPulse className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">
-                  No pathogenic or likely pathogenic variants found in the cardiovascular gene panel.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This does not eliminate cardiovascular risk. Consult a healthcare provider for comprehensive assessment.
-                </p>
-              </div>
+              <PageEmpty
+                icon={HeartPulse}
+                title="No pathogenic or likely pathogenic variants found in the cardiovascular gene panel."
+                description="This does not eliminate cardiovascular risk. Consult a healthcare provider for comprehensive assessment."
+              />
             )}
           </section>
         </>

@@ -10,7 +10,10 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Heart, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { Heart, ChevronDown, ChevronUp } from "lucide-react"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import { cn } from "@/lib/utils"
 import { parseSampleId } from "@/lib/format"
 import { useCarrierVariants, useCarrierDisclaimer } from "@/api/carrier"
@@ -43,13 +46,7 @@ export default function CarrierStatusView() {
   if (sampleId == null) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Carrier Status</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <Heart className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to view carrier status results.
-          </p>
-        </div>
+        <PageEmpty icon={Heart} title="Select a sample to view carrier status results." />
       </div>
     )
   }
@@ -102,26 +99,15 @@ export default function CarrierStatusView() {
 
       {/* Loading state */}
       {variantsQuery.isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="Loading carrier status data..." />
       )}
 
       {/* Error state */}
       {variantsQuery.isError && !variantsQuery.isLoading && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium text-destructive">Failed to load carrier status data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {variantsQuery.error instanceof Error
-                  ? variantsQuery.error.message
-                  : "An unexpected error occurred."}
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageError
+          message={variantsQuery.error instanceof Error ? variantsQuery.error.message : "An unexpected error occurred."}
+          onRetry={() => { variantsQuery.refetch(); }}
+        />
       )}
 
       {/* Main content */}
@@ -175,16 +161,11 @@ export default function CarrierStatusView() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <Heart className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">
-                  No carrier variants identified in the 7-gene panel for this sample.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This does not rule out carrier status. Genotyping arrays detect only a subset
-                  of known variants. Consult a genetic counselor for comprehensive carrier screening.
-                </p>
-              </div>
+              <PageEmpty
+                icon={Heart}
+                title="No carrier variants identified in the 7-gene panel for this sample."
+                description="This does not rule out carrier status. Genotyping arrays detect only a subset of known variants. Consult a genetic counselor for comprehensive carrier screening."
+              />
             )}
           </section>
 

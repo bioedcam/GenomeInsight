@@ -25,6 +25,9 @@ import { parseSampleId } from "@/lib/format"
 import { useFindingsSummary } from "@/api/findings"
 import { useGenerateReport, useExportFhir, fetchReportPreview } from "@/api/reports"
 import EvidenceStars from "@/components/ui/EvidenceStars"
+import PageLoading from "@/components/ui/PageLoading"
+import PageError from "@/components/ui/PageError"
+import PageEmpty from "@/components/ui/PageEmpty"
 import type { FindingSummaryItem } from "@/types/findings"
 
 /** Module display names matching backend MODULE_DISPLAY_NAMES. */
@@ -204,12 +207,7 @@ export default function ReportBuilder() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Report Builder</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            Select a sample to build a report.
-          </p>
-        </div>
+        <PageEmpty icon={FileText} title="Select a sample to build a report." />
       </div>
     )
   }
@@ -219,10 +217,7 @@ export default function ReportBuilder() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Report Builder</h1>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Loading findings…</span>
-        </div>
+        <PageLoading message="Loading findings..." />
       </div>
     )
   }
@@ -232,12 +227,10 @@ export default function ReportBuilder() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Report Builder</h1>
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
-          <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
-          <p className="text-destructive">
-            Failed to load findings. {summaryQuery.error instanceof Error ? summaryQuery.error.message : ""}
-          </p>
-        </div>
+        <PageError
+          message={summaryQuery.error instanceof Error ? summaryQuery.error.message : "Failed to load findings."}
+          onRetry={() => summaryQuery.refetch()}
+        />
       </div>
     )
   }
@@ -247,12 +240,11 @@ export default function ReportBuilder() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Report Builder</h1>
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            No analysis findings available for this sample. Run annotation and analysis modules first.
-          </p>
-        </div>
+        <PageEmpty
+          icon={FileText}
+          title="No analysis findings available."
+          description="Run annotation and analysis modules first."
+        />
       </div>
     )
   }
