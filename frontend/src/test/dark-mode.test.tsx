@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from './test-utils'
+import { render, screen, fireEvent, waitFor } from './test-utils'
 import TopNav from '@/components/layout/TopNav'
 
 // Mock fetch for the preferences API
@@ -21,6 +21,7 @@ const fetchMock = vi.fn(() =>
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
+  ;(fetchMock as ReturnType<typeof vi.fn>).mockClear()
   localStorage.clear()
   document.documentElement.classList.remove('dark')
 })
@@ -77,20 +78,25 @@ describe('Dark mode toggle (T4-30)', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
-  it('persists theme to backend via PUT', () => {
+  it('persists theme to backend via PUT', async () => {
     localStorage.setItem('gi-theme', 'light')
     render(<TopNav />)
     const btn = screen.getByTestId('theme-toggle')
 
     fireEvent.click(btn)
 
-    // Should have called PUT /api/preferences/theme
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/preferences/theme',
-      expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ theme: 'dark' }),
-      }),
-    )
+    // Mutation is fire-and-forget, wait for it to be called
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/preferences/theme',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({ theme: 'dark' }),
+        }),
+      )
+    })
   })
 })

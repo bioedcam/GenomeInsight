@@ -123,4 +123,4 @@ class TestSetTheme:
         prefs_client.put("/api/preferences/theme", json={"theme": "light"})
         content = config_path.read_text()
         assert 'theme = "light"' in content
-        assert "/custom/path" in content
+        assert 'data_dir = "/custom/path"' in content

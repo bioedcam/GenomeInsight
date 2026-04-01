@@ -5,7 +5,7 @@
  * The TopNav theme toggle and Plotly charts both consume this.
  */
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 import type { Theme } from '@/api/preferences'
 import { useTheme } from '@/lib/useTheme'
 
@@ -22,10 +22,13 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme, resolvedTheme, setTheme, cycleTheme } = useTheme()
 
+  const value = useMemo(
+    () => ({ theme, resolvedTheme, setTheme, cycleTheme, isDark: resolvedTheme === 'dark' }),
+    [theme, resolvedTheme, setTheme, cycleTheme],
+  )
+
   return (
-    <ThemeContext.Provider
-      value={{ theme, resolvedTheme, setTheme, cycleTheme, isDark: resolvedTheme === 'dark' }}
-    >
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   )

@@ -6,6 +6,7 @@ Endpoints for persisting UI preferences (theme) to config.toml.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -17,6 +18,8 @@ from backend.config import DEFAULT_DATA_DIR, get_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
+
+_config_lock = threading.Lock()
 
 
 # ── TOML helpers (reuse pattern from setup.py) ─────────────────────
@@ -84,15 +87,17 @@ async def get_theme() -> ThemeResponse:
 async def set_theme(body: ThemeRequest) -> ThemeResponse:
     """Update theme preference and persist to config.toml."""
     config_path = DEFAULT_DATA_DIR / "config.toml"
-    content = _read_config_toml(config_path)
 
-    section = content.get("genomeinsight", {})
-    if not isinstance(section, dict):
-        section = {}
-    section["theme"] = body.theme
-    content["genomeinsight"] = section
+    with _config_lock:
+        content = _read_config_toml(config_path)
 
-    _write_config_toml(config_path, content)
+        section = content.get("genomeinsight", {})
+        if not isinstance(section, dict):
+            section = {}
+        section["theme"] = body.theme
+        content["genomeinsight"] = section
+
+        _write_config_toml(config_path, content)
 
     # Clear cached settings so next read picks up the new value
     get_settings.cache_clear()
