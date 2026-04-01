@@ -202,9 +202,13 @@ jobs:
 
   # ── E2E tests (merge to main only) ─────────────────────
   test-e2e:
-    name: E2E Tests (Playwright)
+    name: E2E Tests — ${{ matrix.browser }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v4
 
@@ -235,10 +239,10 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Run E2E tests (Chromium only in CI)
-        run: npx playwright test --project=chromium
+      - name: Run E2E tests (${{ matrix.browser }})
+        run: npx playwright test --project=${{ matrix.browser }}
         env:
           CI: true
           GENOMEINSIGHT_HUEY_IMMEDIATE: "true"
@@ -247,6 +251,8 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-report-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
