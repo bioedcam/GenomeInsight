@@ -111,48 +111,38 @@ test.describe('P4-26d: Cross-browser — client-side navigation', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Navigate to Variant Explorer
-    const variantsLink = page.locator('nav a[href="/variants"]')
-    if (await variantsLink.isVisible()) {
-      await variantsLink.click()
-      await page.waitForLoadState('networkidle')
-      await expect(page).toHaveURL(/\/variants/)
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    }
+    // Navigate to Variant Explorer using sidebar NavLink (title attribute is always present)
+    const variantsLink = page.locator('nav[aria-label="Main navigation"] a[title="Variant Explorer"]')
+    await variantsLink.click()
+    await page.waitForURL(/\/variants/)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 
     // Navigate to Settings
-    const settingsLink = page.locator('nav a[href="/settings"]')
-    if (await settingsLink.isVisible()) {
-      await settingsLink.click()
-      await page.waitForLoadState('networkidle')
-      await expect(page).toHaveURL(/\/settings/)
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    }
+    const settingsLink = page.locator('nav[aria-label="Main navigation"] a[title="Settings"]')
+    await settingsLink.click()
+    await page.waitForURL(/\/settings/)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 
     // Navigate back to Dashboard
-    const dashLink = page.locator('nav a[href="/"]')
-    if (await dashLink.isVisible()) {
-      await dashLink.click()
-      await page.waitForLoadState('networkidle')
-      await expect(page).toHaveURL(/^\/$|\/\?/)
-    }
+    const dashLink = page.locator('nav[aria-label="Main navigation"] a[title="Dashboard"]')
+    await dashLink.click()
+    await page.waitForURL('/')
   })
 
   test('browser back/forward navigation works', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.goto('/settings')
-    await page.waitForLoadState('networkidle')
-    await expect(page).toHaveURL(/\/settings/)
+    // Navigate via click (not page.goto) to build history stack
+    const settingsLink = page.locator('nav[aria-label="Main navigation"] a[title="Settings"]')
+    await settingsLink.click()
+    await page.waitForURL(/\/settings/)
 
     await page.goBack()
-    await page.waitForLoadState('networkidle')
-    await expect(page).toHaveURL(/^\/$|\/\?/)
+    await page.waitForURL('/')
 
     await page.goForward()
-    await page.waitForLoadState('networkidle')
-    await expect(page).toHaveURL(/\/settings/)
+    await page.waitForURL(/\/settings/)
   })
 
   test('direct URL navigation works for all core routes', async ({ page }) => {
@@ -208,56 +198,59 @@ test.describe('P4-26d: Cross-browser — interactive elements', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Tab through the page and verify focus lands on interactive elements
-    for (let i = 0; i < 5; i++) {
+    // Click body to ensure page focus in headless mode
+    await page.locator('body').click()
+
+    // Tab through the page — skip-nav, main (tabindex=0), sidebar items absorb initial tabs
+    let reachedInteractive = false
+    for (let i = 0; i < 6; i++) {
       await page.keyboard.press('Tab')
+      const focused = await page.evaluate(() => {
+        const el = document.activeElement
+        return el?.matches('a, button, input, select, textarea, [tabindex="0"]') ?? false
+      })
+      if (focused) {
+        reachedInteractive = true
+        break
+      }
     }
 
-    const focused = await page.evaluate(() => {
-      const el = document.activeElement
-      return el
-        ? {
-            tag: el.tagName,
-            isInteractive: el.matches(
-              'a, button, input, select, textarea, [tabindex="0"]',
-            ),
-          }
-        : null
-    })
-
-    expect(focused).toBeTruthy()
-    expect(focused!.tag).not.toBe('BODY')
+    expect(reachedInteractive).toBe(true)
   })
 
   test('command palette opens and closes with keyboard', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
+    // Click body to ensure page focus in headless mode
+    await page.locator('body').click()
+
     // Open command palette with Ctrl+K (Linux/CI) or Meta+K (macOS)
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
     await page.keyboard.press(`${modifier}+k`)
 
     const input = page.getByTestId('command-palette-input')
-    // Command palette should be visible
-    await expect(input).toBeVisible()
+    await expect(input).toBeVisible({ timeout: 3000 })
 
     // Close with Escape
     await page.keyboard.press('Escape')
-    await expect(input).not.toBeVisible()
+    await expect(input).not.toBeVisible({ timeout: 3000 })
   })
 
   test('sidebar collapse/expand works', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const toggleBtn = page.locator('[aria-label="Toggle sidebar"], [data-testid="sidebar-toggle"]')
-    if (await toggleBtn.isVisible()) {
-      await toggleBtn.click()
-      // Wait for animation to settle
-      await page.evaluate(() => new Promise(requestAnimationFrame))
+    // Sidebar toggle uses aria-label "Collapse sidebar" or "Expand sidebar"
+    const collapseBtn = page.locator('[aria-label="Collapse sidebar"]')
+    if (await collapseBtn.isVisible()) {
+      await collapseBtn.click()
+      // Wait for sidebar to collapse
+      const expandBtn = page.locator('[aria-label="Expand sidebar"]')
+      await expect(expandBtn).toBeVisible({ timeout: 2000 })
 
-      await toggleBtn.click()
-      await page.evaluate(() => new Promise(requestAnimationFrame))
+      await expandBtn.click()
+      await expect(collapseBtn).toBeVisible({ timeout: 2000 })
 
       // Page should still be functional
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
