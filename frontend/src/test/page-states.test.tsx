@@ -122,7 +122,7 @@ describe("ErrorBoundary", () => {
     console.error = originalError
   })
 
-  function ThrowingComponent({ message }: { message: string }) {
+  function ThrowingComponent({ message }: { message: string }): JSX.Element {
     throw new Error(message)
   }
 
