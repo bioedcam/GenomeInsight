@@ -161,13 +161,27 @@ class TestDatabaseRegistry:
 
     def test_get_database_status_downloaded(self, tmp_data_dir: Path):
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        # Use a standalone DB (gnomad) for file-based status check
+        # Use a standalone pipeline DB (gnomad) — needs file + version entry
         db_info = get_database("gnomad")
         assert db_info is not None
 
         dest = db_info.dest_path(settings)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"fake gnomad data")
+
+        # File alone is NOT sufficient for standalone pipeline DBs
+        status = get_database_status(db_info, settings)
+        assert status["downloaded"] is False
+
+        # Add database_versions entry — now it should be downloaded
+        ref_path = settings.reference_db_path
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        reference_metadata.create_all(engine)
+        from backend.db.tables import database_versions
+
+        with engine.begin() as conn:
+            conn.execute(database_versions.insert().values(db_name="gnomad", version="test"))
+        engine.dispose()
 
         status = get_database_status(db_info, settings)
         assert status["downloaded"] is True
@@ -243,9 +257,17 @@ class TestListDatabases:
         assert data["downloaded_count"] == bundled_count
 
     def test_list_databases_shows_downloaded(self, db_client: TestClient, tmp_data_dir: Path):
-        # Create a fake downloaded gnomAD file (standalone DB)
+        # Create a fake downloaded gnomAD file + version entry (standalone pipeline DB)
         gnomad_path = tmp_data_dir / "gnomad_af.db"
         gnomad_path.write_bytes(b"fake data")
+
+        from backend.db.tables import database_versions
+
+        ref_path = tmp_data_dir / "reference.db"
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        with engine.begin() as conn:
+            conn.execute(database_versions.insert().values(db_name="gnomad", version="test"))
+        engine.dispose()
 
         resp = db_client.get("/api/databases")
         data = resp.json()
@@ -310,13 +332,11 @@ class TestTriggerDownload:
                 continue
             if db.build_mode in ("manual", "bundled"):
                 continue
-            if db.target_db == "reference":
-                # Insert database_versions entry
-                with engine.begin() as conn:
-                    conn.execute(
-                        database_versions.insert().values(db_name=db.name, version="test")
-                    )
-            else:
+            # All pipeline DBs need a database_versions entry
+            with engine.begin() as conn:
+                conn.execute(database_versions.insert().values(db_name=db.name, version="test"))
+            # Standalone DBs also need the file on disk
+            if db.target_db == "standalone" and db.filename:
                 dest = tmp_data_dir / db.filename
                 dest.write_bytes(b"fake")
 
