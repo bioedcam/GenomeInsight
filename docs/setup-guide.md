@@ -206,6 +206,7 @@ GenomeInsight downloads reference databases needed for variant annotation:
 | dbNSFP | ~400 MB | In-silico pathogenicity scores |
 | VEP bundle | ~500 MB | Variant consequence predictions |
 | ENCODE cCREs | ~50 MB | Regulatory element annotations |
+| **Total** | **~1.5 GB** | **Combined download size** |
 
 Downloads are resumable — if interrupted, they pick up where they left off. Progress is displayed per-database via real-time streaming.
 

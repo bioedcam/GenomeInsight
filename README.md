@@ -1,6 +1,6 @@
 # GenomeInsight
 
-Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe file, annotate variants against clinical databases, and explore findings across 15+ analysis modules — all running locally on your machine.
+Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe file, annotate variants against clinical databases, and explore findings across 15 specialized analysis modules — all running locally on your machine.
 
 **Your data never leaves your computer.** GenomeInsight runs entirely on localhost with no telemetry, no cloud processing, and no outbound variant data.
 
@@ -18,7 +18,7 @@ Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe fi
 - **Automatic database updates** with configurable schedule
 - **WCAG 2.1 AA accessible** — keyboard navigation, screen reader support, axe-core tested
 
-## Quick Start
+## Quick Start (Development)
 
 ```bash
 git clone https://github.com/bioedcam/GenomeInsight.git
@@ -57,7 +57,7 @@ make benchmark         # Run annotation pipeline benchmark (600k SNPs)
 
 ### Project Structure
 
-```
+```text
 GenomeInsight/
 ├── backend/                 # FastAPI application
 │   ├── analysis/            # 15+ analysis modules
