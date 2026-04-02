@@ -129,15 +129,35 @@ def _is_disclaimer_accepted() -> bool:
 
 
 def _has_any_databases() -> bool:
-    """Check if any reference databases have been downloaded."""
+    """Check if any reference databases have been downloaded or built."""
     settings = get_settings()
-    db_files = [
-        settings.data_dir / "clinvar.db",
-        settings.data_dir / "vep_bundle.db",
+    # Check standalone DB files
+    standalone_files = [
         settings.data_dir / "gnomad_af.db",
         settings.data_dir / "dbnsfp.db",
     ]
-    return any(f.exists() for f in db_files)
+    if any(f.exists() for f in standalone_files):
+        return True
+    # Check reference.db-resident databases via database_versions table
+    try:
+        import sqlalchemy as sa
+
+        from backend.db.tables import database_versions
+
+        ref_path = settings.reference_db_path
+        if not ref_path.exists():
+            return False
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        try:
+            with engine.connect() as conn:
+                count = conn.execute(
+                    sa.select(sa.func.count()).select_from(database_versions)
+                ).scalar()
+            return (count or 0) > 0
+        finally:
+            engine.dispose()
+    except Exception:
+        return False
 
 
 def _has_any_samples() -> bool:

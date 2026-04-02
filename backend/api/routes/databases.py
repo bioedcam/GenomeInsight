@@ -30,6 +30,7 @@ from backend.db.database_registry import (
     DATABASES,
     DatabaseInfo,
     get_all_databases,
+    get_build_fn,
     get_database,
     get_database_status,
 )
@@ -78,6 +79,7 @@ class DatabaseStatusResponse(BaseModel):
     phase: int
     downloaded: bool
     file_size_bytes: int | None
+    build_mode: str = "pipeline"
 
 
 class DatabaseListResponse(BaseModel):
@@ -173,14 +175,16 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
         # Default: all required databases
         db_names = [db.name for db in get_all_databases() if db.required]
 
-    # Skip already-downloaded databases
+    # Skip already-completed databases and non-buildable ones
     to_download: list[str] = []
     for name in db_names:
         db_info = get_database(name)
         if db_info is None:
             continue
-        dest = db_info.dest_path(settings)
-        if not dest.exists():
+        if db_info.build_mode in ("manual", "bundled"):
+            continue
+        status = get_database_status(db_info, settings)
+        if not status["downloaded"]:
             to_download.append(name)
 
     if not to_download:
@@ -189,12 +193,11 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
             detail="All requested databases are already downloaded.",
         )
 
-    # Create session and launch parallel downloads
+    # Create session and launch parallel downloads/builds
     session_id = f"dbdl-{uuid.uuid4().hex[:12]}"
     download_jobs: list[DownloadJobInfo] = []
     session_entries: list[tuple[str, str]] = []
 
-    dm = DownloadManager(engine, settings.downloads_dir)
     executor = get_download_executor()
 
     for name in to_download:
@@ -210,15 +213,26 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
         download_jobs.append(DownloadJobInfo(db_name=name, job_id=job_id))
         session_entries.append((name, job_id))
 
-        # Submit download to thread pool
-        executor.submit(
-            _run_download,
-            dm=dm,
-            db_info=db_info,
-            job_id=job_id,
-            engine=engine,
-            settings=settings,
-        )
+        if db_info.build_mode == "pipeline":
+            # Build from upstream sources
+            executor.submit(
+                _run_build,
+                db_info=db_info,
+                job_id=job_id,
+                engine=engine,
+                settings=settings,
+            )
+        else:
+            # Legacy HTTP download (encode_ccres)
+            dm = DownloadManager(engine, settings.downloads_dir)
+            executor.submit(
+                _run_download,
+                dm=dm,
+                db_info=db_info,
+                job_id=job_id,
+                engine=engine,
+                settings=settings,
+            )
 
     # Persist session in-memory and in database
     _active_sessions[session_id] = session_entries
@@ -510,6 +524,94 @@ def _create_job_record(engine: sa.Engine, job_id: str, db_name: str) -> None:
                 created_at=now,
                 updated_at=now,
             )
+        )
+
+
+def _run_build(
+    *,
+    db_info: DatabaseInfo,
+    job_id: str,
+    engine: sa.Engine,
+    settings: Settings,
+) -> None:
+    """Execute a database build pipeline in a background thread."""
+    try:
+        _update_job(
+            engine,
+            job_id,
+            status="running",
+            message=f"Building {db_info.display_name} from upstream source...",
+        )
+
+        build_fn = get_build_fn(db_info.name)
+        if build_fn is None:
+            raise ValueError(f"No build function registered for {db_info.name}")
+
+        # Determine which engine to pass
+        if db_info.target_db == "reference":
+            target_engine = engine
+        else:
+            registry = get_registry()
+            if db_info.name == "gnomad":
+                target_engine = registry.gnomad_engine
+            elif db_info.name == "dbnsfp":
+                target_engine = registry.dbnsfp_engine
+            else:
+                target_engine = engine
+
+        # Progress callback -> job table update
+        def on_progress(downloaded: int, total: int | None) -> None:
+            if total and total > 0:
+                pct = min(95.0, (downloaded / total) * 95.0)
+                _update_job(
+                    engine,
+                    job_id,
+                    status="running",
+                    progress_pct=pct,
+                    message=f"Building {db_info.display_name}... {pct:.0f}%",
+                )
+
+        # Call the build function — signatures vary slightly
+        if db_info.name in ("gnomad", "dbnsfp"):
+            build_fn(
+                target_engine,
+                settings.data_dir,
+                download_progress=on_progress,
+                reference_engine=engine,
+            )
+        elif db_info.name == "mondo_hpo":
+            build_fn(target_engine, settings.data_dir, download_progress=on_progress)
+        else:
+            build_fn(target_engine, settings.data_dir, download_progress=on_progress)
+
+        _update_job(
+            engine,
+            job_id,
+            status="complete",
+            progress_pct=100.0,
+            message=f"{db_info.display_name} ready",
+        )
+
+        logger.info(
+            "database_build_complete",
+            db_name=db_info.name,
+            job_id=job_id,
+        )
+
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {exc}"
+        _update_job(
+            engine,
+            job_id,
+            status="failed",
+            progress_pct=0.0,
+            error=error_msg,
+        )
+        logger.exception(
+            "database_build_failed",
+            db_name=db_info.name,
+            job_id=job_id,
+            error=error_msg,
         )
 
 

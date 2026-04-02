@@ -2,6 +2,9 @@
  *
  * Shows all reference databases, their status, and allows the user to trigger
  * parallel downloads. Progress is streamed via SSE from the backend.
+ *
+ * Databases with build_mode="manual" show an amber "Manual Build" badge.
+ * Databases with build_mode="bundled" show a green "Included" badge.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,7 +19,9 @@ import {
   Download,
   HardDrive,
   Loader2,
+  PackageCheck,
   RefreshCw,
+  Wrench,
 } from 'lucide-react'
 
 interface DatabasesStepProps {
@@ -55,9 +60,14 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
   const handleStartDownload = useCallback(() => {
     if (!dbList) return
 
-    // Get databases that need downloading
+    // Get databases that need downloading (exclude manual/bundled)
     const toDownload = dbList.databases
-      .filter((db) => !db.downloaded)
+      .filter(
+        (db) =>
+          !db.downloaded &&
+          db.build_mode !== 'manual' &&
+          db.build_mode !== 'bundled',
+      )
       .map((db) => db.name)
 
     if (toDownload.length === 0) return
@@ -146,12 +156,15 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
     handleStartDownload()
   }, [handleStartDownload])
 
-  // Determine if we can proceed (all required DBs downloaded)
+  // Determine if we can proceed:
+  // - All required DBs (excluding manual) must be downloaded
+  // - Bundled DBs always count as complete
   const allRequiredDownloaded = dbList
     ? dbList.databases
         .filter((db) => db.required)
         .every((db) => {
-          // Check live progress if available
+          if (db.build_mode === 'bundled') return true
+          if (db.build_mode === 'manual') return true // manual is optional for proceed
           const progress = dbProgress[db.name]
           if (progress) return progress.status === 'complete'
           return db.downloaded
@@ -159,7 +172,12 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
     : false
 
   const needsDownload = dbList
-    ? dbList.databases.some((db) => !db.downloaded)
+    ? dbList.databases.some(
+        (db) =>
+          !db.downloaded &&
+          db.build_mode !== 'manual' &&
+          db.build_mode !== 'bundled',
+      )
     : false
 
   // ── Loading state ──────────────────────────────────────────
@@ -234,9 +252,13 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
         <div className="space-y-3">
           {dbList.databases.map((db) => {
             const progress = dbProgress[db.name]
-            const isComplete = progress
-              ? progress.status === 'complete'
-              : db.downloaded
+            const isBundled = db.build_mode === 'bundled'
+            const isManual = db.build_mode === 'manual'
+            const isComplete = isBundled
+              ? true
+              : progress
+                ? progress.status === 'complete'
+                : db.downloaded
             const isFailed = progress?.status === 'failed'
             const isRunning = progress?.status === 'running'
             const isPending = progress?.status === 'pending'
@@ -254,19 +276,25 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                 <div className="flex items-start gap-3">
                   {/* Status icon */}
                   <div className="mt-0.5 flex-shrink-0">
-                    {isComplete && (
+                    {isBundled && (
+                      <PackageCheck className="h-5 w-5 text-green-500" />
+                    )}
+                    {!isBundled && isComplete && (
                       <CheckCircle2 className="h-5 w-5 text-green-500" />
                     )}
-                    {isFailed && (
+                    {!isBundled && isFailed && (
                       <AlertCircle className="h-5 w-5 text-destructive" />
                     )}
-                    {isRunning && (
+                    {!isBundled && isRunning && (
                       <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     )}
-                    {isPending && (
+                    {!isBundled && isPending && (
                       <Download className="h-5 w-5 text-muted-foreground" />
                     )}
-                    {!progress && !db.downloaded && (
+                    {!isBundled && isManual && !isComplete && !isFailed && !isRunning && !isPending && (
+                      <Wrench className="h-5 w-5 text-amber-500" />
+                    )}
+                    {!isBundled && !isManual && !progress && !db.downloaded && (
                       <HardDrive className="h-5 w-5 text-muted-foreground" />
                     )}
                   </div>
@@ -280,12 +308,22 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(db.expected_size_bytes)}
                       </span>
-                      {db.required && (
+                      {isBundled && (
+                        <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">
+                          Included
+                        </span>
+                      )}
+                      {isManual && (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          Manual Build
+                        </span>
+                      )}
+                      {!isBundled && !isManual && db.required && (
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                           Required
                         </span>
                       )}
-                      {!db.required && (
+                      {!isBundled && !isManual && !db.required && (
                         <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                           Optional
                         </span>
@@ -294,6 +332,13 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {db.description}
                     </p>
+
+                    {/* Manual build help text */}
+                    {isManual && !isComplete && (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                        Run <code className="rounded bg-muted px-1 py-0.5 text-[11px]">scripts/build_vep_bundle.py</code> to build
+                      </p>
+                    )}
 
                     {/* Progress bar */}
                     {(isRunning || isPending) && (
@@ -332,11 +377,18 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                     )}
 
                     {/* Downloaded status */}
-                    {isComplete && (
+                    {isComplete && !isBundled && (
                       <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">
                         Downloaded
                         {db.file_size_bytes != null &&
                           ` (${formatBytes(db.file_size_bytes)})`}
+                      </p>
+                    )}
+
+                    {/* Bundled status */}
+                    {isBundled && (
+                      <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">
+                        Ships with GenomeInsight
                       </p>
                     )}
                   </div>

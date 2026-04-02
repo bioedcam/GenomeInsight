@@ -138,9 +138,11 @@ class TestDatabaseRegistry:
             assert db.name
             assert db.display_name
             assert db.description
-            assert db.url
-            assert db.filename
             assert db.expected_size_bytes > 0
+            # URL and filename only required for download-mode databases
+            if db.build_mode == "download":
+                assert db.url
+                assert db.filename
 
     def test_database_names_match_keys(self):
         for key, db in DATABASES.items():
@@ -148,27 +150,65 @@ class TestDatabaseRegistry:
 
     def test_get_database_status_not_downloaded(self, tmp_data_dir: Path):
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        db_info = get_database("clinvar")
+        # Use a standalone DB (gnomad) for file-based status check
+        db_info = get_database("gnomad")
         assert db_info is not None
 
         status = get_database_status(db_info, settings)
-        assert status["name"] == "clinvar"
+        assert status["name"] == "gnomad"
         assert status["downloaded"] is False
         assert status["file_size_bytes"] is None
 
     def test_get_database_status_downloaded(self, tmp_data_dir: Path):
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        db_info = get_database("clinvar")
+        # Use a standalone DB (gnomad) for file-based status check
+        db_info = get_database("gnomad")
         assert db_info is not None
 
-        # Create a fake downloaded file
         dest = db_info.dest_path(settings)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(b"fake clinvar data")
+        dest.write_bytes(b"fake gnomad data")
 
         status = get_database_status(db_info, settings)
         assert status["downloaded"] is True
-        assert status["file_size_bytes"] == len(b"fake clinvar data")
+        assert status["file_size_bytes"] == len(b"fake gnomad data")
+
+    def test_get_database_status_reference_db(self, tmp_data_dir: Path):
+        """Reference.db-resident databases check database_versions table."""
+        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+        db_info = get_database("clinvar")
+        assert db_info is not None
+        assert db_info.target_db == "reference"
+
+        # Without database_versions entry, should be not downloaded
+        ref_path = settings.reference_db_path
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        reference_metadata.create_all(engine)
+        engine.dispose()
+
+        status = get_database_status(db_info, settings)
+        assert status["downloaded"] is False
+
+        # Add a database_versions entry
+        from backend.db.tables import database_versions
+
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        with engine.begin() as conn:
+            conn.execute(database_versions.insert().values(db_name="clinvar", version="20260101"))
+        engine.dispose()
+
+        status = get_database_status(db_info, settings)
+        assert status["downloaded"] is True
+
+    def test_get_database_status_bundled(self, tmp_data_dir: Path):
+        """Bundled databases always show as downloaded."""
+        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+        db_info = get_database("ancestry_pca")
+        assert db_info is not None
+        assert db_info.build_mode == "bundled"
+
+        status = get_database_status(db_info, settings)
+        assert status["downloaded"] is True
 
     def test_dest_path(self, tmp_data_dir: Path):
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
@@ -198,20 +238,23 @@ class TestListDatabases:
     def test_list_databases_none_downloaded(self, db_client: TestClient):
         resp = db_client.get("/api/databases")
         data = resp.json()
-        assert data["downloaded_count"] == 0
+        # ancestry_pca is bundled and always counts as downloaded
+        bundled_count = sum(1 for db in data["databases"] if db["build_mode"] == "bundled")
+        assert data["downloaded_count"] == bundled_count
 
     def test_list_databases_shows_downloaded(self, db_client: TestClient, tmp_data_dir: Path):
-        # Create a fake downloaded ClinVar file
-        clinvar_path = tmp_data_dir / "clinvar.db"
-        clinvar_path.write_bytes(b"fake data")
+        # Create a fake downloaded gnomAD file (standalone DB)
+        gnomad_path = tmp_data_dir / "gnomad_af.db"
+        gnomad_path.write_bytes(b"fake data")
 
         resp = db_client.get("/api/databases")
         data = resp.json()
-        assert data["downloaded_count"] == 1
+        bundled_count = sum(1 for db in data["databases"] if db["build_mode"] == "bundled")
+        assert data["downloaded_count"] == bundled_count + 1
 
-        clinvar_status = next(d for d in data["databases"] if d["name"] == "clinvar")
-        assert clinvar_status["downloaded"] is True
-        assert clinvar_status["file_size_bytes"] == len(b"fake data")
+        gnomad_status = next(d for d in data["databases"] if d["name"] == "gnomad")
+        assert gnomad_status["downloaded"] is True
+        assert gnomad_status["file_size_bytes"] == len(b"fake data")
 
     def test_list_databases_has_total_size(self, db_client: TestClient):
         resp = db_client.get("/api/databases")
@@ -232,6 +275,7 @@ class TestListDatabases:
             "phase",
             "downloaded",
             "file_size_bytes",
+            "build_mode",
         }
         assert set(db_entry.keys()) == expected_fields
 
@@ -255,11 +299,28 @@ class TestTriggerDownload:
     def test_download_already_downloaded_returns_409(
         self, db_client: TestClient, tmp_data_dir: Path
     ):
+        from backend.db.tables import database_versions
+
+        ref_path = tmp_data_dir / "reference.db"
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+
         # Mark all required databases as downloaded
         for db in get_all_databases():
-            if db.required:
+            if not db.required:
+                continue
+            if db.build_mode in ("manual", "bundled"):
+                continue
+            if db.target_db == "reference":
+                # Insert database_versions entry
+                with engine.begin() as conn:
+                    conn.execute(
+                        database_versions.insert().values(db_name=db.name, version="test")
+                    )
+            else:
                 dest = tmp_data_dir / db.filename
                 dest.write_bytes(b"fake")
+
+        engine.dispose()
 
         resp = db_client.post(
             "/api/databases/download",
@@ -283,6 +344,8 @@ class TestTriggerDownload:
             url=f"{url}/clinvar.db",
             filename="clinvar.db",
             expected_size_bytes=len(TEST_DB_DATA),
+            build_mode="download",
+            target_db="standalone",
         )
 
         with patch.dict(DATABASES, {"clinvar": test_db}):
@@ -306,18 +369,20 @@ class TestTriggerDownload:
     ):
         url = server_url(fake_db_server)
 
-        # Patch all databases to use test server
+        # Patch all databases to use test server with download mode
         test_dbs = {}
         for name, db in DATABASES.items():
             test_dbs[name] = DatabaseInfo(
                 name=db.name,
                 display_name=db.display_name,
                 description=db.description,
-                url=f"{url}/{db.filename}",
-                filename=db.filename,
+                url=f"{url}/{db.filename or db.name + '.db'}",
+                filename=db.filename or f"{db.name}.db",
                 expected_size_bytes=len(TEST_DB_DATA),
                 required=db.required,
                 phase=db.phase,
+                build_mode="download",
+                target_db="standalone",
             )
 
         required_count = sum(1 for db in test_dbs.values() if db.required)
@@ -347,6 +412,8 @@ class TestTriggerDownload:
             url=f"{url}/clinvar.db",
             filename="clinvar.db",
             expected_size_bytes=len(TEST_DB_DATA),
+            build_mode="download",
+            target_db="standalone",
         )
 
         with patch.dict(DATABASES, {"clinvar": test_db}):
@@ -373,6 +440,8 @@ class TestTriggerDownload:
             url=f"{url}/clinvar.db",
             filename="clinvar.db",
             expected_size_bytes=len(TEST_DB_DATA),
+            build_mode="download",
+            target_db="standalone",
         )
 
         with patch.dict(DATABASES, {"clinvar": test_db}):
@@ -520,6 +589,8 @@ class TestDownloadIntegration:
             url=f"{url}/clinvar.db",
             filename="clinvar.db",
             expected_size_bytes=len(TEST_DB_DATA),
+            build_mode="download",
+            target_db="standalone",
         )
 
         with patch.dict(DATABASES, {"clinvar": test_db}, clear=False):
@@ -572,6 +643,8 @@ class TestDownloadIntegration:
                 url=f"{url}/clinvar.db",
                 filename="clinvar.db",
                 expected_size_bytes=len(TEST_DB_DATA),
+                build_mode="download",
+                target_db="standalone",
             ),
             "cpic": DatabaseInfo(
                 name="cpic",
@@ -580,6 +653,8 @@ class TestDownloadIntegration:
                 url=f"{url}/cpic.db",
                 filename="cpic.db",
                 expected_size_bytes=len(TEST_DB_DATA),
+                build_mode="download",
+                target_db="standalone",
             ),
         }
 

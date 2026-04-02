@@ -96,6 +96,8 @@ class TestSessionPersistence:
                     filename="testdb.db",
                     expected_size_bytes=100,
                     required=False,
+                    build_mode="download",
+                    target_db="standalone",
                 )
 
                 with patch.dict(DATABASES, {"testdb": test_db}):

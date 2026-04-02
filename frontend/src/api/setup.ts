@@ -42,7 +42,7 @@ export function useSetupStatus() {
   return useQuery({
     queryKey: SETUP_STATUS_KEY,
     queryFn: fetchSetupStatus,
-    staleTime: 0,
+    staleTime: 60_000,
   })
 }
 
