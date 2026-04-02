@@ -1,109 +1,152 @@
 # GenomeInsight
 
-Personal genomics analysis platform for 23andMe raw data.
+Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe file, annotate variants against clinical databases, and explore findings across 15 specialized analysis modules — all running locally on your machine.
 
-## Quick Start
+**Your data never leaves your computer.** GenomeInsight runs entirely on localhost with no telemetry, no cloud processing, and no outbound variant data.
+
+## Features
+
+- **Variant annotation** against ClinVar, gnomAD, dbNSFP, VEP, and ENCODE
+- **15 analysis modules**: Pharmacogenomics, Nutrigenomics, Cancer, Cardiovascular, APOE, Carrier Status, Ancestry, Fitness, Sleep, Skin, Methylation, Allergy, Traits & Personality, Gene Health, Rare Variants
+- **Interactive variant explorer** with cursor-based pagination, column presets, and advanced filtering
+- **Genome browser** (IGV.js) for visual variant inspection
+- **Custom query builder** with SQL console for advanced analysis
+- **PDF report generation** with clinical-grade typography
+- **Export** to VCF, TSV, JSON, CSV, and FHIR R4 DiagnosticReport
+- **Dark mode** with blue/teal medical theme
+- **Optional authentication** (PIN/password with session timeout)
+- **Automatic database updates** with configurable schedule
+- **WCAG 2.1 AA accessible** — keyboard navigation, screen reader support, axe-core tested
+
+## Quick Start (Development)
 
 ```bash
 git clone https://github.com/bioedcam/GenomeInsight.git
 cd GenomeInsight
-conda activate GI        # Python 3.12+ environment
-make setup               # Install Python + frontend dependencies
-make test                 # Run all tests (~10 s)
-make dev                  # Start backend (port 8000) + frontend (port 5173)
+pip install -e ".[dev]"
+cd frontend && npm install && cd ..
+make dev
 ```
+
+Open [http://localhost:5173](http://localhost:5173) in your browser. The setup wizard will guide you through first-time configuration.
+
+For detailed installation options (native services, Docker, WSL2), see the [Setup Guide](docs/setup-guide.md).
+
+For a walkthrough of all features, see the [Usage Guide](docs/usage-guide.md).
 
 ## Requirements
 
 - Python 3.12+
 - Node 20+ (for frontend)
+- ~2 GB disk space (application + reference databases)
 
-## Local Development
-
-**Backend only:**
-
-```bash
-make run-api
-# or: uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-**Frontend only:**
+## Development
 
 ```bash
-make run-frontend
-# or: cd frontend && npm run dev
+make dev               # Start backend (port 8000) + frontend (port 5173)
+make test              # Run all tests (backend + frontend)
+make test-e2e          # Run Playwright E2E tests
+make lint              # Lint with Ruff
+make format            # Auto-format with Ruff
+make benchmark         # Run annotation pipeline benchmark (600k SNPs)
 ```
 
-**Full stack (backend + frontend):**
+**Backend only:** `make run-api`
+**Frontend only:** `make run-frontend`
+**Huey worker:** `make run-huey`
 
-```bash
-make dev
+### Project Structure
+
+```text
+GenomeInsight/
+├── backend/                 # FastAPI application
+│   ├── analysis/            # 15+ analysis modules
+│   ├── annotation/          # Variant annotation engine
+│   ├── api/routes/          # API endpoints
+│   ├── db/                  # SQLite schema & connections
+│   ├── ingestion/           # 23andMe parser
+│   ├── reports/             # PDF report templates
+│   └── config.py            # Pydantic Settings configuration
+├── frontend/                # React 18 + TypeScript SPA
+│   └── src/
+│       ├── components/      # Reusable UI components
+│       ├── pages/           # Route pages
+│       └── hooks/           # React Query hooks
+├── tests/                   # Backend tests (pytest)
+├── alembic/                 # Database migrations
+├── scripts/                 # Build & utility scripts
+├── systemd/                 # Linux/WSL2 service units
+├── launchd/                 # macOS service plists
+├── docs/                    # Documentation
+│   ├── setup-guide.md       # Installation & deployment
+│   └── usage-guide.md       # Feature walkthrough
+├── Dockerfile               # Container image
+├── docker-compose.yml       # Multi-service deployment
+├── Makefile                 # Dev shortcuts
+└── pyproject.toml           # Python project config
 ```
 
-**Run tests:**
+### Configuration
+
+GenomeInsight uses layered configuration (highest priority first):
+
+1. Environment variables (`GENOMEINSIGHT_` prefix)
+2. `~/.genomeinsight/config.toml`
+3. `.env` file
+4. Built-in defaults
+
+See [`backend/config.py`](backend/config.py) for all available settings.
+
+### Running Tests
 
 ```bash
 make test              # All tests (backend + frontend)
 make test-backend      # Backend only (pytest)
-make test-frontend     # Frontend only (vitest)
-```
-
-**Lint / format:**
-
-```bash
-make lint              # Check with Ruff
-make format            # Auto-fix with Ruff
-```
-
-### Python environment
-
-The recommended path is the conda env `GI`:
-
-```bash
-conda activate GI
-```
-
-Editable install (for development):
-
-```bash
-pip install -e ".[dev]"
-```
-
-For ad-hoc `pytest` runs without installing the package:
-
-```bash
-PYTHONPATH=. pytest
+make test-frontend     # Frontend only (Vitest)
+make test-e2e          # Playwright E2E (Chrome, Firefox, WebKit)
 ```
 
 ## Module Status
 
-| Module | Status | Phase |
-|--------|--------|-------|
-| Setup Wizard | Complete | 1 |
-| Dashboard | Complete | 1 |
-| Variant Explorer | Complete | 2 |
-| Variant Detail | Complete | 2 |
-| Genome Browser (IGV.js) | Complete | 2 |
-| Command Palette | Complete | 4 |
-| Pharmacogenomics | UI skeleton | 3 |
-| Nutrigenomics | UI skeleton | 3 |
-| Cancer | UI skeleton | 3 |
-| Cardiovascular | UI skeleton | 3 |
-| APOE | UI skeleton | 3 |
-| Carrier Status | UI skeleton | 3 |
-| Ancestry | UI skeleton | 3 |
-| Reports | UI skeleton | 4 |
-| Settings | UI skeleton | 4 |
-| Login / Auth | UI skeleton | 4 |
+| Module | Backend | Frontend | Phase |
+|--------|---------|----------|-------|
+| Setup Wizard | Complete | Complete | 1 |
+| Dashboard | Complete | Complete | 1 |
+| Variant Explorer | Complete | Complete | 2 |
+| Variant Detail | Complete | Complete | 2 |
+| Genome Browser (IGV.js) | Complete | Complete | 2 |
+| Command Palette | — | Complete | 4 |
+| Pharmacogenomics | Complete | Complete | 3 |
+| Nutrigenomics | Complete | Complete | 3 |
+| Cancer | Complete | Complete | 3 |
+| Cardiovascular | Complete | Complete | 3 |
+| APOE | Complete | Complete | 3 |
+| Carrier Status | Complete | Complete | 3 |
+| Ancestry | Complete | Complete | 3 |
+| Fitness | Complete | Complete | 3 |
+| Sleep | Complete | Complete | 3 |
+| Skin | Complete | Complete | 3 |
+| Methylation | Complete | Complete | 3 |
+| Allergy | Complete | Complete | 3 |
+| Traits & Personality | Complete | Complete | 3 |
+| Gene Health | Complete | Complete | 3 |
+| Rare Variants | Complete | Complete | 3 |
+| Query Builder | Complete | Complete | 4 |
+| Reports | Complete | Complete | 4 |
+| Settings & Admin | Complete | Complete | 4 |
+| Authentication | Complete | Complete | 4 |
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `ImportError: cannot import name 'UTC' from 'datetime'` | Python < 3.12 | Install Python 3.12+ and activate the correct environment |
-| `ModuleNotFoundError: No module named 'backend'` | Package not installed / `PYTHONPATH` not set | `pip install -e ".[dev]"` or run with `PYTHONPATH=.` |
+| `ImportError: cannot import name 'UTC'` | Python < 3.12 | Install Python 3.12+ |
+| `ModuleNotFoundError: No module named 'backend'` | Package not installed | `pip install -e ".[dev]"` |
 | Node version errors during `npm install` | Node < 20 | Install Node 20+ (`nvm install 20`) |
-| `database is locked` / SQLite WAL errors | Concurrent writes without WAL | Ensure all connections use WAL mode (default in GenomeInsight) |
+| `database is locked` / SQLite WAL errors | Concurrent writes without WAL | Default config uses WAL — check `wal_mode = true` in config.toml |
+| Annotation pipeline hangs | Huey worker not running | Start with `make run-huey` or `make dev` |
+| Blank page at localhost:5173 | Backend not running | Start with `make dev` (runs both servers) |
+| Reference DB download fails | Network issue | Re-run from Settings > Database Management; downloads are resumable |
 
 ## License
 
