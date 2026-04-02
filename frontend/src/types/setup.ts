@@ -81,6 +81,7 @@ export interface DatabaseStatus {
   phase: number
   downloaded: boolean
   file_size_bytes: number | null
+  build_mode: 'pipeline' | 'download' | 'manual' | 'bundled'
 }
 
 export interface DatabaseListResult {

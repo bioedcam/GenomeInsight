@@ -498,6 +498,44 @@ def load_cpic_from_csvs(
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Pipeline entry point (for setup wizard build dispatch)
+# ═══════════════════════════════════════════════════════════════════════
+
+CPIC_DATA_DIR = Path(__file__).parent.parent / "data" / "cpic"
+
+
+def download_and_load_cpic(
+    engine: sa.Engine,
+    dest_dir: Path,
+    *,
+    download_progress: Callable[[int, int | None], None] | None = None,
+    parse_progress: Callable[[int], None] | None = None,
+    timeout: float = 60.0,
+) -> CPICLoadStats:
+    """Load CPIC data from bundled CSV files into reference.db.
+
+    This is the build-mode entry point called by the setup wizard's
+    database download dispatcher. CPIC data ships as bundled CSVs
+    rather than requiring an upstream download.
+    """
+    alleles_csv = CPIC_DATA_DIR / "cpic_alleles.csv"
+    diplotypes_csv = CPIC_DATA_DIR / "cpic_diplotypes.csv"
+    guidelines_csv = CPIC_DATA_DIR / "cpic_guidelines.csv"
+
+    if download_progress is not None:
+        download_progress(50, 100)  # signal "download" half-done (bundled)
+
+    stats = load_cpic_from_csvs(
+        alleles_csv, diplotypes_csv, guidelines_csv, engine, version="bundled"
+    )
+
+    if download_progress is not None:
+        download_progress(100, 100)
+
+    return stats
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # CPIC Lookup Functions (for star-allele calling in P3-02)
 # ═══════════════════════════════════════════════════════════════════════
 

@@ -104,7 +104,34 @@ class TestSetupStatus:
         """With disclaimer accepted and DBs present, setup is complete."""
         flag_path = tmp_data_dir / ".disclaimer_accepted"
         flag_path.write_text('{"accepted_at": "2026-01-01T00:00:00", "version": "1.0"}')
-        (tmp_data_dir / "clinvar.db").write_text("fake")
+        # Use a standalone DB file (gnomad) to mark as having databases
+        (tmp_data_dir / "gnomad_af.db").write_text("fake")
+
+        resp = setup_client.get("/api/setup/status")
+        data = resp.json()
+        assert data["disclaimer_accepted"] is True
+        assert data["has_databases"] is True
+        assert data["needs_setup"] is False
+
+    def test_complete_setup_with_reference_db_versions(
+        self, setup_client: TestClient, tmp_data_dir: Path
+    ) -> None:
+        """With disclaimer accepted and database_versions entries, setup is complete."""
+        flag_path = tmp_data_dir / ".disclaimer_accepted"
+        flag_path.write_text('{"accepted_at": "2026-01-01T00:00:00", "version": "1.0"}')
+
+        # Insert a database_versions entry for a reference.db-resident DB
+        from backend.db.tables import database_versions
+
+        ref_path = tmp_data_dir / "reference.db"
+        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        with engine.begin() as conn:
+            conn.execute(
+                database_versions.insert().values(
+                    db_name="clinvar", version="20260101"
+                )
+            )
+        engine.dispose()
 
         resp = setup_client.get("/api/setup/status")
         data = resp.json()
@@ -358,7 +385,7 @@ class TestDetectExisting:
 
     def test_detect_databases(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect existing reference databases."""
-        (tmp_data_dir / "clinvar.db").write_text("fake")
+        (tmp_data_dir / "gnomad_af.db").write_text("fake")
 
         resp = setup_client.get("/api/setup/detect-existing")
         data = resp.json()
@@ -368,7 +395,7 @@ class TestDetectExisting:
     def test_detect_full_install(self, setup_client: TestClient, tmp_data_dir: Path) -> None:
         """Should detect a complete existing installation."""
         (tmp_data_dir / "config.toml").write_text("[genomeinsight]")
-        (tmp_data_dir / "clinvar.db").write_text("fake")
+        (tmp_data_dir / "gnomad_af.db").write_text("fake")
         samples_dir = tmp_data_dir / "samples"
         samples_dir.mkdir(exist_ok=True)
         (samples_dir / "sample_abc.db").write_text("fake")
