@@ -18,6 +18,7 @@ frequency for the user's inferred ancestry population — and
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import sqlalchemy as sa
@@ -869,11 +870,29 @@ class VariantSearchResult(BaseModel):
     clinvar_significance: str | None = None
 
 
+def _escape_like(value: str) -> str:
+    """Escape SQL LIKE metacharacters so they are treated as literals."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+# Gene symbol pattern: starts with a letter, then letters/digits/hyphens.
+_GENE_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9-]{0,19}$")
+
+
 @router.get("/search")
 def search_variants(
-    sample_id: int = Query(..., description="Sample ID to search variants for"),
+    sample_id: int = Query(
+        ..., description="Sample ID to search variants for",
+    ),
     q: str = Query(
-        ..., min_length=1, max_length=100, description="Search query (rsid prefix or gene symbol)",
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Search query (rsid prefix or gene symbol)",
     ),
     limit: int = Query(10, ge=1, le=50, description="Max results"),
 ) -> list[VariantSearchResult]:
@@ -881,7 +900,7 @@ def search_variants(
 
     Returns a lightweight list of matching variants (max ``limit``).
     Supports prefix matching on rsid (e.g., "rs429") and exact gene symbol
-    matching (e.g., "BRCA1").
+    matching (e.g., "BRCA1", "HLA-A").
     """
     sample_engine = _get_sample_engine(sample_id)
     table = _select_table(sample_engine)
@@ -900,24 +919,23 @@ def search_variants(
     if has_clinvar:
         cols.append(table.c.clinvar_significance)
 
+    escaped = _escape_like(q_stripped)
+
     # rsid prefix search (e.g., "rs429")
     if q_stripped.lower().startswith("rs"):
         query = (
             sa.select(*cols)
             .select_from(table)
-            .where(table.c.rsid.like(f"{q_stripped}%"))
+            .where(table.c.rsid.like(f"{escaped}%", escape="\\"))
             .order_by(table.c.rsid)
             .limit(limit)
         )
-    elif (
-        has_gene and q_stripped.isalnum()
-        and q_stripped[0].isalpha() and q_stripped == q_stripped.upper()
-    ):
-        # Gene symbol exact match (e.g., "BRCA1")
+    elif has_gene and _GENE_SYMBOL_RE.match(q_stripped.upper()):
+        # Gene symbol exact match (e.g., "BRCA1", "HLA-A")
         query = (
             sa.select(*cols)
             .select_from(table)
-            .where(table.c.gene_symbol == q_stripped)
+            .where(table.c.gene_symbol == q_stripped.upper())
             .order_by(*_build_order_by(table))
             .limit(limit)
         )
@@ -926,7 +944,7 @@ def search_variants(
         query = (
             sa.select(*cols)
             .select_from(table)
-            .where(table.c.rsid.like(f"{q_stripped}%"))
+            .where(table.c.rsid.like(f"{escaped}%", escape="\\"))
             .order_by(table.c.rsid)
             .limit(limit)
         )

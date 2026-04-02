@@ -810,3 +810,8 @@ class TestVariantSearch:
         client, sid = client_with_sample
         data = client.get(f"/api/variants/search?sample_id={sid}&q=rs99999999").json()
         assert data == []
+
+    def test_whitespace_only_query_returns_empty_list(self, client_with_sample):
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=%20").json()
+        assert data == []
