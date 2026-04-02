@@ -872,11 +872,7 @@ class VariantSearchResult(BaseModel):
 
 def _escape_like(value: str) -> str:
     """Escape SQL LIKE metacharacters so they are treated as literals."""
-    return (
-        value.replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
-    )
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 # Gene symbol pattern: starts with a letter, then letters/digits/hyphens.
@@ -886,7 +882,8 @@ _GENE_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9-]{0,19}$")
 @router.get("/search")
 def search_variants(
     sample_id: int = Query(
-        ..., description="Sample ID to search variants for",
+        ...,
+        description="Sample ID to search variants for",
     ),
     q: str = Query(
         ...,
