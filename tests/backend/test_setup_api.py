@@ -126,11 +126,7 @@ class TestSetupStatus:
         ref_path = tmp_data_dir / "reference.db"
         engine = sa.create_engine(f"sqlite:///{ref_path}")
         with engine.begin() as conn:
-            conn.execute(
-                database_versions.insert().values(
-                    db_name="clinvar", version="20260101"
-                )
-            )
+            conn.execute(database_versions.insert().values(db_name="clinvar", version="20260101"))
         engine.dispose()
 
         resp = setup_client.get("/api/setup/status")
