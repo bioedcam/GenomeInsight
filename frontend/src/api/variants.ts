@@ -10,6 +10,7 @@ import type {
   DensityResponse,
   ConsequenceSummaryResponse,
   ClinvarSummaryResponse,
+  VariantSearchResult,
 } from "@/types/variants"
 
 const PAGE_SIZE = 100
@@ -236,6 +237,29 @@ export function useClinvarSummary(sampleId: number | null) {
       return res.json()
     },
     enabled: sampleId != null,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Search variants by rsid prefix or gene symbol for the command palette (P4-26e).
+ * Debounced by the caller — fires a lightweight query returning max 10 results.
+ */
+export function useVariantSearch(sampleId: number | null, query: string) {
+  const q = query.trim()
+  return useQuery({
+    queryKey: ["variants-search", sampleId, q],
+    queryFn: async (): Promise<VariantSearchResult[]> => {
+      const params = new URLSearchParams({
+        sample_id: String(sampleId!),
+        q,
+        limit: "10",
+      })
+      const res = await fetch(`/api/variants/search?${params}`)
+      if (!res.ok) return []
+      return res.json()
+    },
+    enabled: sampleId != null && q.length >= 2,
     staleTime: Infinity,
   })
 }

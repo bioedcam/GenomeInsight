@@ -126,6 +126,15 @@ export interface ClinvarSummaryResponse {
   total: number
 }
 
+/** Lightweight variant search result for the command palette (P4-26e). */
+export interface VariantSearchResult {
+  rsid: string
+  chrom: string
+  pos: number
+  gene_symbol: string | null
+  clinvar_significance: string | null
+}
+
 /** Column preset profile (P1-15c). */
 export interface ColumnPreset {
   name: string

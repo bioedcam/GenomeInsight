@@ -854,3 +854,97 @@ def clinvar_summary(
     items.sort(key=lambda x: x.count, reverse=True)
 
     return ClinvarSummaryResponse(items=items, total=total)
+
+
+# ── Variant search (P4-26e) ──────────────────────────────────────
+
+
+class VariantSearchResult(BaseModel):
+    """Lightweight result for the command palette search."""
+
+    rsid: str
+    chrom: str
+    pos: int
+    gene_symbol: str | None = None
+    clinvar_significance: str | None = None
+
+
+@router.get("/search")
+def search_variants(
+    sample_id: int = Query(..., description="Sample ID to search variants for"),
+    q: str = Query(
+        ..., min_length=1, max_length=100, description="Search query (rsid prefix or gene symbol)",
+    ),
+    limit: int = Query(10, ge=1, le=50, description="Max results"),
+) -> list[VariantSearchResult]:
+    """Search variants by rsid prefix or gene symbol for the command palette.
+
+    Returns a lightweight list of matching variants (max ``limit``).
+    Supports prefix matching on rsid (e.g., "rs429") and exact gene symbol
+    matching (e.g., "BRCA1").
+    """
+    sample_engine = _get_sample_engine(sample_id)
+    table = _select_table(sample_engine)
+
+    q_stripped = q.strip()
+    if not q_stripped:
+        return []
+
+    has_gene = hasattr(table.c, "gene_symbol")
+    has_clinvar = hasattr(table.c, "clinvar_significance")
+
+    # Build select columns
+    cols = [table.c.rsid, table.c.chrom, table.c.pos]
+    if has_gene:
+        cols.append(table.c.gene_symbol)
+    if has_clinvar:
+        cols.append(table.c.clinvar_significance)
+
+    # rsid prefix search (e.g., "rs429")
+    if q_stripped.lower().startswith("rs"):
+        query = (
+            sa.select(*cols)
+            .select_from(table)
+            .where(table.c.rsid.like(f"{q_stripped}%"))
+            .order_by(table.c.rsid)
+            .limit(limit)
+        )
+    elif (
+        has_gene and q_stripped.isalnum()
+        and q_stripped[0].isalpha() and q_stripped == q_stripped.upper()
+    ):
+        # Gene symbol exact match (e.g., "BRCA1")
+        query = (
+            sa.select(*cols)
+            .select_from(table)
+            .where(table.c.gene_symbol == q_stripped)
+            .order_by(*_build_order_by(table))
+            .limit(limit)
+        )
+    else:
+        # General rsid prefix search
+        query = (
+            sa.select(*cols)
+            .select_from(table)
+            .where(table.c.rsid.like(f"{q_stripped}%"))
+            .order_by(table.c.rsid)
+            .limit(limit)
+        )
+
+    with sample_engine.connect() as conn:
+        rows = conn.execute(query).fetchall()
+
+    results = []
+    for row in rows:
+        results.append(
+            VariantSearchResult(
+                rsid=row.rsid,
+                chrom=row.chrom,
+                pos=row.pos,
+                gene_symbol=getattr(row, "gene_symbol", None) if has_gene else None,
+                clinvar_significance=(
+                    getattr(row, "clinvar_significance", None) if has_clinvar else None
+                ),
+            )
+        )
+    return results

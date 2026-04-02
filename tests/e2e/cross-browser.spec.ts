@@ -214,7 +214,7 @@ test.describe('P4-26d: Cross-browser — interactive elements', () => {
     expect(tabIndex).toBe('0')
   })
 
-  test('command palette opens and closes', async ({ page }) => {
+  test('command palette opens, searches, navigates, and closes (P4-26e)', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
@@ -224,6 +224,25 @@ test.describe('P4-26d: Cross-browser — interactive elements', () => {
 
     const input = page.getByTestId('command-palette-input')
     await expect(input).toBeVisible({ timeout: 3000 })
+
+    // Verify page navigation items are visible
+    await expect(page.getByRole('option', { name: /Dashboard/i })).toBeVisible()
+    await expect(page.getByRole('option', { name: /Gene Fitness/i })).toBeVisible()
+    await expect(page.getByRole('option', { name: /Query Builder/i })).toBeVisible()
+
+    // Type a page name and verify filtering
+    await input.fill('Pharma')
+    await expect(page.getByRole('option', { name: /Pharmacogenomics/i })).toBeVisible()
+
+    // Clear and verify no destructive actions are exposed
+    await input.fill('')
+    const allOptions = await page.getByRole('option').allTextContents()
+    const destructiveTerms = ['delete', 'remove', 'wipe', 'reset', 'destroy']
+    for (const text of allOptions) {
+      for (const term of destructiveTerms) {
+        expect(text.toLowerCase()).not.toContain(term)
+      }
+    }
 
     // Close with Escape
     await page.keyboard.press('Escape')

@@ -1,15 +1,17 @@
 /**
- * Command palette (P2-18, prerequisite for P4-26e).
+ * Command palette (P4-26e).
  *
  * cmdk-based palette triggered by Cmd+K / Ctrl+K.
  * Supports:
- *   - IGV navigation: gene symbol, rsid, or genomic coordinates
  *   - Page navigation: jump to any sidebar page
+ *   - IGV navigation: gene symbol, rsid, or genomic coordinates
+ *   - Variant search: prefix search on rsid or gene symbol (API-backed)
+ *   - Sample switching: switch between loaded samples
  *
  * Search + navigation only — no destructive or state-changing actions.
  */
-import { useState, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useCallback, useDeferredValue } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Command } from "cmdk"
 import * as Dialog from "@radix-ui/react-dialog"
 import {
@@ -26,9 +28,21 @@ import {
   FileText,
   Settings,
   MapPin,
+  Dumbbell,
+  Moon,
+  FlaskConical as Flask,
+  Sun,
+  Flower2,
+  Fingerprint,
+  Activity,
+  SlidersHorizontal,
+  ArrowRightLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isGenomicQuery } from "@/lib/genomic-query"
+import { useVariantSearch } from "@/api/variants"
+import { useSamples } from "@/api/samples"
+import { parseSampleId } from "@/lib/format"
 
 const pages = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -39,8 +53,16 @@ const pages = [
   { to: "/cardiovascular", icon: HeartPulse, label: "Cardiovascular" },
   { to: "/apoe", icon: Brain, label: "APOE" },
   { to: "/carrier-status", icon: Baby, label: "Carrier Status" },
+  { to: "/fitness", icon: Dumbbell, label: "Gene Fitness" },
+  { to: "/sleep", icon: Moon, label: "Gene Sleep" },
+  { to: "/methylation", icon: Flask, label: "Methylation" },
+  { to: "/skin", icon: Sun, label: "Gene Skin" },
+  { to: "/allergy", icon: Flower2, label: "Gene Allergy" },
+  { to: "/traits", icon: Fingerprint, label: "Traits & Personality" },
+  { to: "/gene-health", icon: Activity, label: "Gene Health" },
   { to: "/ancestry", icon: Globe, label: "Ancestry" },
   { to: "/genome-browser", icon: Dna, label: "Genome Browser" },
+  { to: "/query-builder", icon: SlidersHorizontal, label: "Query Builder" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ]
@@ -52,7 +74,13 @@ export interface CommandPaletteProps {
 
 export default function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState("")
+  const deferredSearch = useDeferredValue(search)
+
+  const activeSampleId = parseSampleId(searchParams.get("sample_id"))
+  const { data: samples } = useSamples()
+  const { data: variantResults } = useVariantSearch(activeSampleId, deferredSearch)
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -78,7 +106,28 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
     [navigate, handleOpenChange],
   )
 
+  const navigateToVariant = useCallback(
+    (rsid: string) => {
+      const params = new URLSearchParams(searchParams)
+      navigate(`/variants/${rsid}?${params}`)
+      handleOpenChange(false)
+    },
+    [navigate, searchParams, handleOpenChange],
+  )
+
+  const switchSample = useCallback(
+    (sampleId: number) => {
+      const params = new URLSearchParams(searchParams)
+      params.set("sample_id", String(sampleId))
+      setSearchParams(params)
+      handleOpenChange(false)
+    },
+    [searchParams, setSearchParams, handleOpenChange],
+  )
+
   const showGenomicAction = search.trim().length > 0 && isGenomicQuery(search)
+  const hasVariantResults = variantResults && variantResults.length > 0
+  const otherSamples = samples?.filter((s) => s.id !== activeSampleId) ?? []
 
   return (
     <Command.Dialog
@@ -92,7 +141,7 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
     >
       <Dialog.Title className="sr-only">Command Menu</Dialog.Title>
       <Dialog.Description className="sr-only">
-        Search pages, genes, rsids, or genomic coordinates
+        Search pages, variants, genes, or switch samples
       </Dialog.Description>
       <div
         data-cmdk-overlay=""
@@ -105,7 +154,7 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
           <Command.Input
             value={search}
             onValueChange={setSearch}
-            placeholder="Search pages, genes, rsids, or coordinates..."
+            placeholder="Search pages, variants, genes, or samples..."
             className="w-full px-4 py-3 text-sm bg-transparent border-b border-border outline-none placeholder:text-muted-foreground"
             data-testid="command-palette-input"
           />
@@ -130,6 +179,31 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
               </Command.Group>
             )}
 
+            {hasVariantResults && (
+              <Command.Group heading="Variants">
+                {variantResults.map((v) => (
+                  <Command.Item
+                    key={v.rsid}
+                    value={`variant-${v.rsid}`}
+                    onSelect={() => navigateToVariant(v.rsid)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
+                    data-testid="command-palette-variant-item"
+                  >
+                    <Dna className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="font-mono">{v.rsid}</span>
+                    {v.gene_symbol && (
+                      <span className="text-muted-foreground text-xs">{v.gene_symbol}</span>
+                    )}
+                    {v.clinvar_significance && (
+                      <span className="ml-auto text-xs text-muted-foreground truncate max-w-[140px]">
+                        {v.clinvar_significance}
+                      </span>
+                    )}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+
             <Command.Group heading="Pages">
               {pages.map(({ to, icon: Icon, label }) => (
                 <Command.Item
@@ -143,6 +217,23 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
                 </Command.Item>
               ))}
             </Command.Group>
+
+            {otherSamples.length > 0 && (
+              <Command.Group heading="Switch Sample">
+                {otherSamples.map((sample) => (
+                  <Command.Item
+                    key={sample.id}
+                    value={`sample-${sample.name}`}
+                    onSelect={() => switchSample(sample.id)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
+                    data-testid="command-palette-sample-item"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{sample.name}</span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
           </Command.List>
         </div>
       </div>
