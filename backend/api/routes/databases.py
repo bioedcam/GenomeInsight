@@ -175,13 +175,19 @@ async def trigger_download(body: DownloadRequest) -> DownloadResponse:
         # Default: all required databases
         db_names = [db.name for db in get_all_databases() if db.required]
 
-    # Skip already-completed databases and non-buildable ones
+    # Deduplicate requested names (preserving order)
+    db_names = list(dict.fromkeys(db_names))
+
+    # Skip already-completed, non-buildable, and in-flight databases
+    in_flight = _get_in_flight_db_names(engine)
     to_download: list[str] = []
     for name in db_names:
         db_info = get_database(name)
         if db_info is None:
             continue
         if db_info.build_mode in ("manual", "bundled"):
+            continue
+        if name in in_flight:
             continue
         status = get_database_status(db_info, settings)
         if not status["downloaded"]:
@@ -509,6 +515,17 @@ def _update_session_status(engine: sa.Engine, session_id: str, status: str) -> N
         )
 
 
+def _get_in_flight_db_names(engine: sa.Engine) -> set[str]:
+    """Return database names that have a pending or running download/build job."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(download_session_jobs.c.db_name)
+            .join(jobs, download_session_jobs.c.job_id == jobs.c.job_id)
+            .where(jobs.c.status.in_(("pending", "running")))
+        ).fetchall()
+    return {row.db_name for row in rows}
+
+
 def _create_job_record(engine: sa.Engine, job_id: str, db_name: str) -> None:
     """Create a job record for SSE tracking before download starts."""
     now = datetime.now(UTC)
@@ -559,30 +576,50 @@ def _run_build(
             else:
                 target_engine = engine
 
-        # Progress callback -> job table update
-        def on_progress(downloaded: int, total: int | None) -> None:
+        # Download progress callback -> 0-90% of job progress
+        def on_download_progress(downloaded: int, total: int | None) -> None:
             if total and total > 0:
-                pct = min(95.0, (downloaded / total) * 95.0)
+                pct = min(90.0, (downloaded / total) * 90.0)
                 _update_job(
                     engine,
                     job_id,
                     status="running",
                     progress_pct=pct,
-                    message=f"Building {db_info.display_name}... {pct:.0f}%",
+                    message=f"Downloading {db_info.display_name}... {pct:.0f}%",
                 )
+
+        # Parse progress callback -> 90-99% of job progress
+        def on_parse_progress(variants_parsed: int) -> None:
+            # We don't know the total, so show an indeterminate-ish progress
+            # that asymptotically approaches 99%
+            pct = min(99.0, 90.0 + min(9.0, variants_parsed / 100_000))
+            _update_job(
+                engine,
+                job_id,
+                status="running",
+                progress_pct=pct,
+                message=f"Importing {db_info.display_name}... {variants_parsed:,} records",
+            )
 
         # Call the build function — signatures vary slightly
         if db_info.name in ("gnomad", "dbnsfp"):
             build_fn(
                 target_engine,
                 settings.data_dir,
-                download_progress=on_progress,
+                download_progress=on_download_progress,
+                parse_progress=on_parse_progress,
                 reference_engine=engine,
             )
         elif db_info.name == "mondo_hpo":
-            build_fn(target_engine, settings.data_dir, download_progress=on_progress)
+            # mondo_hpo does not accept parse_progress
+            build_fn(target_engine, settings.data_dir, download_progress=on_download_progress)
         else:
-            build_fn(target_engine, settings.data_dir, download_progress=on_progress)
+            build_fn(
+                target_engine,
+                settings.data_dir,
+                download_progress=on_download_progress,
+                parse_progress=on_parse_progress,
+            )
 
         _update_job(
             engine,

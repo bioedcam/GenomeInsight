@@ -209,33 +209,44 @@ def get_database(name: str) -> DatabaseInfo | None:
     return DATABASES.get(name)
 
 
-# ── Build function registry (lazy-loaded) ────────────────────────
+# ── Build function registry (per-database lazy import) ───────────
+# Each entry maps db_name -> (module_path, function_name).
+# Only the requested module is imported, so a broken import in one
+# builder does not break all others.
 
-_BUILD_FN_MAP: dict[str, Callable] | None = None
+_BUILD_FN_REGISTRY: dict[str, tuple[str, str]] = {
+    "clinvar": ("backend.annotation.clinvar", "download_and_load_clinvar"),
+    "gnomad": ("backend.annotation.gnomad", "download_and_load_gnomad"),
+    "dbnsfp": ("backend.annotation.dbnsfp", "download_and_load_dbnsfp"),
+    "gwas_catalog": ("backend.annotation.gwas", "download_and_load_gwas"),
+    "dbsnp": ("backend.annotation.dbsnp", "download_and_load_rsmerge"),
+    "mondo_hpo": ("backend.annotation.mondo_hpo", "download_and_load_mondo_hpo"),
+    "cpic": ("backend.annotation.cpic", "download_and_load_cpic"),
+}
+
+# Cache resolved callables so each module is imported at most once.
+_build_fn_cache: dict[str, Callable] = {}
 
 
 def get_build_fn(db_name: str) -> Callable | None:
-    """Return the build function for a pipeline database, or None."""
-    global _BUILD_FN_MAP  # noqa: PLW0603
-    if _BUILD_FN_MAP is None:
-        from backend.annotation.clinvar import download_and_load_clinvar
-        from backend.annotation.cpic import download_and_load_cpic
-        from backend.annotation.dbnsfp import download_and_load_dbnsfp
-        from backend.annotation.dbsnp import download_and_load_rsmerge
-        from backend.annotation.gnomad import download_and_load_gnomad
-        from backend.annotation.gwas import download_and_load_gwas
-        from backend.annotation.mondo_hpo import download_and_load_mondo_hpo
+    """Return the build function for a pipeline database, or None.
 
-        _BUILD_FN_MAP = {
-            "clinvar": download_and_load_clinvar,
-            "gnomad": download_and_load_gnomad,
-            "dbnsfp": download_and_load_dbnsfp,
-            "gwas_catalog": download_and_load_gwas,
-            "dbsnp": download_and_load_rsmerge,
-            "mondo_hpo": download_and_load_mondo_hpo,
-            "cpic": download_and_load_cpic,
-        }
-    return _BUILD_FN_MAP.get(db_name)
+    Imports only the requested module on first call, caching the result.
+    """
+    if db_name in _build_fn_cache:
+        return _build_fn_cache[db_name]
+
+    entry = _BUILD_FN_REGISTRY.get(db_name)
+    if entry is None:
+        return None
+
+    from importlib import import_module
+
+    module_path, fn_name = entry
+    mod = import_module(module_path)
+    fn = getattr(mod, fn_name)
+    _build_fn_cache[db_name] = fn
+    return fn
 
 
 # ── Status checking ──────────────────────────────────────────────
@@ -278,8 +289,16 @@ def get_database_status(db_info: DatabaseInfo, settings: Settings) -> dict:
         # reference.db-resident: check database_versions table
         downloaded = _check_db_version_exists(db_info.name, settings)
         file_size = None
+    elif db_info.build_mode == "pipeline" and db_info.target_db == "standalone":
+        # Standalone pipeline DB (gnomad, dbnsfp): require both the file
+        # AND a database_versions entry. A file alone may be a partial
+        # write from a crashed build.
+        dest = db_info.dest_path(settings)
+        file_exists = dest.exists()
+        file_size = dest.stat().st_size if file_exists else None
+        downloaded = file_exists and _check_db_version_exists(db_info.name, settings)
     else:
-        # standalone or manual: check file existence
+        # download or manual mode: file existence is sufficient
         dest = db_info.dest_path(settings)
         downloaded = dest.exists()
         file_size = dest.stat().st_size if downloaded else None
