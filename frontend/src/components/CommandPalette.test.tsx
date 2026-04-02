@@ -8,10 +8,40 @@ import CommandPalette from "./CommandPalette"
 import { isGenomicQuery } from "@/lib/genomic-query"
 
 const mockNavigate = vi.fn()
+const mockSetSearchParams = vi.fn()
+const mockSearchParams = new URLSearchParams("sample_id=1")
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom")
-  return { ...actual, useNavigate: () => mockNavigate }
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [mockSearchParams, mockSetSearchParams],
+  }
 })
+
+vi.mock("@/api/variants", () => ({
+  useVariantSearch: (sampleId: number | null, query: string) => {
+    if (sampleId && query.startsWith("rs42")) {
+      return {
+        data: [
+          { rsid: "rs429358", chrom: "19", pos: 44908684, gene_symbol: "APOE", clinvar_significance: "risk_factor" },
+          { rsid: "rs4244285", chrom: "10", pos: 96541616, gene_symbol: "CYP2C19", clinvar_significance: null },
+        ],
+      }
+    }
+    return { data: undefined }
+  },
+}))
+
+vi.mock("@/api/samples", () => ({
+  useSamples: () => ({
+    data: [
+      { id: 1, name: "Sample A", file_format: "23andme_v5", created_at: "2024-01-01" },
+      { id: 2, name: "Sample B", file_format: "23andme_v5", created_at: "2024-02-01" },
+    ],
+  }),
+}))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -68,6 +98,18 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument()
     expect(screen.getByText("Variant Explorer")).toBeInTheDocument()
     expect(screen.getByText("Genome Browser")).toBeInTheDocument()
+  })
+
+  it("shows all module pages including new ones", () => {
+    render(<CommandPalette open={true} onOpenChange={vi.fn()} />)
+    expect(screen.getByText("Gene Fitness")).toBeInTheDocument()
+    expect(screen.getByText("Gene Sleep")).toBeInTheDocument()
+    expect(screen.getByText("Methylation")).toBeInTheDocument()
+    expect(screen.getByText("Gene Skin")).toBeInTheDocument()
+    expect(screen.getByText("Gene Allergy")).toBeInTheDocument()
+    expect(screen.getByText("Traits & Personality")).toBeInTheDocument()
+    expect(screen.getByText("Gene Health")).toBeInTheDocument()
+    expect(screen.getByText("Query Builder")).toBeInTheDocument()
   })
 
   it("navigates to page on selection", async () => {
@@ -176,6 +218,61 @@ describe("CommandPalette", () => {
     expect(overlay).toBeTruthy()
     await user.click(overlay!)
 
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("shows variant search results for rsid prefix", async () => {
+    const user = userEvent.setup()
+    render(<CommandPalette open={true} onOpenChange={vi.fn()} />)
+
+    const input = screen.getByTestId("command-palette-input")
+    await user.type(input, "rs42")
+
+    await waitFor(() => {
+      const items = screen.getAllByTestId("command-palette-variant-item")
+      expect(items.length).toBe(2)
+    })
+    expect(screen.getByText("rs429358")).toBeInTheDocument()
+    expect(screen.getByText("APOE")).toBeInTheDocument()
+    expect(screen.getByText("risk_factor")).toBeInTheDocument()
+  })
+
+  it("navigates to variant detail on variant selection", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    render(<CommandPalette open={true} onOpenChange={onOpenChange} />)
+
+    const input = screen.getByTestId("command-palette-input")
+    await user.type(input, "rs42")
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("command-palette-variant-item").length).toBeGreaterThan(0)
+    })
+
+    const items = screen.getAllByTestId("command-palette-variant-item")
+    await user.click(items[0])
+
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/variants/rs429358"))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("shows sample switcher options", () => {
+    render(<CommandPalette open={true} onOpenChange={vi.fn()} />)
+    // Active sample is 1 ("Sample A"), so "Sample B" should appear
+    expect(screen.getByText("Sample B")).toBeInTheDocument()
+    // Should show under "Switch Sample" group
+    expect(screen.getByText("Switch Sample")).toBeInTheDocument()
+  })
+
+  it("switches sample on selection", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    render(<CommandPalette open={true} onOpenChange={onOpenChange} />)
+
+    const sampleItem = screen.getByTestId("command-palette-sample-item")
+    await user.click(sampleItem)
+
+    expect(mockSetSearchParams).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

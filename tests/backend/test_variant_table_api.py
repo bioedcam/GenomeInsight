@@ -738,3 +738,80 @@ class TestClinvarSummary:
         client, _ = client_with_clinvar_sample
         response = client.get("/api/variants/clinvar-summary?sample_id=999")
         assert response.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P4-26e: Variant search for command palette
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestVariantSearch:
+    """GET /api/variants/search returns lightweight results for command palette."""
+
+    def test_returns_200(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/search?sample_id={sid}&q=rs")
+        assert response.status_code == 200
+
+    def test_rsid_prefix_search(self, client_with_sample):
+        """Search by rsid prefix returns matching variants."""
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=rs10").json()
+        rsids = [v["rsid"] for v in data]
+        assert "rs100" in rsids
+        assert "rs101" in rsids
+        assert "rs102" in rsids
+        assert "rs1000" in rsids
+        # Should not include rs200 etc.
+        assert "rs200" not in rsids
+
+    def test_search_respects_limit(self, client_with_sample):
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=rs&limit=3").json()
+        assert len(data) <= 3
+
+    def test_search_returns_lightweight_fields(self, client_with_sample):
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=rs100").json()
+        assert len(data) >= 1
+        v = data[0]
+        assert "rsid" in v
+        assert "chrom" in v
+        assert "pos" in v
+        # Raw variants don't have gene_symbol
+        assert "gene_symbol" in v
+
+    def test_gene_symbol_search_on_annotated(self, client_with_annotated_sample):
+        """Search by gene symbol returns matching annotated variants."""
+        client, sid = client_with_annotated_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=BRCA1").json()
+        assert len(data) == 1
+        assert data[0]["rsid"] == "rs100"
+        assert data[0]["gene_symbol"] == "BRCA1"
+
+    def test_gene_search_returns_clinvar(self, client_with_clinvar_sample):
+        """Annotated variant search includes clinvar_significance."""
+        client, sid = client_with_clinvar_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=APOE").json()
+        assert len(data) == 1
+        assert data[0]["clinvar_significance"] == "Benign"
+
+    def test_empty_query_returns_422(self, client_with_sample):
+        client, sid = client_with_sample
+        response = client.get(f"/api/variants/search?sample_id={sid}&q=")
+        assert response.status_code == 422
+
+    def test_nonexistent_sample_returns_404(self, client_with_sample):
+        client, _ = client_with_sample
+        response = client.get("/api/variants/search?sample_id=999&q=rs1")
+        assert response.status_code == 404
+
+    def test_no_match_returns_empty_list(self, client_with_sample):
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=rs99999999").json()
+        assert data == []
+
+    def test_whitespace_only_query_returns_empty_list(self, client_with_sample):
+        client, sid = client_with_sample
+        data = client.get(f"/api/variants/search?sample_id={sid}&q=%20").json()
+        assert data == []
