@@ -18,6 +18,7 @@ Usage::
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -259,6 +260,7 @@ class DownloadManager:
                     mode = "ab" if offset > 0 else "wb"
                     bytes_since_checkpoint = 0
                     current_offset = offset
+                    last_sse_update = 0.0
 
                     with open(tmp_path, mode) as f:
                         for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
@@ -270,15 +272,20 @@ class DownloadManager:
                             if progress_callback:
                                 progress_callback(current_offset, total_bytes)
 
-                            # Update job progress for SSE
-                            if total_bytes and total_bytes > 0:
+                            # Update job progress for SSE (throttled, non-fatal)
+                            now = time.monotonic()
+                            if total_bytes and total_bytes > 0 and now - last_sse_update >= 2.0:
                                 pct = min((current_offset / total_bytes) * 100.0, 99.9)
-                                self._update_job(
-                                    job_id,
-                                    status="running",
-                                    progress_pct=pct,
-                                    message=f"{current_offset:,} / {total_bytes:,} bytes",
-                                )
+                                try:
+                                    self._update_job(
+                                        job_id,
+                                        status="running",
+                                        progress_pct=pct,
+                                        message=f"{current_offset:,} / {total_bytes:,} bytes",
+                                    )
+                                except sa.exc.OperationalError:
+                                    pass  # progress update is non-critical
+                                last_sse_update = now
 
                             # Checkpoint byte offset periodically
                             if bytes_since_checkpoint >= CHECKPOINT_INTERVAL:
@@ -470,20 +477,29 @@ class DownloadManager:
         progress_pct: float,
         message: str = "",
         error: str | None = None,
+        _retries: int = 5,
     ) -> None:
-        """Update job progress for SSE visibility."""
-        with self._engine.begin() as conn:
-            conn.execute(
-                jobs.update()
-                .where(jobs.c.job_id == job_id)
-                .values(
-                    status=status,
-                    progress_pct=progress_pct,
-                    message=message,
-                    error=error,
-                    updated_at=datetime.now(UTC),
-                )
-            )
+        """Update job progress for SSE visibility with retry on contention."""
+        for attempt in range(_retries):
+            try:
+                with self._engine.begin() as conn:
+                    conn.execute(
+                        jobs.update()
+                        .where(jobs.c.job_id == job_id)
+                        .values(
+                            status=status,
+                            progress_pct=progress_pct,
+                            message=message,
+                            error=error,
+                            updated_at=datetime.now(UTC),
+                        )
+                    )
+                return
+            except sa.exc.OperationalError:
+                if attempt < _retries - 1:
+                    time.sleep(0.1 * (2**attempt))
+                else:
+                    raise
 
 
 def _compute_sha256(path: Path) -> str:

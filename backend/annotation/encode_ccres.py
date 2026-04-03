@@ -47,9 +47,10 @@ logger = structlog.get_logger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-# ENCODE Registry of cCREs V3, GRCh37/hg19
+# ENCODE Registry of cCREs V3, GRCh38/hg38
 # This is the SCREEN (Search Candidate cis-Regulatory Elements) BED file.
-ENCODE_CCRES_URL = "https://downloads.wenglab.org/V3/GRCh37-cCREs.bed"
+# Used only for IGV.js track visualization, not part of the annotation pipeline.
+ENCODE_CCRES_URL = "https://downloads.wenglab.org/V3/GRCh38-cCREs.bed"
 
 # Batch sizes
 BATCH_SIZE = 10_000
@@ -202,15 +203,31 @@ def download_encode_ccres_bed(
 # ── Parsing ──────────────────────────────────────────────────────────────
 
 
+def _extract_ccre_class(value: str) -> str | None:
+    """Extract a known cCRE classification from a value that may contain modifiers.
+
+    The V3 format uses comma-separated values like ``CTCF-only,CTCF-bound``
+    where the primary class comes first.
+    """
+    # Try the raw value first
+    stripped = value.strip()
+    if stripped in CCRE_CLASSIFICATIONS:
+        return stripped
+    # Split on comma — the primary class is the first token
+    for token in stripped.split(","):
+        token = token.strip()
+        if token in CCRE_CLASSIFICATIONS:
+            return token
+    return None
+
+
 def _parse_ccre_bed_line(line: str) -> tuple[CCRERecord | None, str | None]:
     """Parse a single line from the ENCODE cCREs BED file.
 
-    Expected BED format (tab-separated):
-        chrom  start  end  accession  score  strand  ...  ccre_class
-
-    The cCRE classification is typically in column index 9 (0-based),
-    but we also handle the simpler 5-column format where class is in
-    column 4.
+    Supports multiple ENCODE BED formats:
+      - V3 (6-col): chrom start end accession1 accession2 class[,modifier]
+      - BED9+:      chrom start end accession score strand ... ccre_class
+      - Simplified:  chrom start end accession ccre_class
 
     Args:
         line: A single BED line.
@@ -236,25 +253,22 @@ def _parse_ccre_bed_line(line: str) -> tuple[CCRERecord | None, str | None]:
 
     accession = parts[3]
 
-    # cCRE classification: check column 9 first (full ENCODE BED9+),
-    # then fall back to column 4 (simplified format)
+    # Try to find the cCRE classification across known column layouts:
+    # 1. Column 9 (BED9+ full ENCODE format)
+    # 2. Column 5 (V3 6-column format: accession1 accession2 class)
+    # 3. Column 4 (simplified 5-column format: accession class)
     ccre_class = None
-    if len(parts) > 9:
-        candidate = parts[9].strip()
-        if candidate in CCRE_CLASSIFICATIONS:
-            ccre_class = candidate
-    if ccre_class is None and len(parts) > 4:
-        candidate = parts[4].strip()
-        if candidate in CCRE_CLASSIFICATIONS:
-            ccre_class = candidate
+    for col_idx in (9, 5, 4):
+        if ccre_class is None and len(parts) > col_idx:
+            ccre_class = _extract_ccre_class(parts[col_idx])
 
-    # If we still don't have a class, try to extract from the accession
-    # (some ENCODE files encode it as EH38E1234567,PLS)
+    # Last resort: extract from accession if it embeds the class
+    # (e.g. EH38E1234567,PLS)
     if ccre_class is None and "," in accession:
         _acc, _, cls = accession.partition(",")
-        if cls in CCRE_CLASSIFICATIONS:
+        if cls.strip() in CCRE_CLASSIFICATIONS:
             accession = _acc
-            ccre_class = cls
+            ccre_class = cls.strip()
 
     if ccre_class is None:
         return None, "unknown_class"

@@ -24,6 +24,7 @@ Usage::
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -44,9 +45,10 @@ logger = structlog.get_logger(__name__)
 
 # ── Data source URLs ─────────────────────────────────────────────────────
 
-# Monarch Initiative MONDO gene-disease associations (TSV)
+# Monarch Initiative MONDO gene-disease associations (gzipped TSV, human only)
 MONDO_GENE_DISEASE_URL = (
-    "https://data.monarchinitiative.org/latest/tsv/gene_associations/gene_disease.all.tsv"
+    "https://data.monarchinitiative.org/monarch-kg/latest/tsv/"
+    "gene_associations/gene_disease.9606.tsv.gz"
 )
 
 # HPO genes-to-phenotype annotations
@@ -136,7 +138,8 @@ def parse_mondo_gene_disease_tsv(
     records_by_gene: dict[str, list[GenePhenotypeRecord]] = {}
     seen: set[tuple[str, str]] = set()
 
-    with open(tsv_path, encoding="utf-8") as fh:
+    open_fn = gzip.open if tsv_path.suffix == ".gz" else open
+    with open_fn(tsv_path, mode="rt", encoding="utf-8") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         for row in reader:
             stats.total_lines += 1
@@ -273,11 +276,13 @@ def load_mondo_hpo_from_csv(
 
     stats.records_loaded = len(rows)
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(gene_phenotype.delete().where(gene_phenotype.c.source == "mondo_hpo"))
-        for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i : i + BATCH_SIZE]
+
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        with engine.begin() as conn:
             conn.execute(gene_phenotype.insert(), batch)
 
     _wal_checkpoint(engine)
@@ -337,7 +342,7 @@ def download_file(
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
@@ -403,11 +408,13 @@ def load_mondo_hpo_rows(
     Returns:
         Number of rows loaded.
     """
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(gene_phenotype.delete().where(gene_phenotype.c.source == "mondo_hpo"))
-        for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i : i + BATCH_SIZE]
+
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        with engine.begin() as conn:
             conn.execute(gene_phenotype.insert(), batch)
 
     _wal_checkpoint(engine)
@@ -475,7 +482,7 @@ def download_and_load_mondo_hpo(
     mondo_path = download_file(
         mondo_url,
         dest_dir,
-        "gene_disease.all.tsv",
+        "gene_disease.9606.tsv.gz",
         progress_callback=download_progress,
         timeout=timeout,
     )

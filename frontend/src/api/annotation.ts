@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -64,6 +64,33 @@ export function useCancelAnnotation() {
   })
 }
 
+// ── Active job query ──────────────────────────────────────────────────
+
+export interface ActiveAnnotationJob {
+  job_id: string
+  sample_id: number
+  status: "pending" | "running"
+  progress_pct: number
+  message: string
+}
+
+/** Check if a sample has an active (pending/running) annotation job. */
+export function useActiveAnnotationJob(sampleId: number | null) {
+  return useQuery<ActiveAnnotationJob | null>({
+    queryKey: ["annotation-active", sampleId],
+    queryFn: async () => {
+      if (sampleId == null) return null
+      const res = await fetch(`/api/annotation/active/${sampleId}`)
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error(`Failed to check active job: ${res.status}`)
+      return await res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  })
+}
+
 // ── SSE progress hook ──────────────────────────────────────────────────
 
 const TERMINAL_STATES = new Set(["complete", "failed", "cancelled"])
@@ -109,6 +136,9 @@ export function useAnnotationProgress(jobId: string | null): AnnotationProgress 
         queryClient.invalidateQueries({ queryKey: ["variants-total-count"] })
         queryClient.invalidateQueries({ queryKey: ["variants-qc-stats"] })
         queryClient.invalidateQueries({ queryKey: ["variants-chromosomes"] })
+        // Invalidate findings so High-Confidence Findings refreshes
+        queryClient.invalidateQueries({ queryKey: ["findings-summary"] })
+        queryClient.invalidateQueries({ queryKey: ["findings"] })
       }
     })
 

@@ -79,6 +79,9 @@ class DBRegistry:
         @event.listens_for(engine, "connect")
         def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN001
             cursor = dbapi_connection.cursor()
+            # Always set busy_timeout so concurrent writers wait instead
+            # of raising "database is locked" immediately.
+            cursor.execute("PRAGMA busy_timeout=30000")
             if wal:
                 cursor.execute("PRAGMA journal_mode=WAL")
             if read_optimized:

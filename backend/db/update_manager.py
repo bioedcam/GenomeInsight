@@ -46,13 +46,15 @@ logger = structlog.get_logger(__name__)
 
 AUTO_UPDATE_DEFAULTS: dict[str, bool] = {
     "clinvar": True,
-    "gwas": True,
-    "gnomad": False,
-    "dbnsfp": False,
-    "vep_bundle": False,
+    "gwas_catalog": True,
+    "gnomad": True,
+    "dbnsfp": True,
+    "dbsnp": True,
+    "mondo_hpo": True,
+    "vep_bundle": False,  # Not yet uploaded; manual only
     "cpic": True,
-    "encode_ccres": False,
-    "ancestry_pca": False,
+    "encode_ccres": True,
+    "ancestry_pca": True,
 }
 
 # Size threshold for bandwidth-window enforcement (100 MB)
@@ -278,7 +280,7 @@ def check_all_updates(
         result.errors.append(f"clinvar: {exc}")
 
     # Other databases: placeholder checks (version comparison only)
-    for db_name in ("gwas", "gnomad", "dbnsfp", "vep_bundle", "cpic"):
+    for db_name in ("gwas_catalog", "gnomad", "dbnsfp", "vep_bundle", "cpic"):
         current = get_current_version(reference_engine, db_name)
         if current:
             result.up_to_date.append(db_name)

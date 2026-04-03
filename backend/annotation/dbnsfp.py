@@ -29,6 +29,8 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import io
+import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,12 +49,10 @@ logger = structlog.get_logger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-# dbNSFP 4.x academic download URL (placeholder — actual URL varies by version)
-# The real dbNSFP distribution is a TSV archive; this URL points to our
-# pre-built SQLite bundle.  download_and_load_dbnsfp() is designed for the
-# TSV-based pipeline; for the pre-built bundle, use the download manager
-# directly and skip the TSV parse step.
-DBNSFP_TSV_URL = "https://dbnsfp.s3.amazonaws.com/dbNSFP4.5a.zip"
+# dbNSFP 5.x academic download URL (TSV archive, ~50 GB)
+# The distribution is a ZIP containing per-chromosome TSV files.
+# download_and_load_dbnsfp() streams these through csv.DictReader.
+DBNSFP_TSV_URL = "https://dist.genos.us/academic/e55b09/dbNSFP5.3.1a.zip"
 DBNSFP_PREBUILT_URL = "https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz"
 
 # Batch sizes
@@ -446,6 +446,37 @@ def parse_dbnsfp_tsv_line(
     return record, None
 
 
+def _iter_dbnsfp_single_file(
+    fh,
+    stats: LoadStats,
+    progress_callback: Callable[[int], None] | None,
+) -> Iterator[tuple[dict, LoadStats]]:
+    """Parse rows from a single dbNSFP TSV file handle."""
+    reader = csv.DictReader(fh, delimiter="\t")
+    for fields in reader:
+        stats.total_lines += 1
+
+        record, skip_reason = parse_dbnsfp_tsv_line(fields)
+
+        if record is None:
+            if skip_reason == "invalid_chrom":
+                stats.skipped_invalid_chrom += 1
+            elif skip_reason == "no_scores":
+                stats.skipped_no_scores += 1
+            else:
+                stats.skipped_malformed += 1
+            continue
+
+        stats.variants_loaded += 1
+
+        row = _record_to_dict(record)
+
+        if progress_callback and stats.total_lines % 100_000 == 0:
+            progress_callback(stats.total_lines)
+
+        yield row, stats
+
+
 def iter_dbnsfp_tsv(
     tsv_path: Path,
     *,
@@ -454,10 +485,11 @@ def iter_dbnsfp_tsv(
     """Iterate over dbNSFP TSV rows lazily, yielding (row_dict, stats).
 
     Memory-efficient: yields one row at a time for streaming inserts.
-    Handles both plain text and gzip-compressed files.
+    Handles plain text, gzip-compressed, and ZIP archives (containing
+    per-chromosome gzipped TSV files as distributed by dbNSFP).
 
     Args:
-        tsv_path: Path to the dbNSFP TSV file (.tsv or .tsv.gz).
+        tsv_path: Path to the dbNSFP file (.tsv, .tsv.gz, or .zip).
         progress_callback: Optional callback called with parsed line count
             at regular intervals.
 
@@ -466,31 +498,27 @@ def iter_dbnsfp_tsv(
     """
     stats = LoadStats()
 
-    open_fn = gzip.open if tsv_path.suffix == ".gz" else open
-    with open_fn(tsv_path, "rt", encoding="utf-8") as fh:  # type: ignore[call-overload]
-        reader = csv.DictReader(fh, delimiter="\t")
-        for fields in reader:
-            stats.total_lines += 1
-
-            record, skip_reason = parse_dbnsfp_tsv_line(fields)
-
-            if record is None:
-                if skip_reason == "invalid_chrom":
-                    stats.skipped_invalid_chrom += 1
-                elif skip_reason == "no_scores":
-                    stats.skipped_no_scores += 1
-                else:
-                    stats.skipped_malformed += 1
-                continue
-
-            stats.variants_loaded += 1
-
-            row = _record_to_dict(record)
-
-            if progress_callback and stats.total_lines % 100_000 == 0:
-                progress_callback(stats.total_lines)
-
-            yield row, stats
+    if tsv_path.suffix == ".zip":
+        # dbNSFP ZIP archive: contains per-chromosome files like
+        # dbNSFP5.3.1a_variant.chr1.gz (gzipped TSVs)
+        with zipfile.ZipFile(tsv_path, "r") as zf:
+            members = sorted(
+                n for n in zf.namelist()
+                if "_variant.chr" in n and not n.startswith("__MACOSX")
+            )
+            logger.info("dbnsfp_zip_members", count=len(members), files=members[:3])
+            for member in members:
+                logger.info("dbnsfp_processing_member", member=member)
+                with zf.open(member) as raw_fh:
+                    if member.endswith(".gz"):
+                        fh = io.TextIOWrapper(gzip.open(raw_fh, "rb"), encoding="utf-8")
+                    else:
+                        fh = io.TextIOWrapper(raw_fh, encoding="utf-8")
+                    yield from _iter_dbnsfp_single_file(fh, stats, progress_callback)
+    else:
+        open_fn = gzip.open if tsv_path.suffix == ".gz" else open
+        with open_fn(tsv_path, "rt", encoding="utf-8") as fh:  # type: ignore[call-overload]
+            yield from _iter_dbnsfp_single_file(fh, stats, progress_callback)
 
 
 def _record_to_dict(record: DbNSFPRecord) -> dict:
@@ -711,15 +739,15 @@ def download_dbnsfp(
         Path to the downloaded file.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / "dbnsfp.db.gz"
-    tmp_path = dest_dir / "dbnsfp.db.gz.tmp"
+    dest_path = dest_dir / "dbnsfp_archive.zip"
+    tmp_path = dest_dir / "dbnsfp_archive.zip.tmp"
 
     logger.info("dbnsfp_download_start", url=url)
 
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
@@ -792,7 +820,7 @@ def download_and_load_dbnsfp(
     if reference_engine is not None:
         record_dbnsfp_version(
             reference_engine,
-            version="4.x",
+            version="5.3.1a",
             file_path=str(downloaded_path),
             file_size_bytes=downloaded_path.stat().st_size,
             checksum=sha256,

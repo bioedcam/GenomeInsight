@@ -26,6 +26,7 @@ import csv
 import gzip
 import hashlib
 import re
+import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import islice
@@ -45,8 +46,12 @@ logger = structlog.get_logger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-# GWAS Catalog associations TSV (all associations, alternative format)
-GWAS_CATALOG_URL = "https://www.ebi.ac.uk/gwas/api/search/downloads/alternative"
+# GWAS Catalog associations (ontology-annotated, alternative format) — ZIP from EBI FTP.
+# Contains a TSV with the same columns as the former /downloads/alternative endpoint.
+GWAS_CATALOG_URL = (
+    "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/"
+    "gwas-catalog-associations_ontology-annotated-full.zip"
+)
 
 # Batch size for bulk inserts (executemany)
 BATCH_SIZE = 10_000
@@ -651,12 +656,13 @@ def load_gwas_into_db(
     if stats is None:
         stats = GWASLoadStats(associations_loaded=len(rows))
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(gwas_associations.delete())
 
-        for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i : i + BATCH_SIZE]
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        with engine.begin() as conn:
             conn.execute(gwas_associations.insert(), batch)
 
     _wal_checkpoint(engine)
@@ -686,11 +692,12 @@ def load_gwas_from_iter(
         for row, stats in row_iter:
             yield row
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(gwas_associations.delete())
 
-        for batch in _batched(rows_only(), BATCH_SIZE):
+    for batch in _batched(rows_only(), BATCH_SIZE):
+        with engine.begin() as conn:
             conn.execute(gwas_associations.insert(), batch)
 
     _wal_checkpoint(engine)
@@ -756,9 +763,10 @@ def download_gwas_catalog(
     progress_callback: Callable[[int, int | None], None] | None = None,
     timeout: float = 600.0,
 ) -> Path:
-    """Download the GWAS Catalog associations TSV from EBI.
+    """Download the GWAS Catalog associations from EBI FTP.
 
-    Writes to a temporary file and renames on success.
+    The source is a ZIP archive containing a single TSV file. Downloads
+    the ZIP, extracts the TSV, and removes the ZIP.
 
     Args:
         dest_dir: Directory to save the downloaded file.
@@ -767,18 +775,19 @@ def download_gwas_catalog(
         timeout: HTTP request timeout in seconds.
 
     Returns:
-        Path to the downloaded TSV file.
+        Path to the extracted TSV file.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / "gwas_catalog_associations.tsv"
-    tmp_path = dest_dir / "gwas_catalog_associations.tsv.tmp"
+    zip_path = dest_dir / "gwas_catalog_associations.zip"
+    zip_tmp = dest_dir / "gwas_catalog_associations.zip.tmp"
 
     logger.info("gwas_download_start", url=url)
 
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
@@ -788,16 +797,31 @@ def download_gwas_catalog(
                 if content_length:
                     total_bytes = int(content_length)
 
-                with open(tmp_path, "wb") as f:
+                with open(zip_tmp, "wb") as f:
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         if progress_callback:
                             progress_callback(response.num_bytes_downloaded, total_bytes)
 
-        tmp_path.rename(dest_path)
+        zip_tmp.rename(zip_path)
     except BaseException:
-        tmp_path.unlink(missing_ok=True)
+        zip_tmp.unlink(missing_ok=True)
         raise
+
+    # Extract the TSV from the ZIP
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            tsv_names = [n for n in zf.namelist() if n.endswith(".tsv")]
+            if not tsv_names:
+                raise ValueError("No TSV file found inside GWAS Catalog ZIP")
+            with zf.open(tsv_names[0]) as src, open(dest_path, "wb") as dst:
+                while True:
+                    chunk = src.read(65536)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+    finally:
+        zip_path.unlink(missing_ok=True)
 
     logger.info("gwas_download_complete", path=str(dest_path))
     return dest_path

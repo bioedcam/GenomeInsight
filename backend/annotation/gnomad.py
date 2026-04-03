@@ -585,7 +585,7 @@ def download_gnomad_vcf(
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
