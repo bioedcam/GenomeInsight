@@ -1,6 +1,6 @@
 """ENCODE cCREs (candidate cis-Regulatory Elements) data loader.
 
-Downloads the ENCODE Registry of cCREs BED file (GRCh37/hg19), parses it,
+Downloads the ENCODE Registry of cCREs BED file (GRCh38/hg38), parses it,
 and loads into a local SQLite database for efficient region-based queries.
 This data is used exclusively for IGV.js track visualization — it is NOT
 integrated into the annotation pipeline, findings, or reference.db.

@@ -7,8 +7,8 @@ re-annotation prompts for affected samples.
 Scheduler behaviour (§2.20):
 - Always fires once on app startup regardless of config.
 - ``update_check_interval``: "startup" | "daily" | "weekly".
-- Per-database auto-update toggles (ClinVar/GWAS default on;
-  gnomAD/dbNSFP/VEP default off).
+- Per-database auto-update toggles (most default on;
+  VEP bundle default off).
 - ``update_download_window``: optional time window for >100 MB downloads.
 """
 

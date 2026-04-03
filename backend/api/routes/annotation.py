@@ -44,7 +44,7 @@ async def start_annotation(sample_id: int) -> dict:
 
 
 @router.get("/active/{sample_id}")
-async def get_active_annotation(sample_id: int) -> dict | None:
+async def get_active_annotation(sample_id: int) -> dict:
     """Return the currently running or pending annotation job for a sample.
 
     Returns 200 with job info if an active job exists, or 404 if none.

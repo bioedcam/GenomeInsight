@@ -516,10 +516,18 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
             build_fn(engine, settings.downloads_dir)
         else:
             import sqlalchemy as sa
+            from sqlalchemy import event
 
             dest = db_info.dest_path(settings) if db_info else settings.data_dir / f"{db_name}.db"
             dest.parent.mkdir(parents=True, exist_ok=True)
             standalone_engine = sa.create_engine(f"sqlite:///{dest}")
+
+            @event.listens_for(standalone_engine, "connect")
+            def _set_pragmas(dbapi_conn, _):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.close()
             try:
                 build_fn(standalone_engine, settings.downloads_dir)
             finally:

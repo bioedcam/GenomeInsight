@@ -224,21 +224,20 @@ async def get_database_statuses() -> list[DatabaseStatus]:
         db_info = DATABASES.get(db_name)
         display_name = db_info.display_name if db_info else db_name
 
-        # If no version stamp, check on-disk status as fallback.
+        # If no version stamp or file size, check on-disk status as fallback.
         # Databases may exist on disk without a database_versions entry
         # (e.g. after a build that didn't record its version).
-        if version is None and db_info is not None:
+        on_disk = None
+        if (version is None or file_size_bytes is None) and db_info is not None:
             on_disk = get_database_status(db_info, settings)
-            if on_disk["downloaded"]:
-                version = "installed"
-                if on_disk.get("file_size_bytes"):
-                    file_size_bytes = on_disk["file_size_bytes"]
 
-        # If no size from version stamp, try on-disk stat
-        if file_size_bytes is None and db_info is not None:
-            on_disk = get_database_status(db_info, settings)
+        if version is None and on_disk is not None and on_disk["downloaded"]:
+            version = "installed"
             if on_disk.get("file_size_bytes"):
                 file_size_bytes = on_disk["file_size_bytes"]
+
+        if file_size_bytes is None and on_disk is not None and on_disk.get("file_size_bytes"):
+            file_size_bytes = on_disk["file_size_bytes"]
 
         result.append(
             DatabaseStatus(

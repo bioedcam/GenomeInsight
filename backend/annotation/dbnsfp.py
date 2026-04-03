@@ -1,6 +1,6 @@
 """dbNSFP SQLite loader and annotation lookup.
 
-Downloads dbNSFP 4.x academic TSV, extracts missense in-silico prediction
+Downloads dbNSFP 5.x academic TSV (ZIP archive), extracts missense in-silico prediction
 scores, and builds an indexed SQLite database (``dbnsfp.db``) with a
 composite ``(chrom, pos, ref, alt)`` key.  Also provides batch lookup
 functions used by the annotation engine.
