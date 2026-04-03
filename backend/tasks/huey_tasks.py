@@ -196,6 +196,41 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
         else:
             error_summary = None
 
+        # Run all analysis modules to populate findings
+        _update_job(
+            job_id,
+            status="running",
+            progress_pct=95.0,
+            message="Running analysis modules...",
+        )
+        try:
+            from backend.analysis.run_all import run_all_analyses
+
+            def analysis_progress(module_name: str, index: int, total: int) -> None:
+                pct = 95.0 + (index / total) * 4.0  # 95% → 99%
+                _update_job(
+                    job_id,
+                    status="running",
+                    progress_pct=round(pct, 1),
+                    message=f"Analyzing: {module_name} ({index + 1}/{total})",
+                )
+
+            analysis_results = run_all_analyses(
+                sample_engine, registry, progress_callback=analysis_progress,
+            )
+            errors = [k for k, v in analysis_results.items() if v == "error"]
+            if errors:
+                logger.warning(
+                    "some_analysis_modules_failed",
+                    extra={"job_id": job_id, "failed_modules": errors},
+                )
+        except Exception:
+            logger.exception(
+                "analysis_modules_failed",
+                extra={"job_id": job_id, "sample_id": sample_id},
+            )
+            # Non-fatal: annotation succeeded, analysis is best-effort
+
         # Generate SVGs for all findings (post-analysis step)
         _update_job(
             job_id,
@@ -450,9 +485,14 @@ def run_update_check_task(job_id: str) -> None:
 
 @huey.task()
 def run_database_update_task(job_id: str, db_name: str) -> None:
-    """Huey background task: run a specific database update."""
+    """Huey background task: run a specific database update.
+
+    Uses the same build function that the setup wizard uses
+    (via database_registry.get_build_fn) so all databases are
+    updated through a single, tested code path.
+    """
     from backend.db.connection import get_registry
-    from backend.db.update_manager import run_clinvar_update
+    from backend.db.database_registry import DATABASES, get_build_fn
 
     try:
         _update_job(
@@ -462,16 +502,38 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
         )
 
         registry = get_registry()
+        build_fn = get_build_fn(db_name)
+        if build_fn is None:
+            raise ValueError(f"No build function registered for '{db_name}'")
 
-        if db_name == "clinvar":
-            result = run_clinvar_update(registry)
-            msg = (
-                f"ClinVar updated: {result.new_version} "
-                f"({result.variants_reclassified} reclassified, "
-                f"{result.variants_added} added)"
-            )
+        db_info = DATABASES.get(db_name)
+        engine = registry.reference_engine
+        settings = registry.settings
+
+        # Build functions for reference-target DBs take the reference engine;
+        # standalone DBs write to their own file and take a fresh engine.
+        if db_info and db_info.target_db == "reference":
+            build_fn(engine, settings.downloads_dir)
         else:
-            msg = f"Update for {db_name} not yet implemented"
+            import sqlalchemy as sa
+            from sqlalchemy import event
+
+            dest = db_info.dest_path(settings) if db_info else settings.data_dir / f"{db_name}.db"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            standalone_engine = sa.create_engine(f"sqlite:///{dest}")
+
+            @event.listens_for(standalone_engine, "connect")
+            def _set_pragmas(dbapi_conn, _):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.close()
+            try:
+                build_fn(standalone_engine, settings.downloads_dir)
+            finally:
+                standalone_engine.dispose()
+
+        msg = f"{db_name} update complete"
 
         _update_job(
             job_id,

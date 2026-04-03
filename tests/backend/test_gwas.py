@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import csv
 import gzip
+import io
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -853,13 +855,19 @@ class TestRecordGwasVersion:
 
 class TestDownloadGwasCatalog:
     def test_download_success(self, tmp_path: Path):
-        """Download should write file and rename on success."""
+        """Download should write ZIP, extract TSV, and clean up ZIP."""
         tsv_content = b"SNPS\ttrait\nrs429358\tAlzheimer disease\n"
 
+        # Build a ZIP archive containing a TSV
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("gwas-catalog-download-associations-alt-full.tsv", tsv_content)
+        zip_bytes = zip_buf.getvalue()
+
         mock_response = MagicMock()
-        mock_response.headers = {"Content-Length": str(len(tsv_content))}
-        mock_response.iter_bytes.return_value = [tsv_content]
-        mock_response.num_bytes_downloaded = len(tsv_content)
+        mock_response.headers = {"Content-Length": str(len(zip_bytes))}
+        mock_response.iter_bytes.return_value = [zip_bytes]
+        mock_response.num_bytes_downloaded = len(zip_bytes)
         mock_response.raise_for_status = MagicMock()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
@@ -870,11 +878,13 @@ class TestDownloadGwasCatalog:
         mock_client.__exit__ = MagicMock(return_value=False)
 
         with patch("backend.annotation.gwas.httpx.Client", return_value=mock_client):
-            result = download_gwas_catalog(tmp_path, url="http://test/gwas.tsv")
+            result = download_gwas_catalog(tmp_path, url="http://test/gwas.zip")
 
         assert result.exists()
         assert result.name == "gwas_catalog_associations.tsv"
         assert result.read_bytes() == tsv_content
+        # ZIP should be cleaned up
+        assert not (tmp_path / "gwas_catalog_associations.zip").exists()
 
     def test_download_cleanup_on_failure(self, tmp_path: Path):
         """Temp file should be cleaned up on download failure."""
@@ -894,20 +904,24 @@ class TestDownloadGwasCatalog:
             patch("backend.annotation.gwas.httpx.Client", return_value=mock_client),
             pytest.raises(httpx.HTTPStatusError),
         ):
-            download_gwas_catalog(tmp_path, url="http://test/gwas.tsv")
+            download_gwas_catalog(tmp_path, url="http://test/gwas.zip")
 
         # Temp file should not exist
-        assert not (tmp_path / "gwas_catalog_associations.tsv.tmp").exists()
+        assert not (tmp_path / "gwas_catalog_associations.zip.tmp").exists()
 
     def test_progress_callback(self, tmp_path: Path):
         """Progress callback should be called with byte counts."""
-        tsv_content = b"data\n"
+        # Build a ZIP containing a small TSV
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("data.tsv", b"data\n")
+        zip_bytes = zip_buf.getvalue()
         callback = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.headers = {"Content-Length": str(len(tsv_content))}
-        mock_response.iter_bytes.return_value = [tsv_content]
-        mock_response.num_bytes_downloaded = len(tsv_content)
+        mock_response.headers = {"Content-Length": str(len(zip_bytes))}
+        mock_response.iter_bytes.return_value = [zip_bytes]
+        mock_response.num_bytes_downloaded = len(zip_bytes)
         mock_response.raise_for_status = MagicMock()
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
@@ -920,7 +934,7 @@ class TestDownloadGwasCatalog:
         with patch("backend.annotation.gwas.httpx.Client", return_value=mock_client):
             download_gwas_catalog(
                 tmp_path,
-                url="http://test/gwas.tsv",
+                url="http://test/gwas.zip",
                 progress_callback=callback,
             )
 

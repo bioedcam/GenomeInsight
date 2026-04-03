@@ -69,7 +69,7 @@ function getUpdateCadence(dbName: string, autoUpdate: boolean): string {
   if (!autoUpdate) return 'Manual'
   // ClinVar and GWAS update frequently; others are less frequent
   if (dbName === 'clinvar') return 'Weekly'
-  if (dbName === 'gwas') return 'Monthly'
+  if (dbName === 'gwas_catalog') return 'Monthly'
   if (dbName === 'cpic') return 'Monthly'
   return 'Auto'
 }
@@ -188,9 +188,11 @@ function DatabaseRow({
         )}
       </td>
 
-      {/* Size delta */}
+      {/* Size */}
       <td className="py-3 px-4 text-sm text-muted-foreground">
-        {updateInfo ? formatBytes(updateInfo.download_size_bytes) : '—'}
+        {updateInfo
+          ? formatBytes(updateInfo.download_size_bytes)
+          : formatBytes(status.file_size_bytes)}
       </td>
 
       {/* Last checked */}

@@ -393,13 +393,14 @@ def load_clinvar_into_db(
     if stats is None:
         stats = LoadStats(variants_loaded=len(rows))
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(clinvar_variants.delete())
 
-        # Bulk insert in batches
-        for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i : i + BATCH_SIZE]
+    # Bulk insert in batches (per-batch transactions to avoid long locks)
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        with engine.begin() as conn:
             conn.execute(clinvar_variants.insert(), batch)
 
     # WAL checkpoint after bulk load (outside transaction)
@@ -441,11 +442,12 @@ def load_clinvar_from_iter(
         for row, stats in row_iter:
             yield row
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(clinvar_variants.delete())
 
-        for batch in _batched(rows_only(), BATCH_SIZE):
+    for batch in _batched(rows_only(), BATCH_SIZE):
+        with engine.begin() as conn:
             conn.execute(clinvar_variants.insert(), batch)
 
     # WAL checkpoint after bulk load (outside transaction)
@@ -532,7 +534,7 @@ def download_clinvar_vcf(
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
@@ -557,6 +559,26 @@ def download_clinvar_vcf(
 
     logger.info("clinvar_download_complete", path=str(dest_path))
     return dest_path
+
+
+def _get_clinvar_last_modified_version(url: str = CLINVAR_VCF_URL) -> str | None:
+    """Get the ClinVar VCF version from the HTTP Last-Modified header.
+
+    Returns YYYYMMDD string or None on failure.
+    """
+    try:
+        with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+            resp = client.head(url)
+            resp.raise_for_status()
+        last_modified = resp.headers.get("Last-Modified", "")
+        if last_modified:
+            from email.utils import parsedate_to_datetime
+
+            dt = parsedate_to_datetime(last_modified)
+            return dt.strftime("%Y%m%d")
+    except Exception:
+        logger.debug("clinvar_last_modified_fetch_failed")
+    return None
 
 
 def download_and_load_clinvar(
@@ -599,8 +621,10 @@ def download_and_load_clinvar(
     stats = load_clinvar_from_iter(row_iter, engine)
     stats.sha256 = sha256
 
-    # Record version
-    version = stats.file_date or datetime.now(UTC).strftime("%Y%m%d")
+    # Record version using HTTP Last-Modified (same source as check_clinvar_update)
+    # so the stored version matches what the update checker compares against.
+    # The VCF fileDate is typically 1 day earlier than the FTP Last-Modified.
+    version = _get_clinvar_last_modified_version(url) or datetime.now(UTC).strftime("%Y%m%d")
     record_clinvar_version(
         engine,
         version=version,

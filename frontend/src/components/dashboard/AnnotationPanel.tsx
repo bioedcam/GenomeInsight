@@ -10,6 +10,7 @@ import {
   useStartAnnotation,
   useCancelAnnotation,
   useAnnotationProgress,
+  useActiveAnnotationJob,
   type AnnotationProgress,
 } from "@/api/annotation"
 import { cn } from "@/lib/utils"
@@ -66,6 +67,15 @@ function useETA(progress: AnnotationProgress | null) {
 export default function AnnotationPanel({ sampleId, variantCount }: AnnotationPanelProps) {
   const [jobId, setJobId] = useState<string | null>(null)
   const [dismissed, setDismissed] = useState(false)
+
+  // Check for an already-running job on mount (e.g. page reload during annotation)
+  const { data: activeJob } = useActiveAnnotationJob(sampleId)
+  useEffect(() => {
+    if (activeJob?.job_id && !jobId) {
+      setJobId(activeJob.job_id)
+      setDismissed(false)
+    }
+  }, [activeJob, jobId])
 
   const startAnnotation = useStartAnnotation()
   const cancelAnnotation = useCancelAnnotation()

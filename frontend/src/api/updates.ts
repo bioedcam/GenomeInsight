@@ -10,6 +10,7 @@ export interface DatabaseStatus {
   current_version: string | null
   version_display: string | null
   downloaded_at: string | null
+  file_size_bytes: number | null
   auto_update: boolean
   update_available: boolean
 }
@@ -53,6 +54,14 @@ export interface TriggerUpdateResponse {
   job_id: string
   db_name: string
   message: string
+}
+
+export interface JobStatus {
+  job_id: string
+  status: string
+  progress_pct: number
+  message: string
+  error: string | null
 }
 
 export interface AppUpdateInfo {
@@ -148,6 +157,38 @@ async function toggleAutoUpdate(dbName: string, enabled: boolean): Promise<void>
   }
 }
 
+async function fetchJobStatus(jobId: string): Promise<JobStatus> {
+  const res = await fetch(`/api/updates/job/${jobId}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Job status fetch failed: ${res.status} ${text}`.trim())
+  }
+  return res.json()
+}
+
+async function pollJobUntilDone(
+  jobId: string,
+  intervalMs = 2000,
+  maxDurationMs = 10 * 60 * 1000, // 10 minutes
+  signal?: AbortSignal,
+): Promise<JobStatus> {
+  const startTime = Date.now()
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (signal?.aborted) {
+      throw new DOMException('Polling aborted', 'AbortError')
+    }
+    if (Date.now() - startTime > maxDurationMs) {
+      throw new Error(`Job ${jobId} did not complete within ${maxDurationMs / 1000}s`)
+    }
+    const status = await fetchJobStatus(jobId)
+    if (status.status === 'complete' || status.status === 'failed' || status.status === 'cancelled') {
+      return status
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
 async function fetchAppUpdate(): Promise<AppUpdateInfo> {
   const res = await fetch('/api/updates/app-update')
   if (!res.ok) {
@@ -207,11 +248,16 @@ export function useReannotationPrompts(sampleId?: number) {
   })
 }
 
-/** Trigger a database update. Invalidates status + check caches on success. */
+/** Trigger a database update. Polls for job completion, then invalidates caches. */
 export function useTriggerUpdate() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (dbName: string) => triggerUpdate(dbName),
+    mutationFn: async (dbName: string) => {
+      const resp = await triggerUpdate(dbName)
+      // Poll until the background Huey task finishes
+      await pollJobUntilDone(resp.job_id)
+      return resp
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: DB_STATUS_KEY })
       qc.invalidateQueries({ queryKey: UPDATE_CHECK_KEY })

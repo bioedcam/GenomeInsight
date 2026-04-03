@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -52,7 +53,7 @@ def get_download_executor() -> ThreadPoolExecutor:
     """Return the module-level download executor, creating it if needed."""
     global _download_executor  # noqa: PLW0603
     if _download_executor is None:
-        _download_executor = ThreadPoolExecutor(max_workers=4)
+        _download_executor = ThreadPoolExecutor(max_workers=8)
     return _download_executor
 
 
@@ -576,30 +577,49 @@ def _run_build(
             else:
                 target_engine = engine
 
+        # Throttle progress writes to at most once per 2 seconds per callback
+        _last_dl_update = 0.0
+        _last_parse_update = 0.0
+        _THROTTLE_INTERVAL = 2.0
+
         # Download progress callback -> 0-90% of job progress
         def on_download_progress(downloaded: int, total: int | None) -> None:
+            nonlocal _last_dl_update
+            now = time.monotonic()
+            if now - _last_dl_update < _THROTTLE_INTERVAL:
+                return
             if total and total > 0:
                 pct = min(90.0, (downloaded / total) * 90.0)
+                try:
+                    _update_job(
+                        engine,
+                        job_id,
+                        status="running",
+                        progress_pct=pct,
+                        message=f"Downloading {db_info.display_name}... {pct:.0f}%",
+                    )
+                    _last_dl_update = now
+                except sa.exc.OperationalError:
+                    _last_dl_update = now  # back off even on failure
+
+        # Parse progress callback -> 90-99% of job progress
+        def on_parse_progress(variants_parsed: int) -> None:
+            nonlocal _last_parse_update
+            now = time.monotonic()
+            if now - _last_parse_update < _THROTTLE_INTERVAL:
+                return
+            pct = min(99.0, 90.0 + min(9.0, variants_parsed / 100_000))
+            try:
                 _update_job(
                     engine,
                     job_id,
                     status="running",
                     progress_pct=pct,
-                    message=f"Downloading {db_info.display_name}... {pct:.0f}%",
+                    message=f"Importing {db_info.display_name}... {variants_parsed:,} records",
                 )
-
-        # Parse progress callback -> 90-99% of job progress
-        def on_parse_progress(variants_parsed: int) -> None:
-            # We don't know the total, so show an indeterminate-ish progress
-            # that asymptotically approaches 99%
-            pct = min(99.0, 90.0 + min(9.0, variants_parsed / 100_000))
-            _update_job(
-                engine,
-                job_id,
-                status="running",
-                progress_pct=pct,
-                message=f"Importing {db_info.display_name}... {variants_parsed:,} records",
-            )
+                _last_parse_update = now
+            except sa.exc.OperationalError:
+                _last_parse_update = now
 
         # Call the build function — signatures vary slightly
         if db_info.name in ("gnomad", "dbnsfp"):
@@ -743,17 +763,26 @@ def _update_job(
     progress_pct: float = 0.0,
     message: str = "",
     error: str | None = None,
+    _retries: int = 5,
 ) -> None:
-    """Update a job record."""
-    with engine.begin() as conn:
-        conn.execute(
-            jobs.update()
-            .where(jobs.c.job_id == job_id)
-            .values(
-                status=status,
-                progress_pct=progress_pct,
-                message=message,
-                error=error,
-                updated_at=datetime.now(UTC),
-            )
-        )
+    """Update a job record with retry on SQLite contention."""
+    for attempt in range(_retries):
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    jobs.update()
+                    .where(jobs.c.job_id == job_id)
+                    .values(
+                        status=status,
+                        progress_pct=progress_pct,
+                        message=message,
+                        error=error,
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+            return
+        except sa.exc.OperationalError:
+            if attempt < _retries - 1:
+                time.sleep(0.1 * (2**attempt))
+            else:
+                raise

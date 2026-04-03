@@ -54,10 +54,11 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# NCBI FTP URL for dbSNP RsMergeArch (GRCh37p13 / build 151)
+# NCBI FTP URL for dbSNP RsMergeArch (GRCh38p7 / build 151)
+# RsMergeArch contains rsID merge history which is assembly-independent.
 RSMERGE_URL = (
     "https://ftp.ncbi.nlm.nih.gov/snp/organisms/"
-    "human_9606_b151_GRCh37p13/database/organism_data/RsMergeArch.bcp.gz"
+    "human_9606_b151_GRCh38p7/database/organism_data/RsMergeArch.bcp.gz"
 )
 
 # Batch size for bulk inserts
@@ -276,12 +277,13 @@ def load_rsmerge_into_db(
     if stats is None:
         stats = LoadStats(merges_loaded=len(rows))
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(dbsnp_merges.delete())
 
-        for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i : i + BATCH_SIZE]
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        with engine.begin() as conn:
             # Use INSERT OR REPLACE to handle duplicate old_rsids
             # (some rsids may appear multiple times in the merge chain)
             stmt = sqlite_insert(dbsnp_merges).values(batch)
@@ -325,11 +327,12 @@ def load_rsmerge_from_iter(
         for row, stats in row_iter:
             yield row
 
-    with engine.begin() as conn:
-        if clear_existing:
+    if clear_existing:
+        with engine.begin() as conn:
             conn.execute(dbsnp_merges.delete())
 
-        for batch in _batched(rows_only(), BATCH_SIZE):
+    for batch in _batched(rows_only(), BATCH_SIZE):
+        with engine.begin() as conn:
             stmt = sqlite_insert(dbsnp_merges).values(batch)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["old_rsid"],
@@ -416,7 +419,7 @@ def download_rsmerge_arch(
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=httpx.Timeout(timeout, connect=30.0),
+            timeout=httpx.Timeout(timeout, connect=30.0, read=120.0),
         ) as client:
             with client.stream("GET", url) as response:
                 response.raise_for_status()

@@ -28,9 +28,9 @@ setup-frontend:  ## Install frontend dependencies
 
 run: run-api  ## Start the API server (default)
 
-dev:  ## Start backend + frontend dev servers concurrently
-	@echo "Starting API server (port 8000) and Vite dev server (port 5173)..."
-	@trap 'kill 0' INT TERM; $(MAKE) run-api & $(MAKE) run-frontend & wait
+dev:  ## Start backend + frontend + Huey worker concurrently
+	@echo "Starting API server (port 8000), Vite dev server (port 5173), and Huey worker..."
+	@trap 'kill 0' INT TERM; $(MAKE) run-api & $(MAKE) run-frontend & $(MAKE) run-huey & wait
 
 run-api:  ## Start FastAPI dev server
 	uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload

@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.db.connection import get_registry
-from backend.db.database_registry import DATABASES
+from backend.db.database_registry import DATABASES, get_build_fn, get_database_status
 from backend.db.update_manager import (
     AUTO_UPDATE_DEFAULTS,
     check_all_updates,
@@ -79,6 +79,7 @@ class DatabaseStatus(BaseModel):
     current_version: str | None
     version_display: str | None
     downloaded_at: str | None
+    file_size_bytes: int | None
     auto_update: bool
     update_available: bool
 
@@ -130,19 +131,19 @@ async def trigger_update(req: TriggerUpdateRequest) -> TriggerUpdateResponse:
         run_database_update_task,
     )
 
-    supported = {"clinvar"}
-    if req.db_name not in supported:
+    # Any database with a build function can be updated
+    db_info = DATABASES.get(req.db_name)
+    build_fn = get_build_fn(req.db_name) if db_info else None
+    if build_fn is None:
+        supported = sorted(k for k in DATABASES if get_build_fn(k) is not None)
         raise HTTPException(
             status_code=400,
-            detail=f"Update not supported for '{req.db_name}'. Supported: {sorted(supported)}",
+            detail=f"Update not supported for '{req.db_name}'. Supported: {supported}",
         )
 
     # Check bandwidth window — look up actual expected download size
     registry = get_registry()
     settings = registry.settings
-    from backend.db.database_registry import DATABASES
-
-    db_info = DATABASES.get(req.db_name)
     estimated_size = db_info.expected_size_bytes if db_info else 0
     if not should_download_now(estimated_size, settings.update_download_window):
         raise HTTPException(
@@ -157,6 +158,32 @@ async def trigger_update(req: TriggerUpdateRequest) -> TriggerUpdateResponse:
         job_id=job_id,
         db_name=req.db_name,
         message=f"Update queued for {req.db_name}",
+    )
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    progress_pct: float
+    message: str
+    error: str | None = None
+
+
+@router.get("/job/{job_id}", response_model=JobStatusResponse)
+async def get_update_job_status(job_id: str) -> JobStatusResponse:
+    """Poll the status of a database update job."""
+    from backend.api.sse import get_job_progress
+
+    registry = get_registry()
+    status = get_job_progress(registry.reference_engine, job_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return JobStatusResponse(
+        job_id=status.job_id,
+        status=status.status,
+        progress_pct=status.progress_pct,
+        message=status.message,
+        error=status.error,
     )
 
 
@@ -180,6 +207,7 @@ async def get_database_statuses() -> list[DatabaseStatus]:
     """
     registry = get_registry()
     engine = registry.reference_engine
+    settings = registry.settings
 
     # Fetch all version stamps in one query
     stamps = {s["db_name"]: s for s in get_all_version_stamps(engine)}
@@ -192,8 +220,24 @@ async def get_database_statuses() -> list[DatabaseStatus]:
         stamp = stamps.get(db_name)
         version = stamp["version"] if stamp else None
         downloaded_at = stamp["downloaded_at"] if stamp else None
+        file_size_bytes = stamp["file_size_bytes"] if stamp else None
         db_info = DATABASES.get(db_name)
         display_name = db_info.display_name if db_info else db_name
+
+        # If no version stamp or file size, check on-disk status as fallback.
+        # Databases may exist on disk without a database_versions entry
+        # (e.g. after a build that didn't record its version).
+        on_disk = None
+        if (version is None or file_size_bytes is None) and db_info is not None:
+            on_disk = get_database_status(db_info, settings)
+
+        if version is None and on_disk is not None and on_disk["downloaded"]:
+            version = "installed"
+            if on_disk.get("file_size_bytes"):
+                file_size_bytes = on_disk["file_size_bytes"]
+
+        if file_size_bytes is None and on_disk is not None and on_disk.get("file_size_bytes"):
+            file_size_bytes = on_disk["file_size_bytes"]
 
         result.append(
             DatabaseStatus(
@@ -202,6 +246,7 @@ async def get_database_statuses() -> list[DatabaseStatus]:
                 current_version=version,
                 version_display=format_version_display(version, db_name),
                 downloaded_at=downloaded_at,
+                file_size_bytes=file_size_bytes,
                 auto_update=auto_update,
                 update_available=False,  # Set by GET /updates/check
             )
