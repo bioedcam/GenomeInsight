@@ -567,7 +567,8 @@ def _get_clinvar_last_modified_version(url: str = CLINVAR_VCF_URL) -> str | None
     Returns YYYYMMDD string or None on failure.
     """
     try:
-        with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+        timeout = httpx.Timeout(30.0, connect=10.0)
+        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
             resp = client.head(url)
             resp.raise_for_status()
         last_modified = resp.headers.get("Last-Modified", "")

@@ -41,11 +41,22 @@ class MockEventSource {
   }
 }
 
+/** Mock the active-annotation-job endpoint to return 404 (no active job). */
+function mockNoActiveJob() {
+  mockFetch.mockResolvedValueOnce({
+    ok: false,
+    status: 404,
+    json: async () => ({ detail: "No active job" }),
+  })
+}
+
 beforeEach(() => {
   mockFetch.mockReset()
   MockEventSource.instances = []
   vi.stubGlobal("fetch", mockFetch)
   vi.stubGlobal("EventSource", MockEventSource)
+  // useActiveAnnotationJob fires on mount — always mock it first
+  mockNoActiveJob()
 })
 
 afterEach(() => {
