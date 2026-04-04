@@ -503,8 +503,7 @@ def iter_dbnsfp_tsv(
         # dbNSFP5.3.1a_variant.chr1.gz (gzipped TSVs)
         with zipfile.ZipFile(tsv_path, "r") as zf:
             members = sorted(
-                n for n in zf.namelist()
-                if "_variant.chr" in n and not n.startswith("__MACOSX")
+                n for n in zf.namelist() if "_variant.chr" in n and not n.startswith("__MACOSX")
             )
             logger.info("dbnsfp_zip_members", count=len(members), files=members[:3])
             for member in members:
