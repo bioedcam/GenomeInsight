@@ -216,7 +216,9 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
                 )
 
             analysis_results = run_all_analyses(
-                sample_engine, registry, progress_callback=analysis_progress,
+                sample_engine,
+                registry,
+                progress_callback=analysis_progress,
             )
             errors = [k for k, v in analysis_results.items() if v == "error"]
             if errors:
@@ -528,6 +530,7 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
                 cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.close()
+
             try:
                 build_fn(standalone_engine, settings.downloads_dir)
             finally:
