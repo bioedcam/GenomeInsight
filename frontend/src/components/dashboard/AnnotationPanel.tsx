@@ -65,17 +65,18 @@ function useETA(progress: AnnotationProgress | null) {
 }
 
 export default function AnnotationPanel({ sampleId, variantCount }: AnnotationPanelProps) {
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [userJobId, setUserJobId] = useState<string | null>(null)
   const [dismissed, setDismissed] = useState(false)
 
-  // Check for an already-running job on mount (e.g. page reload during annotation)
+  // Check for an already-running job on mount (e.g. page reload during annotation).
+  // Derive effective jobId: prefer user-initiated job, fall back to active job from server.
   const { data: activeJob } = useActiveAnnotationJob(sampleId)
-  useEffect(() => {
-    if (activeJob?.job_id && !jobId) {
-      setJobId(activeJob.job_id)
-      setDismissed(false)
-    }
-  }, [activeJob, jobId])
+  const jobId = userJobId ?? (dismissed ? null : activeJob?.job_id ?? null)
+
+  const setJobId = useCallback((id: string | null) => {
+    setUserJobId(id)
+    if (id) setDismissed(false)
+  }, [])
 
   const startAnnotation = useStartAnnotation()
   const cancelAnnotation = useCancelAnnotation()
@@ -89,7 +90,7 @@ export default function AnnotationPanel({ sampleId, variantCount }: AnnotationPa
         setJobId(result.job_id)
       },
     })
-  }, [sampleId, startAnnotation])
+  }, [sampleId, startAnnotation, setJobId])
 
   const handleCancel = useCallback(() => {
     if (jobId) {
@@ -100,7 +101,7 @@ export default function AnnotationPanel({ sampleId, variantCount }: AnnotationPa
   const handleDismiss = useCallback(() => {
     setDismissed(true)
     setJobId(null)
-  }, [])
+  }, [setJobId])
 
   // ── No active job: show "Run Annotation" button ──────────
   if (!jobId || dismissed) {
