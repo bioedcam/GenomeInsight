@@ -173,7 +173,6 @@ async function pollJobUntilDone(
   signal?: AbortSignal,
 ): Promise<JobStatus> {
   const startTime = Date.now()
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (signal?.aborted) {
       throw new DOMException('Polling aborted', 'AbortError')
