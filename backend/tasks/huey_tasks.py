@@ -504,6 +504,32 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
         )
 
         registry = get_registry()
+
+        # VEP bundle uses a dedicated download-from-GitHub path
+        if db_name == "vep_bundle":
+            from backend.db.update_manager import run_vep_bundle_update
+
+            _update_job(
+                job_id,
+                status="running",
+                progress_pct=10.0,
+                message="Downloading VEP bundle from GitHub",
+            )
+            result = run_vep_bundle_update(registry.settings)
+            if result is None:
+                raise RuntimeError("VEP bundle download failed or file is invalid")
+            _update_job(
+                job_id,
+                status="complete",
+                progress_pct=100.0,
+                message="VEP Bundle update complete",
+            )
+            logger.info(
+                "database_update_task_complete",
+                extra={"job_id": job_id, "db_name": db_name},
+            )
+            return
+
         build_fn = get_build_fn(db_name)
         if build_fn is None:
             raise ValueError(f"No build function registered for '{db_name}'")

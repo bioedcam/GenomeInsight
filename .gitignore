@@ -32,8 +32,9 @@ frontend/.vite/
 *.db
 *.db-wal
 *.db-shm
-# Exception: test fixtures
+# Exception: test fixtures and bundled databases
 !tests/fixtures/*.db
+!bundles/*.db
 
 # Environment & secrets
 .env

@@ -101,7 +101,7 @@ class TriggerUpdateResponse(BaseModel):
 async def check_for_updates() -> UpdateCheckResponse:
     """Check all databases for available updates."""
     registry = get_registry()
-    result = check_all_updates(registry.reference_engine)
+    result = check_all_updates(registry.reference_engine, settings=registry.settings)
 
     return UpdateCheckResponse(
         available=[
@@ -131,11 +131,14 @@ async def trigger_update(req: TriggerUpdateRequest) -> TriggerUpdateResponse:
         run_database_update_task,
     )
 
-    # Any database with a build function can be updated
+    # Any database with a build function or VEP bundle can be updated
     db_info = DATABASES.get(req.db_name)
     build_fn = get_build_fn(req.db_name) if db_info else None
-    if build_fn is None:
-        supported = sorted(k for k in DATABASES if get_build_fn(k) is not None)
+    is_vep_bundle = req.db_name == "vep_bundle"
+    if build_fn is None and not is_vep_bundle:
+        supported = sorted(
+            k for k in DATABASES if get_build_fn(k) is not None or k == "vep_bundle"
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Update not supported for '{req.db_name}'. Supported: {supported}",

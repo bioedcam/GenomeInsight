@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from datetime import time as dt_time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
@@ -38,6 +39,7 @@ from backend.db.tables import (
 if TYPE_CHECKING:
     from sqlalchemy import Engine
 
+    from backend.config import Settings
     from backend.db.connection import DBRegistry
 
 logger = structlog.get_logger(__name__)
@@ -51,7 +53,7 @@ AUTO_UPDATE_DEFAULTS: dict[str, bool] = {
     "dbnsfp": True,
     "dbsnp": True,
     "mondo_hpo": True,
-    "vep_bundle": False,  # Not yet uploaded; manual only
+    "vep_bundle": False,  # Bundled with repo; check GitHub for updates
     "cpic": True,
     "encode_ccres": True,
     "ancestry_pca": True,
@@ -257,15 +259,215 @@ def check_clinvar_update(
         return None
 
 
+def check_vep_bundle_update(
+    reference_engine: Engine,
+    settings: Settings | None = None,
+    *,
+    timeout: float = 30.0,
+) -> VersionInfo | None:
+    """Check if a newer VEP bundle is available on GitHub.
+
+    Reads the ``bundle_metadata`` table from the local VEP bundle to get
+    the current build_date, then queries the GitHub API for the latest
+    commit date on ``bundles/vep_bundle.db`` in the main branch.
+    """
+    import sqlite3
+
+    from backend.config import get_settings
+    from backend.db.database_registry import BUNDLED_DIR, DATABASES
+
+    if settings is None:
+        settings = get_settings()
+
+    db_info = DATABASES["vep_bundle"]
+
+    # 1. Get local build date from the installed VEP bundle
+    local_path = db_info.dest_path(settings)
+    local_build_date: str | None = None
+
+    if local_path.exists():
+        try:
+            with sqlite3.connect(str(local_path)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    local_build_date = row[0]
+        except Exception:
+            pass
+
+    if local_build_date is None:
+        # Also check bundled source
+        bundled_src = BUNDLED_DIR / db_info.filename
+        if bundled_src.exists():
+            try:
+                with sqlite3.connect(str(bundled_src)) as conn:
+                    row = conn.execute(
+                        "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                    ).fetchone()
+                    if row:
+                        local_build_date = row[0]
+            except Exception:
+                pass
+
+    # 2. Check GitHub for the latest commit on the VEP bundle file
+    try:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=httpx.Timeout(timeout, connect=10.0),
+        ) as client:
+            resp = client.get(
+                "https://api.github.com/repos/bioedcam/GenomeInsight/commits",
+                params={"path": "bundles/vep_bundle.db", "per_page": "1"},
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            resp.raise_for_status()
+
+        commits = resp.json()
+        if not commits:
+            return None
+
+        # Extract the commit date (YYYY-MM-DD)
+        try:
+            commit_date_str = commits[0]["commit"]["committer"]["date"][:10]
+        except (KeyError, TypeError, IndexError) as exc:
+            logger.warning("vep_bundle_commit_parse_failed", error=str(exc))
+            return None
+
+        # Compare dates — if remote commit is newer than local build, update available
+        if local_build_date and commit_date_str <= local_build_date:
+            return None  # Already up to date
+
+        return VersionInfo(
+            db_name="vep_bundle",
+            latest_version=commit_date_str,
+            download_url=db_info.url,
+            download_size_bytes=db_info.expected_size_bytes,
+            release_date=commit_date_str,
+        )
+    except Exception as exc:
+        logger.warning("vep_bundle_update_check_failed", error=str(exc))
+        return None
+
+
+def run_vep_bundle_update(
+    settings: Settings | None = None,
+    *,
+    timeout: float = 120.0,
+) -> UpdateResult | None:
+    """Download the latest VEP bundle from GitHub and replace the local copy.
+
+    Also updates the bundled copy in the repo's ``bundles/`` directory.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+
+    from backend.config import get_settings
+    from backend.db.database_registry import BUNDLED_DIR, DATABASES
+
+    if settings is None:
+        settings = get_settings()
+
+    db_info = DATABASES["vep_bundle"]
+    dest = db_info.dest_path(settings)
+    start_time = time.monotonic()
+
+    # Get previous version
+    previous_version: str | None = None
+    if dest.exists():
+        try:
+            with sqlite3.connect(str(dest)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    previous_version = row[0]
+        except Exception:
+            pass
+
+    # Download to a temporary file first
+    try:
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=httpx.Timeout(timeout, connect=15.0),
+        ) as client:
+            resp = client.get(db_info.url)
+            resp.raise_for_status()
+
+        with tempfile.NamedTemporaryFile(
+            dir=str(dest.parent), suffix=".db.tmp", delete=False
+        ) as tmp:
+            tmp.write(resp.content)
+            tmp_path = Path(tmp.name)
+
+        # Verify it's a valid SQLite with bundle_metadata
+        new_version: str | None = None
+        try:
+            with sqlite3.connect(str(tmp_path)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    new_version = row[0]
+
+            if new_version is None:
+                logger.error("vep_bundle_update_invalid", error="No build_date in metadata")
+                return None
+        finally:
+            if new_version is None:
+                tmp_path.unlink(missing_ok=True)
+
+        # Replace the installed copy
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(tmp_path), str(dest))
+
+        # Also update the bundled copy in the repo
+        bundled_dest = BUNDLED_DIR / db_info.filename
+        if BUNDLED_DIR.exists():
+            try:
+                shutil.copy2(str(dest), str(bundled_dest))
+            except OSError as copy_err:
+                logger.warning(
+                    "bundled_copy_failed",
+                    dest=str(bundled_dest),
+                    error=str(copy_err),
+                )
+
+        duration = int(time.monotonic() - start_time)
+        download_size = dest.stat().st_size
+
+        logger.info(
+            "vep_bundle_update_complete",
+            previous_version=previous_version,
+            new_version=new_version,
+            size_bytes=download_size,
+            duration_seconds=duration,
+        )
+
+        return UpdateResult(
+            db_name="vep_bundle",
+            previous_version=previous_version,
+            new_version=new_version,
+            download_size_bytes=download_size,
+            duration_seconds=duration,
+        )
+
+    except Exception as exc:
+        logger.exception("vep_bundle_update_failed", error=str(exc))
+        return None
+
+
 def check_all_updates(
     reference_engine: Engine,
     *,
     timeout: float = 30.0,
+    settings: Settings | None = None,
 ) -> UpdateCheckResult:
     """Check all databases for available updates.
 
-    Currently supports ClinVar differential check. Other databases
-    use placeholder version comparison (full re-download only).
+    Supports ClinVar differential check and VEP bundle GitHub check.
+    Other databases use placeholder version comparison.
     """
     result = UpdateCheckResult()
 
@@ -279,8 +481,18 @@ def check_all_updates(
     except Exception as exc:
         result.errors.append(f"clinvar: {exc}")
 
+    # VEP bundle: GitHub commit check
+    try:
+        vep_update = check_vep_bundle_update(reference_engine, settings, timeout=timeout)
+        if vep_update:
+            result.available.append(vep_update)
+        else:
+            result.up_to_date.append("vep_bundle")
+    except Exception as exc:
+        result.errors.append(f"vep_bundle: {exc}")
+
     # Other databases: placeholder checks (version comparison only)
-    for db_name in ("gwas_catalog", "gnomad", "dbnsfp", "vep_bundle", "cpic"):
+    for db_name in ("gwas_catalog", "gnomad", "dbnsfp", "cpic"):
         current = get_current_version(reference_engine, db_name)
         if current:
             result.up_to_date.append(db_name)
@@ -848,7 +1060,7 @@ def run_scheduled_update_check(registry: DBRegistry) -> UpdateCheckResult:
     engine = registry.reference_engine
 
     # 1. Check for updates
-    check_result = check_all_updates(engine)
+    check_result = check_all_updates(engine, settings=settings)
 
     logger.info(
         "update_check_complete",
@@ -880,6 +1092,8 @@ def run_scheduled_update_check(registry: DBRegistry) -> UpdateCheckResult:
         try:
             if db_name == "clinvar":
                 run_clinvar_update(registry)
+            elif db_name == "vep_bundle":
+                run_vep_bundle_update(settings)
         except Exception as exc:
             logger.exception("auto_update_failed", db_name=db_name, error=str(exc))
             check_result.errors.append(f"{db_name} update failed: {exc}")
