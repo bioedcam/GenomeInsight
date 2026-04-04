@@ -1,30 +1,31 @@
 /**
  * Playwright global setup — bypass setup wizard for E2E tests.
  *
- * Accepts the disclaimer and marks a database as installed so the
- * AuthGuard doesn't redirect to /setup.
+ * Creates the disclaimer flag file and a dummy database file so the
+ * AuthGuard doesn't redirect to /setup. This runs before the web
+ * servers start, so we write files directly instead of calling the API.
+ *
+ * The backend data_dir defaults to ~/.genomeinsight (Path.home() / ".genomeinsight").
  */
 
 import * as fs from 'fs'
 import * as path from 'path'
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8000'
-
 export default async function globalSetup() {
-  // Accept the disclaimer so needs_setup can be false
-  const disclaimerResp = await fetch(`${BACKEND_URL}/api/setup/accept-disclaimer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  })
-  if (!disclaimerResp.ok) {
-    console.warn(`[e2e-setup] Failed to accept disclaimer: ${disclaimerResp.status}`)
+  const dataDir = process.env.GENOMEINSIGHT_DATA_DIR
+    ?? path.join(process.env.HOME ?? '/tmp', '.genomeinsight')
+  fs.mkdirSync(dataDir, { recursive: true })
+
+  // Create disclaimer flag so _is_disclaimer_accepted() returns true
+  const disclaimerPath = path.join(dataDir, '.disclaimer_accepted')
+  if (!fs.existsSync(disclaimerPath)) {
+    fs.writeFileSync(
+      disclaimerPath,
+      JSON.stringify({ accepted_at: new Date().toISOString(), version: '1.0' }),
+    )
   }
 
-  // Create a dummy standalone DB file so _has_any_databases() returns true.
-  // The data_dir defaults to ~/.genomeinsight/data (or $GENOMEINSIGHT_DATA_DIR).
-  const dataDir = process.env.GENOMEINSIGHT_DATA_DIR
-    ?? path.join(process.env.HOME ?? '/tmp', '.genomeinsight', 'data')
-  fs.mkdirSync(dataDir, { recursive: true })
+  // Create dummy gnomad_af.db so _has_any_databases() returns true
   const dummyDb = path.join(dataDir, 'gnomad_af.db')
   if (!fs.existsSync(dummyDb)) {
     fs.writeFileSync(dummyDb, '')
