@@ -848,7 +848,7 @@ class TestUpdateAPI:
         assert resp.status_code == 404
 
     def test_trigger_unsupported_db(self, update_client):
-        resp = update_client.post("/api/updates/trigger", json={"db_name": "gnomad"})
+        resp = update_client.post("/api/updates/trigger", json={"db_name": "nonexistent_db"})
         assert resp.status_code == 400
         assert "not supported" in resp.json()["detail"].lower()
 
