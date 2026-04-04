@@ -241,6 +241,7 @@ class TestNoOutboundVariantData:
             "api.github.com",  # Update checker
             "github.com",  # Release/source links
             "s3.amazonaws.com",  # dbNSFP S3 bucket
+            "dist.genos.us",  # dbNSFP 5.x academic distribution
             "example.com",  # Test/placeholder URLs in comments
         }
         unexpected_urls: list[str] = []

@@ -601,8 +601,12 @@ class TestDownloadAndLoadClinvar:
         dest_dir = tmp_path / "downloads"
         dest_dir.mkdir()
 
-        with patch("backend.annotation.clinvar.download_clinvar_vcf") as mock_dl:
+        with (
+            patch("backend.annotation.clinvar.download_clinvar_vcf") as mock_dl,
+            patch("backend.annotation.clinvar._get_clinvar_last_modified_version") as mock_ver,
+        ):
             mock_dl.return_value = MINI_CLINVAR_VCF
+            mock_ver.return_value = "20260301"
 
             stats = download_and_load_clinvar(ref_engine, dest_dir)
 
