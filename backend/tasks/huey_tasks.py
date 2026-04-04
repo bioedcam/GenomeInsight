@@ -509,6 +509,12 @@ def run_database_update_task(job_id: str, db_name: str) -> None:
         if db_name == "vep_bundle":
             from backend.db.update_manager import run_vep_bundle_update
 
+            _update_job(
+                job_id,
+                status="running",
+                progress_pct=10.0,
+                message="Downloading VEP bundle from GitHub",
+            )
             result = run_vep_bundle_update(registry.settings)
             if result is None:
                 raise RuntimeError("VEP bundle download failed or file is invalid")

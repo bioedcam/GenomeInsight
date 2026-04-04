@@ -287,13 +287,12 @@ def check_vep_bundle_update(
 
     if local_path.exists():
         try:
-            conn = sqlite3.connect(str(local_path))
-            row = conn.execute(
-                "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
-            ).fetchone()
-            if row:
-                local_build_date = row[0]
-            conn.close()
+            with sqlite3.connect(str(local_path)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    local_build_date = row[0]
         except Exception:
             pass
 
@@ -302,13 +301,12 @@ def check_vep_bundle_update(
         bundled_src = BUNDLED_DIR / db_info.filename
         if bundled_src.exists():
             try:
-                conn = sqlite3.connect(str(bundled_src))
-                row = conn.execute(
-                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
-                ).fetchone()
-                if row:
-                    local_build_date = row[0]
-                conn.close()
+                with sqlite3.connect(str(bundled_src)) as conn:
+                    row = conn.execute(
+                        "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                    ).fetchone()
+                    if row:
+                        local_build_date = row[0]
             except Exception:
                 pass
 
@@ -330,7 +328,11 @@ def check_vep_bundle_update(
             return None
 
         # Extract the commit date (YYYY-MM-DD)
-        commit_date_str = commits[0]["commit"]["committer"]["date"][:10]
+        try:
+            commit_date_str = commits[0]["commit"]["committer"]["date"][:10]
+        except (KeyError, TypeError, IndexError) as exc:
+            logger.warning("vep_bundle_commit_parse_failed", error=str(exc))
+            return None
 
         # Compare dates — if remote commit is newer than local build, update available
         if local_build_date and commit_date_str <= local_build_date:
@@ -375,13 +377,12 @@ def run_vep_bundle_update(
     previous_version: str | None = None
     if dest.exists():
         try:
-            conn = sqlite3.connect(str(dest))
-            row = conn.execute(
-                "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
-            ).fetchone()
-            if row:
-                previous_version = row[0]
-            conn.close()
+            with sqlite3.connect(str(dest)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    previous_version = row[0]
         except Exception:
             pass
 
@@ -402,16 +403,20 @@ def run_vep_bundle_update(
 
         # Verify it's a valid SQLite with bundle_metadata
         new_version: str | None = None
-        conn = sqlite3.connect(str(tmp_path))
-        row = conn.execute("SELECT value FROM bundle_metadata WHERE key = 'build_date'").fetchone()
-        if row:
-            new_version = row[0]
-        conn.close()
+        try:
+            with sqlite3.connect(str(tmp_path)) as conn:
+                row = conn.execute(
+                    "SELECT value FROM bundle_metadata WHERE key = 'build_date'"
+                ).fetchone()
+                if row:
+                    new_version = row[0]
 
-        if new_version is None:
-            tmp_path.unlink(missing_ok=True)
-            logger.error("vep_bundle_update_invalid", error="No build_date in metadata")
-            return None
+            if new_version is None:
+                logger.error("vep_bundle_update_invalid", error="No build_date in metadata")
+                return None
+        finally:
+            if new_version is None:
+                tmp_path.unlink(missing_ok=True)
 
         # Replace the installed copy
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -420,7 +425,14 @@ def run_vep_bundle_update(
         # Also update the bundled copy in the repo
         bundled_dest = BUNDLED_DIR / db_info.filename
         if BUNDLED_DIR.exists():
-            shutil.copy2(str(dest), str(bundled_dest))
+            try:
+                shutil.copy2(str(dest), str(bundled_dest))
+            except OSError as copy_err:
+                logger.warning(
+                    "bundled_copy_failed",
+                    dest=str(bundled_dest),
+                    error=str(copy_err),
+                )
 
         duration = int(time.monotonic() - start_time)
         download_size = dest.stat().st_size

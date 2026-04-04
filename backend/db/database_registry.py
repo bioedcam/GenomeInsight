@@ -303,8 +303,8 @@ def get_database_status(db_info: DatabaseInfo, settings: Settings) -> dict:
                 src=str(bundled_src),
                 dest=str(dest),
             )
-        downloaded = True  # Bundled DBs always count as available
-        file_size = dest.stat().st_size if dest.exists() else None
+        downloaded = dest.exists()
+        file_size = dest.stat().st_size if downloaded else None
     elif db_info.target_db == "reference":
         # reference.db-resident: check database_versions table
         downloaded = _check_db_version_exists(db_info.name, settings)
