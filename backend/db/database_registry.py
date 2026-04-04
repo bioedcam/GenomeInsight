@@ -10,14 +10,22 @@ orchestrate parallel downloads.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 from backend.config import Settings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = structlog.get_logger(__name__)
+
+# Directory containing databases shipped with the repo
+BUNDLED_DIR = Path(__file__).resolve().parent.parent.parent / "bundles"
 
 
 @dataclass(frozen=True)
@@ -89,12 +97,12 @@ DATABASES: dict[str, DatabaseInfo] = {
         name="vep_bundle",
         display_name="VEP Bundle",
         description="Pre-computed variant effect predictions for 23andMe v5 rsids",
-        url="",
+        url="https://raw.githubusercontent.com/bioedcam/GenomeInsight/main/bundles/vep_bundle.db",
         filename="vep_bundle.db",
-        expected_size_bytes=500_000_000,  # ~500 MB
+        expected_size_bytes=12_000_000,  # ~12 MB
         required=False,
         phase=2,
-        build_mode="manual",
+        build_mode="bundled",
         target_db="standalone",
     ),
     "gnomad": DatabaseInfo(
@@ -283,8 +291,20 @@ def get_database_status(db_info: DatabaseInfo, settings: Settings) -> dict:
     Returns a dict with download/presence status suitable for API responses.
     """
     if db_info.build_mode == "bundled":
-        downloaded = True
-        file_size = None
+        dest = db_info.dest_path(settings)
+        bundled_src = BUNDLED_DIR / db_info.filename
+        if not dest.exists() and bundled_src.exists():
+            # Auto-copy from the repo bundled directory to data_dir
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(bundled_src), str(dest))
+            logger.info(
+                "bundled_db_copied",
+                db_name=db_info.name,
+                src=str(bundled_src),
+                dest=str(dest),
+            )
+        downloaded = True  # Bundled DBs always count as available
+        file_size = dest.stat().st_size if dest.exists() else None
     elif db_info.target_db == "reference":
         # reference.db-resident: check database_versions table
         downloaded = _check_db_version_exists(db_info.name, settings)
