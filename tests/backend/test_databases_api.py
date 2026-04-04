@@ -215,14 +215,16 @@ class TestDatabaseRegistry:
         assert status["downloaded"] is True
 
     def test_get_database_status_bundled(self, tmp_data_dir: Path):
-        """Bundled databases always show as downloaded."""
+        """Bundled databases show as downloaded when bundled source exists."""
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
-        db_info = get_database("ancestry_pca")
+        db_info = get_database("vep_bundle")
         assert db_info is not None
         assert db_info.build_mode == "bundled"
 
         status = get_database_status(db_info, settings)
+        # vep_bundle.db ships in bundles/ and gets auto-copied to data_dir
         assert status["downloaded"] is True
+        assert status["file_size_bytes"] is not None
 
     def test_dest_path(self, tmp_data_dir: Path):
         settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
@@ -252,9 +254,11 @@ class TestListDatabases:
     def test_list_databases_none_downloaded(self, db_client: TestClient):
         resp = db_client.get("/api/databases")
         data = resp.json()
-        # ancestry_pca is bundled and always counts as downloaded
-        bundled_count = sum(1 for db in data["databases"] if db["build_mode"] == "bundled")
-        assert data["downloaded_count"] == bundled_count
+        # Only bundled DBs with actual files in bundles/ count as downloaded
+        bundled_downloaded = sum(
+            1 for db in data["databases"] if db["build_mode"] == "bundled" and db["downloaded"]
+        )
+        assert data["downloaded_count"] == bundled_downloaded
 
     def test_list_databases_shows_downloaded(self, db_client: TestClient, tmp_data_dir: Path):
         # Create a fake downloaded gnomAD file + version entry (standalone pipeline DB)
@@ -271,8 +275,10 @@ class TestListDatabases:
 
         resp = db_client.get("/api/databases")
         data = resp.json()
-        bundled_count = sum(1 for db in data["databases"] if db["build_mode"] == "bundled")
-        assert data["downloaded_count"] == bundled_count + 1
+        bundled_downloaded = sum(
+            1 for db in data["databases"] if db["build_mode"] == "bundled" and db["downloaded"]
+        )
+        assert data["downloaded_count"] == bundled_downloaded + 1
 
         gnomad_status = next(d for d in data["databases"] if d["name"] == "gnomad")
         assert gnomad_status["downloaded"] is True
