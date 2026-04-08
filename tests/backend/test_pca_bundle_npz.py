@@ -176,9 +176,11 @@ class TestStatisticalArrays:
             assert bundle.eigenvalues[i] >= bundle.eigenvalues[i + 1]
 
     def test_n_total_snps(self, bundle) -> None:
+        # 548,818 SNPs in the gnomAD HGDP+1KG reference panel before AIM selection
         assert bundle.n_total_snps == 548818
 
     def test_n_selected_aims(self, bundle) -> None:
+        # Top 5,000 AIMs selected by Rosenberg's In + Fst ranking
         assert bundle.n_selected_aims == 5000
 
 
