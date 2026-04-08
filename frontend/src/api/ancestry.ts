@@ -1,10 +1,14 @@
-/** React Query hooks for ancestry module API (P3-27, P3-34). */
+/** React Query hooks for ancestry module API (P3-27, P3-34, AMv2 Step 6). */
 
-import { useQuery } from "@tanstack/react-query"
+import { useRef } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type {
   AncestryFindingResponse,
   HaplogroupResponse,
+  LAIProgressResponse,
+  LAIResultResponse,
   LAIStatusResponse,
+  LAITriggerResponse,
   PCACoordinatesResponse,
 } from "@/types/ancestry"
 
@@ -91,5 +95,84 @@ export function useLAIStatus() {
       return res.json()
     },
     staleTime: 3_600_000, // 1 hour
+  })
+}
+
+/**
+ * LAI analysis results for a sample.
+ * Returns chromosome painting + global ancestry, or null if not run.
+ * Cached with staleTime: Infinity since LAI results don't change.
+ */
+export function useLAIResults(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["lai-results", sampleId],
+    queryFn: async (): Promise<LAIResultResponse | null> => {
+      const res = await fetch(`/api/analysis/ancestry/lai/${sampleId}/results`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`LAI results failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    enabled: sampleId != null,
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * LAI analysis progress polling for a sample.
+ * Polls every 3 seconds while enabled. Calls onComplete when job finishes.
+ */
+export function useLAIProgress(
+  sampleId: number | null,
+  enabled: boolean,
+  onComplete?: () => void,
+) {
+  const completeFiredRef = useRef(false)
+
+  return useQuery({
+    queryKey: ["lai-progress", sampleId],
+    queryFn: async (): Promise<LAIProgressResponse | null> => {
+      const res = await fetch(`/api/analysis/ancestry/lai/${sampleId}/progress`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`LAI progress failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      const data: LAIProgressResponse | null = await res.json()
+      if (data?.status === "completed" && onComplete && !completeFiredRef.current) {
+        completeFiredRef.current = true
+        onComplete()
+      }
+      // Reset guard when job is not terminal (new job started)
+      if (data?.status === "running" || data?.status === "pending") {
+        completeFiredRef.current = false
+      }
+      return data
+    },
+    enabled: enabled && sampleId != null,
+    refetchInterval: 3_000, // Poll every 3 seconds
+  })
+}
+
+/**
+ * Mutation to trigger LAI analysis for a sample.
+ * Returns a job_id for progress tracking.
+ */
+export function useTriggerLAI() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (sampleId: number): Promise<LAITriggerResponse> => {
+      const res = await fetch(`/api/analysis/ancestry/lai/${sampleId}`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`LAI trigger failed: ${res.status}${text ? ` - ${text}` : ""}`)
+      }
+      return res.json()
+    },
+    onSuccess: (_data, sampleId) => {
+      queryClient.invalidateQueries({ queryKey: ["lai-progress", sampleId] })
+    },
   })
 }
