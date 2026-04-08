@@ -20,6 +20,18 @@ export interface AncestryFindingResponse {
   is_sufficient: boolean
   evidence_level: number
   finding_text: string
+  /** NNLS-kNN confidence (cosine similarity, 0–1). */
+  confidence: number
+  /** Fraction of AIMs missing from user data (0–1). */
+  missing_aim_rate: number
+  /** Admixture estimation method ("nnls" or "idw"). */
+  admixture_method: string
+  /** Number of principal components used. */
+  n_pcs_used: number
+  /** Per-population NNLS fractions (may be null if not computed). */
+  nnls_fractions: Record<string, number> | null
+  /** Per-population kNN fractions (may be null if not computed). */
+  knn_fractions: Record<string, number> | null
 }
 
 /** PCA coordinates for scatter plot visualization (P3-25). */

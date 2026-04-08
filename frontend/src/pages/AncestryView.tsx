@@ -1,17 +1,16 @@
-/** Ancestry module page (P3-27, P3-34).
+/** Ancestry module page (P3-27, P3-34, AMv2 Step 5).
  *
  * Layout:
- * - Ancestry result summary card (top population, coverage, evidence)
- * - Admixture bar chart (population fractions)
- * - PCA scatter plot (user projected onto reference panel)
+ * - Ancestry result summary card (top population, confidence, coverage, evidence)
+ * - Admixture bar chart (7 populations, NNLS fractions)
+ * - PCA scatter plot (user projected onto reference panel, PC selection)
+ * - Analysis details (collapsible — AIMs, PCs, method, reference panel)
+ * - Chromosome painting section (LAI bundle states)
  * - Haplogroup assignments with traversal path (P3-34)
- *
- * PRD P3-27: Ancestry UI — admixture bar, PCA scatter.
- * PRD P3-34: Ancestry UI haplogroup extension.
  */
 
 import { useSearchParams } from "react-router-dom"
-import { Download, Globe, Info, Loader2 } from "lucide-react"
+import { Download, Globe, Info, Loader2, Play } from "lucide-react"
 import PageLoading from "@/components/ui/PageLoading"
 import PageError from "@/components/ui/PageError"
 import PageEmpty from "@/components/ui/PageEmpty"
@@ -23,6 +22,7 @@ import AncestryResultCard from "@/components/ancestry/AncestryResultCard"
 import AdmixtureBar from "@/components/ancestry/AdmixtureBar"
 import PCAScatter from "@/components/ancestry/PCAScatter"
 import HaplogroupCard from "@/components/ancestry/HaplogroupCard"
+import AnalysisDetails from "@/components/ancestry/AnalysisDetails"
 
 export default function AncestryView() {
   const [searchParams] = useSearchParams()
@@ -62,7 +62,7 @@ export default function AncestryView() {
         <div>
           <h1 className="text-2xl font-bold">Ancestry</h1>
           <p className="text-sm text-muted-foreground">
-            Ancestry inference via PCA projection and admixture estimation
+            Ancestry inference via PCA projection and NNLS admixture estimation
           </p>
         </div>
       </div>
@@ -102,18 +102,18 @@ export default function AncestryView() {
             <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold mb-3">Admixture Proportions</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Estimated ancestry proportions based on PCA distance to reference populations
+                Estimated ancestry proportions using NNLS against reference population centroids
               </p>
               <AdmixtureBar admixture_fractions={findingsQuery.data.admixture_fractions} />
             </div>
           </section>
 
           {/* PCA Scatter Plot */}
-          <section aria-label="PCA scatter plot">
+          <section aria-label="PCA scatter plot" className="mb-8">
             <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold mb-3">PCA Projection</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Your sample projected onto the reference panel PCA space (PC1 vs PC2)
+                Your sample projected onto the reference panel PCA space
               </p>
               {pcaQuery.isLoading && (
                 <div className="flex items-center justify-center py-12">
@@ -136,8 +136,13 @@ export default function AncestryView() {
             </div>
           </section>
 
+          {/* Analysis Details (collapsible) */}
+          <section aria-label="Analysis details" className="mb-8">
+            <AnalysisDetails finding={findingsQuery.data} />
+          </section>
+
           {/* Chromosome Painting Section */}
-          <section aria-label="Chromosome painting" className="mt-8">
+          <section aria-label="Chromosome painting" className="mb-8">
             <div className="rounded-lg border bg-card p-5">
               <h2 className="text-lg font-semibold mb-3">Chromosome Painting</h2>
               {laiStatusQuery.isLoading && (
@@ -154,7 +159,8 @@ export default function AncestryView() {
               {laiStatusQuery.data && !laiStatusQuery.data.bundle_downloaded && (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Enables chromosome-level ancestry painting (15-30 min analysis). Requires Java 8+.
+                    Enable chromosome-level ancestry painting for detailed per-chromosome ancestry breakdown.
+                    Requires a one-time ~500 MB download and Java 8+. Analysis takes 15-30 minutes.
                   </p>
                   <div className="flex items-center gap-3">
                     <button
@@ -168,7 +174,7 @@ export default function AncestryView() {
                       )}
                     >
                       <Download className="h-4 w-4" />
-                      {triggerDownload.isPending ? "Starting..." : "Download LAI Bundle (~500 MB)"}
+                      {triggerDownload.isPending ? "Starting..." : "Enable Chromosome Painting (~500 MB)"}
                     </button>
                   </div>
                 </div>
@@ -182,15 +188,30 @@ export default function AncestryView() {
                 </div>
               )}
               {laiStatusQuery.data && laiStatusQuery.data.lai_available && (
-                <p className="text-sm text-muted-foreground">
-                  Chromosome painting results will appear here after running the deep ancestry analysis.
-                </p>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    LAI bundle is ready. Run chromosome painting to see detailed per-chromosome ancestry breakdown.
+                  </p>
+                  <button
+                    type="button"
+                    disabled
+                    title="Chromosome painting will be available in a future update"
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
+                      "bg-primary text-primary-foreground hover:bg-primary/90 transition-colors",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                    )}
+                  >
+                    <Play className="h-4 w-4" />
+                    Run Chromosome Painting Analysis (~20 min)
+                  </button>
+                </div>
               )}
             </div>
           </section>
 
           {/* Haplogroup Assignments (P3-34) */}
-          <section aria-label="Haplogroup assignments" className="mt-8">
+          <section aria-label="Haplogroup assignments">
             {haplogroupQuery.isLoading && (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

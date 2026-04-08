@@ -1,7 +1,7 @@
-/** Ancestry inference summary card (P3-27).
+/** Ancestry inference summary card (P3-27, AMv2 Step 5).
  *
- * Shows the top inferred population, coverage stats, and
- * evidence level for the ancestry inference result.
+ * Shows the top inferred population, coverage stats, confidence badge,
+ * missing AIM rate quality indicator, and evidence level.
  */
 
 import { cn } from "@/lib/utils"
@@ -12,6 +12,43 @@ import { POPULATION_COLORS, POPULATION_LABELS } from "./constants"
 
 interface AncestryResultCardProps {
   finding: AncestryFindingResponse
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100)
+  if (pct === 0) return null
+  const isHigh = pct >= 90
+  const color = isHigh
+    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+    : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+  const label = isHigh ? "High confidence" : "Moderate confidence"
+  return (
+    <span
+      className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", color)}
+      data-testid="confidence-badge"
+    >
+      {label}
+    </span>
+  )
+}
+
+function MissingAimIndicator({ rate }: { rate: number }) {
+  if (rate <= 0) return null
+  const pct = Math.round(rate * 100)
+  const isHigh = pct > 20
+  return (
+    <span
+      className={cn(
+        "text-xs",
+        isHigh
+          ? "text-amber-600 dark:text-amber-400 font-medium"
+          : "text-muted-foreground",
+      )}
+      data-testid="missing-aim-indicator"
+    >
+      {pct}% AIMs missing
+    </span>
+  )
 }
 
 export default function AncestryResultCard({ finding }: AncestryResultCardProps) {
@@ -38,19 +75,21 @@ export default function AncestryResultCard({ finding }: AncestryResultCardProps)
             >
               {topLabel}
             </span>
+            <ConfidenceBadge confidence={finding.confidence} />
           </div>
 
           <p className="text-sm text-muted-foreground mb-3">
             {finding.finding_text}
           </p>
 
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span>
               {formatNumber(finding.snps_used)} / {formatNumber(finding.snps_total)} AIMs used ({coveragePct}%)
             </span>
             <span className="flex items-center gap-1">
               Evidence: <EvidenceStars level={finding.evidence_level} />
             </span>
+            <MissingAimIndicator rate={finding.missing_aim_rate} />
             {!finding.is_sufficient && (
               <span className="text-amber-600 dark:text-amber-400 font-medium">
                 Low coverage — results may be unreliable
