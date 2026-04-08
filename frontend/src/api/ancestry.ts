@@ -1,5 +1,6 @@
 /** React Query hooks for ancestry module API (P3-27, P3-34, AMv2 Step 6). */
 
+import { useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type {
   AncestryFindingResponse,
@@ -127,7 +128,8 @@ export function useLAIProgress(
   enabled: boolean,
   onComplete?: () => void,
 ) {
-  const completeFiredRef = { current: false }
+  const completeFiredRef = useRef(false)
+
   return useQuery({
     queryKey: ["lai-progress", sampleId],
     queryFn: async (): Promise<LAIProgressResponse | null> => {
@@ -140,6 +142,10 @@ export function useLAIProgress(
       if (data?.status === "completed" && onComplete && !completeFiredRef.current) {
         completeFiredRef.current = true
         onComplete()
+      }
+      // Reset guard when job is not terminal (new job started)
+      if (data?.status === "running" || data?.status === "pending") {
+        completeFiredRef.current = false
       }
       return data
     },
