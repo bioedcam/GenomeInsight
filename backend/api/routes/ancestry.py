@@ -49,6 +49,12 @@ class AncestryFindingResponse(BaseModel):
     is_sufficient: bool
     evidence_level: int
     finding_text: str
+    confidence: float = 0.0
+    missing_aim_rate: float = 0.0
+    admixture_method: str = "nnls"
+    n_pcs_used: int = 0
+    nnls_fractions: dict[str, float] | None = None
+    knn_fractions: dict[str, float] | None = None
 
 
 class AncestryRunResponse(BaseModel):
@@ -180,7 +186,8 @@ def get_ancestry_findings(
     sample_engine = _get_sample_engine(sample_id)
 
     with sample_engine.connect() as conn:
-        row = conn.execute(
+        # Fetch PCA projection finding (has pc_scores, distances, ranking)
+        pca_row = conn.execute(
             sa.select(findings)
             .where(
                 findings.c.module == "ancestry",
@@ -190,24 +197,70 @@ def get_ancestry_findings(
             .limit(1)
         ).fetchone()
 
-    if row is None:
+        # Fetch NNLS admixture finding (has confidence, method, fractions)
+        nnls_row = conn.execute(
+            sa.select(findings)
+            .where(
+                findings.c.module == "ancestry",
+                findings.c.category == "nnls_admixture",
+            )
+            .order_by(findings.c.id.desc())
+            .limit(1)
+        ).fetchone()
+
+        # Fetch kNN admixture finding
+        knn_row = conn.execute(
+            sa.select(findings)
+            .where(
+                findings.c.module == "ancestry",
+                findings.c.category == "knn_admixture",
+            )
+            .order_by(findings.c.id.desc())
+            .limit(1)
+        ).fetchone()
+
+    if pca_row is None:
         return None
 
-    detail = json.loads(row.detail_json) if row.detail_json else {}
+    pca_detail = json.loads(pca_row.detail_json) if pca_row.detail_json else {}
+    nnls_detail = json.loads(nnls_row.detail_json) if nnls_row and nnls_row.detail_json else {}
+    knn_detail = json.loads(knn_row.detail_json) if knn_row and knn_row.detail_json else {}
+
+    # Prefer NNLS fractions over PCA-derived fractions
+    admixture_fractions = (
+        nnls_detail.get("admixture_fractions")
+        or pca_detail.get("admixture_fractions", {})
+    )
+    top_population = (
+        nnls_detail.get("top_population")
+        or pca_detail.get("top_population", "")
+    )
+
+    # Use NNLS finding text if available, otherwise PCA
+    finding_text = (nnls_row.finding_text if nnls_row else None) or pca_row.finding_text or ""
 
     return AncestryFindingResponse(
-        top_population=detail.get("top_population", ""),
-        pc_scores=detail.get("pc_scores", []),
-        population_distances=detail.get("population_distances", {}),
-        admixture_fractions=detail.get("admixture_fractions", {}),
-        population_ranking=[PopulationDistance(**p) for p in detail.get("population_ranking", [])],
-        snps_used=detail.get("snps_used", 0),
-        snps_total=detail.get("snps_total", 0),
-        coverage_fraction=detail.get("coverage_fraction", 0.0),
-        projection_time_ms=detail.get("projection_time_ms", 0.0),
-        is_sufficient=detail.get("is_sufficient", False),
-        evidence_level=row.evidence_level or 2,
-        finding_text=row.finding_text or "",
+        top_population=top_population,
+        pc_scores=pca_detail.get("pc_scores", []),
+        population_distances=pca_detail.get("population_distances", {}),
+        admixture_fractions=admixture_fractions,
+        population_ranking=[
+            PopulationDistance(**p)
+            for p in pca_detail.get("population_ranking", [])
+        ],
+        snps_used=pca_detail.get("snps_used", 0),
+        snps_total=pca_detail.get("snps_total", 0),
+        coverage_fraction=pca_detail.get("coverage_fraction", 0.0),
+        projection_time_ms=pca_detail.get("projection_time_ms", 0.0),
+        is_sufficient=pca_detail.get("is_sufficient", False),
+        evidence_level=pca_row.evidence_level or 2,
+        finding_text=finding_text,
+        confidence=nnls_detail.get("confidence", 0.0),
+        missing_aim_rate=pca_detail.get("missing_aim_rate", 0.0),
+        admixture_method=nnls_detail.get("admixture_method", "nnls"),
+        n_pcs_used=pca_detail.get("n_pcs_used", 0),
+        nnls_fractions=nnls_detail.get("admixture_fractions"),
+        knn_fractions=knn_detail.get("admixture_fractions"),
     )
 
 

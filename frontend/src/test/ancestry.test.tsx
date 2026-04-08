@@ -1,11 +1,12 @@
-/** Tests for the Ancestry UI (P3-27, P3-34). */
+/** Tests for the Ancestry UI (P3-27, P3-34, AMv2 Step 5). */
 
 import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "./test-utils"
+import { render, screen, fireEvent } from "./test-utils"
 import AncestryResultCard from "@/components/ancestry/AncestryResultCard"
 import AdmixtureBar from "@/components/ancestry/AdmixtureBar"
 import PCAScatter from "@/components/ancestry/PCAScatter"
 import HaplogroupCard from "@/components/ancestry/HaplogroupCard"
+import AnalysisDetails from "@/components/ancestry/AnalysisDetails"
 import type {
   AncestryFindingResponse,
   HaplogroupAssignment,
@@ -23,71 +24,92 @@ vi.mock("react-plotly.js", () => ({
 
 const ANCESTRY_FINDING: AncestryFindingResponse = {
   top_population: "EUR",
-  pc_scores: [0.012, -0.004, 0.001, 0.002, -0.001, 0.000],
+  pc_scores: [0.012, -0.004, 0.001, 0.002, -0.001, 0.000, 0.003, -0.002],
   population_distances: {
     AFR: 0.85,
     AMR: 0.32,
+    CSA: 0.45,
     EAS: 0.71,
     EUR: 0.04,
-    SAS: 0.45,
+    MID: 0.56,
     OCE: 0.92,
   },
   admixture_fractions: {
     EUR: 0.82,
     AMR: 0.11,
     EAS: 0.04,
-    SAS: 0.02,
+    CSA: 0.02,
     AFR: 0.01,
+    MID: 0.00,
     OCE: 0.00,
   },
   population_ranking: [
     { population: "EUR", distance: 0.04 },
     { population: "AMR", distance: 0.32 },
-    { population: "SAS", distance: 0.45 },
+    { population: "CSA", distance: 0.45 },
+    { population: "MID", distance: 0.56 },
     { population: "EAS", distance: 0.71 },
     { population: "AFR", distance: 0.85 },
     { population: "OCE", distance: 0.92 },
   ],
-  snps_used: 112,
-  snps_total: 128,
-  coverage_fraction: 0.875,
+  snps_used: 4500,
+  snps_total: 5000,
+  coverage_fraction: 0.9,
   projection_time_ms: 45.3,
   is_sufficient: true,
   evidence_level: 2,
-  finding_text: "Primary ancestry component: European (82.0%)",
+  finding_text: "Inferred ancestry: EUR 82%, AMR 11%, EAS 4% (4,500/5,000 markers, 90% coverage)",
+  confidence: 0.95,
+  missing_aim_rate: 0.1,
+  admixture_method: "nnls",
+  n_pcs_used: 8,
+  nnls_fractions: { EUR: 0.82, AMR: 0.11, EAS: 0.04, CSA: 0.02, AFR: 0.01, MID: 0.00, OCE: 0.00 },
+  knn_fractions: { EUR: 0.80, AMR: 0.13, EAS: 0.04, CSA: 0.02, AFR: 0.01, MID: 0.00, OCE: 0.00 },
 }
 
 const LOW_COVERAGE_FINDING: AncestryFindingResponse = {
   ...ANCESTRY_FINDING,
-  snps_used: 20,
-  snps_total: 128,
-  coverage_fraction: 0.156,
+  snps_used: 500,
+  snps_total: 5000,
+  coverage_fraction: 0.1,
   is_sufficient: false,
+  missing_aim_rate: 0.9,
+  confidence: 0.3,
   finding_text: "Primary ancestry component: European (70.0%) — low coverage",
 }
 
 const PCA_COORDINATES: PCACoordinatesResponse = {
-  user: [0.012, -0.004, 0.001, 0.002, -0.001, 0.000],
+  user: [0.012, -0.004, 0.001, 0.002, -0.001, 0.000, 0.003, -0.002],
   reference_samples: {
     EUR: [
-      [0.01, -0.005],
-      [0.015, -0.003],
+      [0.01, -0.005, 0.001, 0.002, -0.001, 0.000, 0.003, -0.002],
+      [0.015, -0.003, 0.002, 0.001, -0.002, 0.001, 0.002, -0.001],
     ],
     AFR: [
-      [-0.02, 0.03],
-      [-0.025, 0.035],
+      [-0.02, 0.03, -0.01, 0.005, 0.001, -0.002, 0.003, 0.001],
+      [-0.025, 0.035, -0.012, 0.006, 0.002, -0.001, 0.002, 0.002],
+    ],
+    CSA: [
+      [0.005, -0.01, 0.008, -0.003, 0.002, 0.001, -0.001, 0.003],
+    ],
+    MID: [
+      [0.008, -0.006, 0.004, -0.001, 0.001, 0.002, 0.001, 0.001],
     ],
   },
   centroids: {
-    EUR: [0.012, -0.004],
-    AFR: [-0.022, 0.032],
+    EUR: [0.012, -0.004, 0.001, 0.002, -0.001, 0.000, 0.003, -0.002],
+    AFR: [-0.022, 0.032, -0.011, 0.005, 0.001, -0.001, 0.002, 0.001],
+    CSA: [0.005, -0.01, 0.008, -0.003, 0.002, 0.001, -0.001, 0.003],
+    MID: [0.008, -0.006, 0.004, -0.001, 0.001, 0.002, 0.001, 0.001],
   },
   population_labels: {
     EUR: "European",
     AFR: "African",
+    CSA: "Central/South Asian",
+    MID: "Middle Eastern",
   },
-  n_components: 6,
-  pc_labels: ["PC1", "PC2", "PC3", "PC4", "PC5", "PC6"],
+  n_components: 8,
+  pc_labels: ["PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8"],
   top_population: "EUR",
 }
 
@@ -102,18 +124,46 @@ describe("AncestryResultCard", () => {
   it("renders finding text", () => {
     render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
     expect(
-      screen.getByText("Primary ancestry component: European (82.0%)"),
+      screen.getByText(/Inferred ancestry: EUR 82%/),
     ).toBeInTheDocument()
   })
 
   it("renders SNP coverage stats", () => {
     render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
-    expect(screen.getByText(/112 \/ 128 AIMs used \(88%\)/)).toBeInTheDocument()
+    expect(screen.getByText(/4,500 \/ 5,000 AIMs used \(90%\)/)).toBeInTheDocument()
   })
 
   it("renders evidence stars", () => {
     render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
     expect(screen.getByLabelText("2 of 4 stars evidence")).toBeInTheDocument()
+  })
+
+  it("shows high confidence badge", () => {
+    render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
+    expect(screen.getByTestId("confidence-badge")).toHaveTextContent("High confidence")
+  })
+
+  it("shows moderate confidence badge when confidence < 90%", () => {
+    const modConf = { ...ANCESTRY_FINDING, confidence: 0.75 }
+    render(<AncestryResultCard finding={modConf} />)
+    expect(screen.getByTestId("confidence-badge")).toHaveTextContent("Moderate confidence")
+  })
+
+  it("does not show confidence badge when confidence is 0", () => {
+    const noConf = { ...ANCESTRY_FINDING, confidence: 0 }
+    render(<AncestryResultCard finding={noConf} />)
+    expect(screen.queryByTestId("confidence-badge")).not.toBeInTheDocument()
+  })
+
+  it("shows missing AIM indicator", () => {
+    render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
+    expect(screen.getByTestId("missing-aim-indicator")).toHaveTextContent("10% AIMs missing")
+  })
+
+  it("does not show missing AIM indicator when rate is 0", () => {
+    const noMissing = { ...ANCESTRY_FINDING, missing_aim_rate: 0 }
+    render(<AncestryResultCard finding={noMissing} />)
+    expect(screen.queryByTestId("missing-aim-indicator")).not.toBeInTheDocument()
   })
 
   it("shows low coverage warning when insufficient", () => {
@@ -130,14 +180,14 @@ describe("AncestryResultCard", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("renders population ranking", () => {
+  it("renders population ranking with 7 populations", () => {
     render(<AncestryResultCard finding={ANCESTRY_FINDING} />)
     expect(screen.getByText("Population Ranking")).toBeInTheDocument()
-    // "European" appears twice (badge + ranking), so use getAllByText
     expect(screen.getAllByText("European").length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText("Admixed American")).toBeInTheDocument()
+    expect(screen.getByText("Central/South Asian")).toBeInTheDocument()
     expect(screen.getByText("East Asian")).toBeInTheDocument()
-    expect(screen.getByText("South Asian")).toBeInTheDocument()
+    expect(screen.getByText("Middle Eastern")).toBeInTheDocument()
     expect(screen.getByText("African")).toBeInTheDocument()
     expect(screen.getByText("Oceanian")).toBeInTheDocument()
   })
@@ -164,11 +214,14 @@ describe("AdmixtureBar", () => {
     expect(screen.getByTestId("admixture-bar")).toBeInTheDocument()
   })
 
-  it("renders plotly chart with traces", () => {
+  it("renders plotly chart with traces for 7 populations", () => {
     render(
       <AdmixtureBar admixture_fractions={ANCESTRY_FINDING.admixture_fractions} />,
     )
-    expect(screen.getByTestId("plotly-chart")).toBeInTheDocument()
+    const chart = screen.getByTestId("plotly-chart")
+    const traces = JSON.parse(chart.getAttribute("data-traces") ?? "[]")
+    // EUR, AMR, EAS, CSA should appear (above 0.001 threshold)
+    expect(traces.length).toBeGreaterThanOrEqual(4)
   })
 
   it("shows empty state when no fractions", () => {
@@ -184,7 +237,6 @@ describe("AdmixtureBar", () => {
     )
     const chart = screen.getByTestId("plotly-chart")
     const traces = JSON.parse(chart.getAttribute("data-traces") ?? "[]")
-    // Only EUR should appear (AFR is below 0.001 threshold)
     expect(traces).toHaveLength(1)
     expect(traces[0].name).toBe("European")
   })
@@ -210,6 +262,8 @@ describe("PCAScatter", () => {
     const names = traces.map((t: { name: string }) => t.name)
     expect(names).toContain("European")
     expect(names).toContain("African")
+    expect(names).toContain("Central/South Asian")
+    expect(names).toContain("Middle Eastern")
   })
 
   it("includes user sample trace", () => {
@@ -226,6 +280,77 @@ describe("PCAScatter", () => {
     const traces = JSON.parse(chart.getAttribute("data-traces") ?? "[]")
     const names = traces.map((t: { name: string }) => t.name)
     expect(names).toContain("Centroids")
+  })
+
+  it("renders PC selection dropdowns when n_components > 2", () => {
+    render(<PCAScatter pcaData={PCA_COORDINATES} />)
+    expect(screen.getByTestId("pc-selectors")).toBeInTheDocument()
+    expect(screen.getByTestId("pc-x-select")).toBeInTheDocument()
+    expect(screen.getByTestId("pc-y-select")).toBeInTheDocument()
+  })
+
+  it("does not render PC selectors when n_components <= 2", () => {
+    const twoPC: PCACoordinatesResponse = {
+      ...PCA_COORDINATES,
+      n_components: 2,
+      pc_labels: ["PC1", "PC2"],
+    }
+    render(<PCAScatter pcaData={twoPC} />)
+    expect(screen.queryByTestId("pc-selectors")).not.toBeInTheDocument()
+  })
+
+  it("updates chart axes when PC selection changes", () => {
+    render(<PCAScatter pcaData={PCA_COORDINATES} />)
+    const ySelect = screen.getByTestId("pc-y-select")
+    fireEvent.change(ySelect, { target: { value: "2" } })
+    // After changing Y to PC3, the chart should re-render
+    expect(screen.getByTestId("plotly-chart")).toBeInTheDocument()
+  })
+})
+
+// ── AnalysisDetails tests ──────────────────────────────────────────
+
+describe("AnalysisDetails", () => {
+  it("renders collapsed by default", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    expect(screen.getByTestId("analysis-details")).toBeInTheDocument()
+    expect(screen.queryByTestId("analysis-details-content")).not.toBeInTheDocument()
+  })
+
+  it("expands when clicked", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByTestId("analysis-details-content")).toBeInTheDocument()
+  })
+
+  it("shows AIMs used when expanded", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByText(/4,500 \/ 5,000/)).toBeInTheDocument()
+  })
+
+  it("shows PCs used when expanded", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByText("8")).toBeInTheDocument()
+  })
+
+  it("shows method description when expanded", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByText(/Non-negative least squares/)).toBeInTheDocument()
+  })
+
+  it("shows reference panel info when expanded", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByText(/3,419 single-ancestry samples/)).toBeInTheDocument()
+  })
+
+  it("shows missing AIM rate when expanded", () => {
+    render(<AnalysisDetails finding={ANCESTRY_FINDING} />)
+    fireEvent.click(screen.getByTestId("analysis-details-toggle"))
+    expect(screen.getByText("10%")).toBeInTheDocument()
   })
 })
 
@@ -298,8 +423,6 @@ describe("HaplogroupCard", () => {
     expect(path).toBeInTheDocument()
     expect(screen.getByText("L3")).toBeInTheDocument()
     expect(screen.getByText("N")).toBeInTheDocument()
-    // R, H, H1, H1a appear multiple times (in path + haplogroup name + finding text)
-    // so verify via traversal path container
     expect(path.textContent).toContain("R")
     expect(path.textContent).toContain("HV")
     expect(path.textContent).toContain("H1")
