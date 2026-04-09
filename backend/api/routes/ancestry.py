@@ -55,6 +55,8 @@ class AncestryFindingResponse(BaseModel):
     n_pcs_used: int = 0
     nnls_fractions: dict[str, float] | None = None
     knn_fractions: dict[str, float] | None = None
+    nnls_ci_low: dict[str, float] | None = None
+    nnls_ci_high: dict[str, float] | None = None
 
 
 class AncestryRunResponse(BaseModel):
@@ -256,6 +258,8 @@ def get_ancestry_findings(
         n_pcs_used=pca_detail.get("n_pcs_used", 0),
         nnls_fractions=nnls_detail.get("admixture_fractions"),
         knn_fractions=knn_detail.get("admixture_fractions"),
+        nnls_ci_low=nnls_detail.get("ci_low"),
+        nnls_ci_high=nnls_detail.get("ci_high"),
     )
 
 

@@ -32,6 +32,10 @@ export interface AncestryFindingResponse {
   nnls_fractions: Record<string, number> | null
   /** Per-population kNN fractions (may be null if not computed). */
   knn_fractions: Record<string, number> | null
+  /** Bootstrap 95% CI lower bound per population (NNLS). */
+  nnls_ci_low: Record<string, number> | null
+  /** Bootstrap 95% CI upper bound per population (NNLS). */
+  nnls_ci_high: Record<string, number> | null
 }
 
 /** PCA coordinates for scatter plot visualization (P3-25). */
@@ -88,6 +92,10 @@ export interface LAIGlobalAncestryEntry {
   percentage: number
   display_name: string
   color: string
+  /** Per-population window confidence from LAI (mean softmax probability). */
+  confidence?: number
+  /** Warning text, e.g. for MID lower-precision. */
+  warning?: string
 }
 
 /** A single segment in chromosome painting (one window). */

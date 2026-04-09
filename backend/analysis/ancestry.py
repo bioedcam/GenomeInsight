@@ -222,6 +222,8 @@ class AncestryResult:
     n_pcs_used: int = 0
     nnls_fractions: dict[str, float] | None = None
     knn_fractions: dict[str, float] | None = None
+    nnls_ci_low: dict[str, float] | None = None
+    nnls_ci_high: dict[str, float] | None = None
 
     @property
     def n_components(self) -> int:
@@ -524,6 +526,88 @@ def estimate_admixture_nnls(
     return fractions
 
 
+def bootstrap_admixture_nnls(
+    user_pcs: np.ndarray,
+    bundle: AncestryBundle,
+    genotype_map: dict[str, str | None],
+    n_iterations: int = 100,
+    ci: float = 0.95,
+    rng_seed: int | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Bootstrap confidence intervals for NNLS admixture fractions.
+
+    Resamples AIM subsets (with replacement), re-projects onto PCA space,
+    and re-runs NNLS for each iteration.  Returns the lower and upper
+    bounds of the CI per population.
+
+    Args:
+        user_pcs: User's projected PC coordinates (unused directly — kept
+            for API symmetry; we re-project from genotypes each iteration).
+        bundle: Loaded ancestry PCA bundle.
+        genotype_map: rsid → genotype string mapping for the sample.
+        n_iterations: Number of bootstrap iterations.
+        ci: Confidence interval width (0–1), default 0.95.
+        rng_seed: Optional seed for reproducibility.
+
+    Returns:
+        Tuple of (ci_low dict, ci_high dict) mapping population → bound.
+    """
+    rng = np.random.default_rng(rng_seed)
+    pops = list(bundle.reference_centroids.keys())
+    n_snps = bundle.snp_count
+    alpha = (1.0 - ci) / 2.0
+
+    # Pre-encode dosages for all AIMs
+    dosages = np.full(n_snps, np.nan, dtype=np.float64)
+    for i, snp in enumerate(bundle.snps):
+        genotype = genotype_map.get(snp.rsid)
+        d = _encode_dosage(genotype, snp.alt)
+        if d is not None:
+            dosages[i] = d
+
+    # Centroid matrix for NNLS
+    centroid_matrix = np.column_stack([bundle.reference_centroids[p] for p in pops])
+
+    # Collect fractions from each bootstrap iteration
+    all_fracs = np.zeros((n_iterations, len(pops)), dtype=np.float64)
+
+    for it in range(n_iterations):
+        # Resample AIM indices with replacement
+        idx = rng.integers(0, n_snps, size=n_snps)
+
+        # Build standardized dosage vector for resampled AIMs
+        standardized = np.zeros(n_snps, dtype=np.float64)
+        for j, orig_i in enumerate(idx):
+            d = dosages[orig_i]
+            if not np.isnan(d):
+                std = bundle.stds[orig_i]
+                if std > 0:
+                    standardized[j] = (d - bundle.means[orig_i]) / std
+
+        # Re-project using resampled loadings
+        resampled_loadings = bundle.loadings[idx, :]
+        pc_scores = standardized @ resampled_loadings
+
+        # NNLS
+        x, _ = _scipy_nnls(centroid_matrix, pc_scores)
+        total = x.sum()
+        if total > 0:
+            x = x / total
+        else:
+            x = np.ones(len(pops)) / len(pops)
+
+        all_fracs[it] = x
+
+    # Compute percentile-based confidence intervals
+    ci_low_vals = np.percentile(all_fracs, alpha * 100, axis=0)
+    ci_high_vals = np.percentile(all_fracs, (1.0 - alpha) * 100, axis=0)
+
+    ci_low = {pop: round(float(ci_low_vals[i]), 4) for i, pop in enumerate(pops)}
+    ci_high = {pop: round(float(ci_high_vals[i]), 4) for i, pop in enumerate(pops)}
+
+    return ci_low, ci_high
+
+
 def estimate_admixture_knn(
     user_pcs: np.ndarray,
     bundle: AncestryBundle,
@@ -785,6 +869,9 @@ def infer_ancestry(
     # Confidence: cosine similarity between NNLS and kNN
     confidence = compute_confidence(nnls_fracs, knn_fracs)
 
+    # Bootstrap 95% CI for NNLS fractions
+    ci_low, ci_high = bootstrap_admixture_nnls(pc_scores, bundle, genotype_map, n_iterations=100)
+
     # Top population from NNLS
     top_pop = max(nnls_fracs, key=lambda p: nnls_fracs[p])
 
@@ -810,6 +897,8 @@ def infer_ancestry(
         n_pcs_used=bundle.n_components,
         nnls_fractions=nnls_fracs,
         knn_fractions=knn_fracs,
+        nnls_ci_low=ci_low,
+        nnls_ci_high=ci_high,
     )
 
     logger.info(
@@ -896,7 +985,7 @@ def store_ancestry_findings(
     }
 
     # Row 2: NNLS admixture (primary — has top_population for get_inferred_ancestry)
-    nnls_detail = {
+    nnls_detail: dict = {
         "top_population": result.top_population,
         "inferred_ancestry": result.top_population,
         "admixture_fractions": result.nnls_fractions or result.admixture_fractions,
@@ -907,6 +996,10 @@ def store_ancestry_findings(
         "snps_total": result.snps_total,
         "coverage_fraction": result.coverage_fraction,
     }
+    if result.nnls_ci_low is not None:
+        nnls_detail["ci_low"] = result.nnls_ci_low
+    if result.nnls_ci_high is not None:
+        nnls_detail["ci_high"] = result.nnls_ci_high
 
     nnls_row = {
         "module": "ancestry",

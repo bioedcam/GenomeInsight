@@ -136,7 +136,22 @@ export default function AncestryView() {
               <p className="text-sm text-muted-foreground mb-4">
                 Estimated ancestry proportions using NNLS against reference population centroids
               </p>
-              <AdmixtureBar admixture_fractions={findingsQuery.data.admixture_fractions} />
+              <AdmixtureBar
+                admixture_fractions={findingsQuery.data.admixture_fractions}
+                ci_low={findingsQuery.data.nnls_ci_low ?? undefined}
+                ci_high={findingsQuery.data.nnls_ci_high ?? undefined}
+              />
+              {/* MID lower-precision info note */}
+              {findingsQuery.data.admixture_fractions.MID != null &&
+                findingsQuery.data.admixture_fractions.MID > 0.001 &&
+                findingsQuery.data.admixture_fractions.MID < 0.15 && (
+                <div className="flex items-start gap-2 mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-sm">
+                  <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>
+                    Middle Eastern ancestry estimates have lower precision with the current reference panel.
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -316,7 +331,13 @@ export default function AncestryView() {
                             {Object.entries(findingsQuery.data?.admixture_fractions ?? {})
                               .filter(([, v]) => v >= 0.001)
                               .sort(([, a], [, b]) => b - a)
-                              .map(([pop, frac]) => (
+                              .map(([pop, frac]) => {
+                                const ciLow = findingsQuery.data?.nnls_ci_low?.[pop]
+                                const ciHigh = findingsQuery.data?.nnls_ci_high?.[pop]
+                                const halfWidth = ciLow != null && ciHigh != null
+                                  ? (ciHigh - ciLow) / 2 * 100
+                                  : null
+                                return (
                                 <div key={pop} className="flex items-center gap-2 text-sm">
                                   <span className="w-28 text-muted-foreground">
                                     {POPULATION_LABELS[pop] ?? pop}
@@ -330,11 +351,15 @@ export default function AncestryView() {
                                       }}
                                     />
                                   </div>
-                                  <span className="w-12 text-right text-muted-foreground">
+                                  <span className="w-16 text-right text-muted-foreground">
                                     {(frac * 100).toFixed(1)}%
+                                    {halfWidth != null && halfWidth > 0.05 && (
+                                      <span className="text-xs"> {"\u00B1"}{halfWidth.toFixed(1)}</span>
+                                    )}
                                   </span>
                                 </div>
-                              ))}
+                                )
+                              })}
                           </div>
                         </div>
                       </div>
@@ -344,6 +369,14 @@ export default function AncestryView() {
                         tier1={findingsQuery.data?.admixture_fractions ?? {}}
                         tier2={laiResultsQuery.data.global_ancestry}
                       />
+
+                      {/* MID lower-precision warning from LAI */}
+                      {laiResultsQuery.data.global_ancestry.MID?.warning && (
+                        <div className="flex items-start gap-2 mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-sm">
+                          <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <span>{laiResultsQuery.data.global_ancestry.MID.warning}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

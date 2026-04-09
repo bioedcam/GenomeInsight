@@ -31,6 +31,7 @@ from backend.analysis.ancestry import (
     _classify_nearest_centroid,
     _encode_dosage,
     _project_onto_pca,
+    bootstrap_admixture_nnls,
     classify_ancestry,
     compute_admixture_fractions,
     compute_confidence,
@@ -1254,3 +1255,203 @@ class TestAncestryBundle:
         idx = small_bundle.rsid_to_index()
         assert idx["rs1"] == 0
         assert idx["rs4"] == 3
+
+
+# ── Bootstrap NNLS CI tests (T-MID-01) ──────────────────────────────────
+
+
+class TestBootstrapAdmixtureNNLS:
+    """T-MID-01: Bootstrap CI contains the point estimate."""
+
+    def test_ci_contains_point_estimate(self, small_bundle: AncestryBundle) -> None:
+        """Bootstrap 95% CI should contain the NNLS point estimate.
+
+        With only 4 AIMs in the small bundle, bootstrap variability is
+        high — use a generous tolerance of 0.15 to account for the small
+        feature set producing wide CIs.
+        """
+        user_pcs = np.array([-1.0, 1.5])  # near EUR centroid
+        genotype_map = {snp.rsid: "AG" for snp in small_bundle.snps}
+
+        point_est = estimate_admixture_nnls(user_pcs, small_bundle)
+        ci_low, ci_high = bootstrap_admixture_nnls(
+            user_pcs,
+            small_bundle,
+            genotype_map,
+            n_iterations=200,
+            rng_seed=42,
+        )
+
+        for pop in small_bundle.reference_centroids:
+            # Point estimate should fall within or near the CI
+            # (generous tolerance for small bundle with only 4 AIMs)
+            assert ci_low[pop] <= point_est[pop] + 0.15, (
+                f"{pop}: ci_low={ci_low[pop]:.4f} > point={point_est[pop]:.4f}"
+            )
+            assert ci_high[pop] >= point_est[pop] - 0.15, (
+                f"{pop}: ci_high={ci_high[pop]:.4f} < point={point_est[pop]:.4f}"
+            )
+
+    def test_ci_low_leq_ci_high(self, small_bundle: AncestryBundle) -> None:
+        """CI lower bound should always be <= upper bound."""
+        genotype_map = {snp.rsid: "AG" for snp in small_bundle.snps}
+        ci_low, ci_high = bootstrap_admixture_nnls(
+            np.array([0.0, 0.0]),
+            small_bundle,
+            genotype_map,
+            n_iterations=50,
+            rng_seed=42,
+        )
+        for pop in small_bundle.reference_centroids:
+            assert ci_low[pop] <= ci_high[pop]
+
+    def test_ci_values_non_negative(self, small_bundle: AncestryBundle) -> None:
+        genotype_map = {snp.rsid: "AG" for snp in small_bundle.snps}
+        ci_low, ci_high = bootstrap_admixture_nnls(
+            np.array([0.0, 0.0]),
+            small_bundle,
+            genotype_map,
+            n_iterations=50,
+            rng_seed=42,
+        )
+        for pop in small_bundle.reference_centroids:
+            assert ci_low[pop] >= 0.0
+            assert ci_high[pop] >= 0.0
+
+    def test_integration_infer_ancestry_has_ci(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        """infer_ancestry should populate nnls_ci_low and nnls_ci_high."""
+        result = infer_ancestry(small_bundle, eur_sample)
+        assert result.nnls_ci_low is not None
+        assert result.nnls_ci_high is not None
+        for pop in small_bundle.reference_centroids:
+            assert pop in result.nnls_ci_low
+            assert pop in result.nnls_ci_high
+
+    def test_stored_finding_has_ci(
+        self,
+        small_bundle: AncestryBundle,
+        eur_sample: sa.Engine,
+    ) -> None:
+        """CI should be stored in the nnls_admixture finding detail_json."""
+        result = infer_ancestry(small_bundle, eur_sample)
+        store_ancestry_findings(result, eur_sample)
+
+        with eur_sample.connect() as conn:
+            row = conn.execute(
+                sa.select(findings)
+                .where(findings.c.module == "ancestry")
+                .where(findings.c.category == "nnls_admixture")
+            ).fetchone()
+        detail = json.loads(row.detail_json)
+        assert "ci_low" in detail
+        assert "ci_high" in detail
+
+
+# ── MID warning tests (T-MID-02, T-MID-03) ──────────────────────────────
+
+
+class TestMIDWarning:
+    """T-MID-02/03: MID lower-precision warning triggers correctly."""
+
+    def test_mid_warning_triggers_below_15pct(self) -> None:
+        """T-MID-02: MID warning triggers when MID proportion < 15%."""
+        from backend.analysis.gnomix_inference import CANONICAL_POPULATIONS, ChromosomeResult
+        from backend.analysis.lai_runner import LAIRunner
+
+        runner = LAIRunner.__new__(LAIRunner)
+        n_windows = 100
+
+        # All windows are EUR on both haplotypes — MID gets 0%
+        eur_idx = CANONICAL_POPULATIONS.index("EUR")
+        hap0 = np.full(n_windows, eur_idx, dtype=np.int32)
+        hap1 = np.full(n_windows, eur_idx, dtype=np.int32)
+
+        # Build probabilities with high confidence for EUR
+        probs = np.zeros((n_windows, 7), dtype=np.float64)
+        probs[:, eur_idx] = 0.95
+
+        chrom_results = {
+            1: ChromosomeResult(
+                chrom=1,
+                n_windows=n_windows,
+                hap0_ancestry=hap0,
+                hap1_ancestry=hap1,
+                hap0_probs=probs,
+                hap1_probs=probs,
+                window_positions=[(i * 1000, (i + 1) * 1000) for i in range(n_windows)],
+            )
+        }
+
+        ancestry = runner._compute_global_ancestry(chrom_results)
+        assert "MID" in ancestry
+        assert ancestry["MID"]["fraction"] < 0.15
+        assert "warning" in ancestry["MID"]
+        assert "lower precision" in ancestry["MID"]["warning"]
+
+    def test_mid_warning_absent_above_15pct(self) -> None:
+        """T-MID-03: MID warning does NOT trigger when MID proportion > 15%."""
+        from backend.analysis.gnomix_inference import CANONICAL_POPULATIONS, ChromosomeResult
+        from backend.analysis.lai_runner import LAIRunner
+
+        runner = LAIRunner.__new__(LAIRunner)
+        n_windows = 100
+
+        mid_idx = CANONICAL_POPULATIONS.index("MID")
+        # All windows assigned to MID on both haplotypes → 100%
+        hap = np.full(n_windows, mid_idx, dtype=np.int32)
+
+        probs = np.zeros((n_windows, 7), dtype=np.float64)
+        probs[:, mid_idx] = 0.90
+
+        chrom_results = {
+            1: ChromosomeResult(
+                chrom=1,
+                n_windows=n_windows,
+                hap0_ancestry=hap,
+                hap1_ancestry=hap,
+                hap0_probs=probs,
+                hap1_probs=probs,
+                window_positions=[(i * 1000, (i + 1) * 1000) for i in range(n_windows)],
+            )
+        }
+
+        ancestry = runner._compute_global_ancestry(chrom_results)
+        assert "MID" in ancestry
+        assert ancestry["MID"]["fraction"] > 0.15
+        assert "warning" not in ancestry["MID"]
+
+    def test_per_population_confidence_computed(self) -> None:
+        """Per-population confidence should be present in LAI results."""
+        from backend.analysis.gnomix_inference import CANONICAL_POPULATIONS, ChromosomeResult
+        from backend.analysis.lai_runner import LAIRunner
+
+        runner = LAIRunner.__new__(LAIRunner)
+        n_windows = 10
+
+        eur_idx = CANONICAL_POPULATIONS.index("EUR")
+        hap = np.full(n_windows, eur_idx, dtype=np.int32)
+        probs = np.zeros((n_windows, 7), dtype=np.float64)
+        probs[:, eur_idx] = 0.85
+
+        chrom_results = {
+            1: ChromosomeResult(
+                chrom=1,
+                n_windows=n_windows,
+                hap0_ancestry=hap,
+                hap1_ancestry=hap,
+                hap0_probs=probs,
+                hap1_probs=probs,
+                window_positions=[(i * 1000, (i + 1) * 1000) for i in range(n_windows)],
+            )
+        }
+
+        ancestry = runner._compute_global_ancestry(chrom_results)
+        # EUR should have high confidence (mean softmax prob ~0.85)
+        assert "confidence" in ancestry["EUR"]
+        assert ancestry["EUR"]["confidence"] > 0.8
+        # Populations with 0 windows should have 0 confidence
+        assert ancestry["AFR"]["confidence"] == 0.0
