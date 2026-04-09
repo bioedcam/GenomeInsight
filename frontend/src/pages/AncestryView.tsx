@@ -141,7 +141,7 @@ export default function AncestryView() {
                 ci_low={findingsQuery.data.nnls_ci_low ?? undefined}
                 ci_high={findingsQuery.data.nnls_ci_high ?? undefined}
               />
-              {/* MID lower-precision info note */}
+              {/* MID lower-precision info note (threshold matches backend MID_LOW_PRECISION_THRESHOLD) */}
               {findingsQuery.data.admixture_fractions.MID != null &&
                 findingsQuery.data.admixture_fractions.MID > 0.001 &&
                 findingsQuery.data.admixture_fractions.MID < 0.15 && (

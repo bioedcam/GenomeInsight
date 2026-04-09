@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+# Threshold below which MID ancestry estimates are flagged as lower-precision
+MID_LOW_PRECISION_THRESHOLD = 0.15
+
 POPULATIONS: dict[str, dict[str, str]] = {
     "AFR": {"display": "African", "color": "#E8A838"},
     "AMR": {"display": "Indigenous American", "color": "#EE6677"},
@@ -496,8 +499,8 @@ class LAIRunner:
                 "color": POPULATIONS[pop]["color"],
                 "confidence": round(confidence, 4),
             }
-            # Flag MID with lower-precision warning when proportion < 15%
-            if pop == "MID" and frac < 0.15:
+            # Flag MID with lower-precision warning when proportion is low
+            if pop == "MID" and frac < MID_LOW_PRECISION_THRESHOLD:
                 entry["warning"] = (
                     "Middle Eastern ancestry estimates have lower precision "
                     "with current reference panel"
