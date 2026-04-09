@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+# Threshold below which MID ancestry estimates are flagged as lower-precision
+MID_LOW_PRECISION_THRESHOLD = 0.15
+
 POPULATIONS: dict[str, dict[str, str]] = {
     "AFR": {"display": "African", "color": "#E8A838"},
     "AMR": {"display": "Indigenous American", "color": "#EE6677"},
@@ -443,10 +446,17 @@ class LAIRunner:
     def _compute_global_ancestry(
         self, chrom_results: dict[int, ChromosomeResult]
     ) -> dict[str, dict]:
-        """Compute genome-wide ancestry proportions from chromosome results."""
+        """Compute genome-wide ancestry proportions from chromosome results.
+
+        Also computes per-population confidence as the mean softmax
+        probability for windows assigned to each population, and flags
+        MID with a warning when its proportion is below 15%.
+        """
         from backend.analysis.gnomix_inference import CANONICAL_POPULATIONS
 
         pop_windows: dict[str, int] = defaultdict(int)
+        # Accumulate softmax probabilities for confidence calculation
+        pop_prob_sums: dict[str, float] = defaultdict(float)
         total_windows = 0
 
         n_pops = len(CANONICAL_POPULATIONS)
@@ -463,8 +473,13 @@ class LAIRunner:
                         h1=h1_idx,
                     )
                     continue
-                pop_windows[CANONICAL_POPULATIONS[h0_idx]] += 1
-                pop_windows[CANONICAL_POPULATIONS[h1_idx]] += 1
+                h0_pop = CANONICAL_POPULATIONS[h0_idx]
+                h1_pop = CANONICAL_POPULATIONS[h1_idx]
+                pop_windows[h0_pop] += 1
+                pop_windows[h1_pop] += 1
+                # Sum the softmax probability for the assigned population
+                pop_prob_sums[h0_pop] += float(result.hap0_probs[w, h0_idx])
+                pop_prob_sums[h1_pop] += float(result.hap1_probs[w, h1_idx])
                 total_windows += 2
 
         if total_windows == 0:
@@ -472,13 +487,25 @@ class LAIRunner:
 
         ancestry: dict[str, dict] = {}
         for pop in sorted(POPULATIONS.keys()):
-            frac = pop_windows.get(pop, 0) / total_windows
-            ancestry[pop] = {
+            n_wins = pop_windows.get(pop, 0)
+            frac = n_wins / total_windows
+            # Per-population confidence: mean softmax probability across
+            # windows assigned to this population (0–1 scale).
+            confidence = pop_prob_sums.get(pop, 0.0) / n_wins if n_wins > 0 else 0.0
+            entry: dict = {
                 "fraction": round(frac, 4),
                 "percentage": round(frac * 100, 1),
                 "display_name": POPULATIONS[pop]["display"],
                 "color": POPULATIONS[pop]["color"],
+                "confidence": round(confidence, 4),
             }
+            # Flag MID with lower-precision warning when proportion is low
+            if pop == "MID" and frac < MID_LOW_PRECISION_THRESHOLD:
+                entry["warning"] = (
+                    "Middle Eastern ancestry estimates have lower precision "
+                    "with current reference panel"
+                )
+            ancestry[pop] = entry
 
         return ancestry
 
