@@ -1121,24 +1121,18 @@ def get_ancestry_matched_af_column(population: str | None) -> str:
     return _ANCESTRY_TO_GNOMAD_COL.get(population.upper(), "gnomad_af_global")
 
 
-def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
-    """Retrieve the inferred top ancestry from a sample's findings.
+def _get_latest_ancestry_finding(
+    sample_engine: sa.Engine,
+) -> tuple[str | None, dict | None]:
+    """Return ``(top_population, detail_dict)`` from the best ancestry finding.
 
-    Preference order: ``nnls_admixture`` → ``pca_projection``.
-    Extracts ``top_population`` from ``detail_json``.
+    Preference order: ``local_ancestry`` → ``nnls_admixture`` →
+    ``pca_projection`` → any ancestry finding.
 
-    This is the canonical way to get ancestry for P3-26 (ancestry-matched AF)
-    and is also used by PRS ancestry mismatch checks (P3-16).
-
-    Args:
-        sample_engine: SQLAlchemy engine for the sample database.
-
-    Returns:
-        Inferred top ancestry code (e.g. "EUR", "EAS", "AFR") or None.
+    Returns ``(None, None)`` when no usable finding exists.
     """
-    # Try nnls_admixture first (primary), then pca_projection, then any ancestry finding
     with sample_engine.connect() as conn:
-        for category in ("nnls_admixture", "pca_projection", None):
+        for category in ("local_ancestry", "nnls_admixture", "pca_projection", None):
             stmt = (
                 sa.select(findings.c.detail_json)
                 .where(findings.c.module == "ancestry")
@@ -1152,12 +1146,57 @@ def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
             if row is not None and row.detail_json:
                 try:
                     detail = json.loads(row.detail_json)
-                    result = detail.get("top_population") or detail.get("inferred_ancestry")
-                    if result:
-                        return result
+                    top_pop = detail.get("top_population") or detail.get("inferred_ancestry")
+                    if top_pop:
+                        return top_pop, detail
                 except (ValueError, TypeError):
                     continue
 
+    return None, None
+
+
+def get_inferred_ancestry(sample_engine: sa.Engine) -> str | None:
+    """Retrieve the inferred top ancestry from a sample's findings.
+
+    Preference order: ``local_ancestry`` → ``nnls_admixture`` →
+    ``pca_projection``.  Extracts ``top_population`` from ``detail_json``.
+
+    This is the canonical way to get ancestry for P3-26 (ancestry-matched AF)
+    and is also used by PRS ancestry mismatch checks (P3-16).
+
+    Args:
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Inferred top ancestry code (e.g. "EUR", "EAS", "AFR") or None.
+    """
+    top_pop, _ = _get_latest_ancestry_finding(sample_engine)
+    return top_pop
+
+
+def get_top_ancestry_fraction(sample_engine: sa.Engine) -> float | None:
+    """Retrieve the top ancestry fraction from a sample's findings.
+
+    Searches the same categories as :func:`get_inferred_ancestry` in the same
+    preference order (``local_ancestry`` → ``nnls_admixture`` →
+    ``pca_projection``).  Returns the fraction for the top population from
+    ``admixture_fractions`` in ``detail_json``.
+
+    Args:
+        sample_engine: SQLAlchemy engine for the sample database.
+
+    Returns:
+        Fraction (0.0–1.0) of the top ancestry, or None if unavailable.
+    """
+    top_pop, detail = _get_latest_ancestry_finding(sample_engine)
+    if top_pop is None or detail is None:
+        return None
+    fracs = detail.get("admixture_fractions", {})
+    if top_pop in fracs:
+        try:
+            return float(fracs[top_pop])
+        except (ValueError, TypeError):
+            return None
     return None
 
 
