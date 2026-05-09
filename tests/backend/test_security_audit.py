@@ -173,6 +173,7 @@ class TestNoOutboundVariantData:
         "annotation/omim.py": "reference DB download (with API key)",
         "api/routes/genes.py": "UniProt protein domain lookup (gene symbol only)",
         "db/download_manager.py": "generic resumable downloader",
+        "db/manifest.py": "fetch bundles/manifest.json from raw GitHub (no variant data)",
         "db/update_manager.py": "ClinVar HEAD check for freshness",
         "utils/pubmed.py": "PubMed search (gene symbol + PMID only)",
         "utils/uniprot.py": "UniProt protein domain lookup (gene symbol only)",
@@ -240,6 +241,7 @@ class TestNoOutboundVariantData:
             "rest.uniprot.org",  # UniProt
             "api.github.com",  # Update checker
             "github.com",  # Release/source links
+            "raw.githubusercontent.com",  # bundle manifest hosted in repo
             "s3.amazonaws.com",  # dbNSFP S3 bucket
             "dist.genos.us",  # dbNSFP 5.x academic distribution
             "example.com",  # Test/placeholder URLs in comments

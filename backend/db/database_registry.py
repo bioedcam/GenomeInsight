@@ -22,6 +22,8 @@ from backend.config import Settings
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sqlalchemy import Engine
+
 logger = structlog.get_logger(__name__)
 
 # Directory containing databases shipped with the repo
@@ -367,6 +369,57 @@ def get_build_fn(db_name: str) -> Callable | None:
     fn = getattr(mod, fn_name)
     _build_fn_cache[db_name] = fn
     return fn
+
+
+# ── Version recording ────────────────────────────────────────────
+
+
+def _record_db_version(
+    engine: Engine,
+    db_name: str,
+    version: str,
+    file_size_bytes: int,
+    sha256: str | None = None,
+) -> None:
+    """Upsert a single row in ``database_versions``.
+
+    Single-source helper used by every download/build/extract path so the
+    Update Manager always sees a row regardless of which DB type completed
+    (per setup-update-plan §3.7).
+    """
+    from datetime import UTC, datetime
+
+    import sqlalchemy as sa
+
+    from backend.db.tables import database_versions
+
+    with engine.begin() as conn:
+        existing = conn.execute(
+            sa.select(database_versions.c.db_name).where(database_versions.c.db_name == db_name)
+        ).fetchone()
+
+        now = datetime.now(UTC)
+        if existing:
+            conn.execute(
+                database_versions.update()
+                .where(database_versions.c.db_name == db_name)
+                .values(
+                    version=version,
+                    file_size_bytes=file_size_bytes,
+                    downloaded_at=now,
+                    checksum_sha256=sha256,
+                )
+            )
+        else:
+            conn.execute(
+                database_versions.insert().values(
+                    db_name=db_name,
+                    version=version,
+                    file_size_bytes=file_size_bytes,
+                    downloaded_at=now,
+                    checksum_sha256=sha256,
+                )
+            )
 
 
 # ── Status checking ──────────────────────────────────────────────
