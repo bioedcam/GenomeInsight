@@ -83,6 +83,8 @@ test.describe('P3-68: Module pages verification', () => {
 
       test('heading hierarchy is valid (no skipped levels)', async ({ page }) => {
         await page.goto(mod.path)
+        // Wait for React to mount AppLayout before inspecting the heading tree.
+        await page.locator('h1').first().waitFor({ state: 'visible' })
         await page.waitForLoadState('networkidle')
 
         const headingLevels = await page.evaluate(() => {
@@ -120,6 +122,9 @@ test.describe('P3-68: Module pages verification', () => {
 
       test('passes axe-core WCAG 2.1 AA accessibility check', async ({ page }) => {
         await page.goto(mod.path)
+        // Wait for React to mount AppLayout so axe-core analyzes the fully
+        // hydrated DOM rather than the empty `<div id="root">` shell.
+        await page.locator('h1').first().waitFor({ state: 'visible' })
         await page.waitForLoadState('networkidle')
 
         const results = await new AxeBuilder({ page })
