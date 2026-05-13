@@ -469,6 +469,7 @@ class TestTier2LAI:
         with (
             patch("backend.main.get_settings", return_value=settings),
             patch("backend.db.connection.get_settings", return_value=settings),
+            patch("backend.config.get_settings", return_value=settings),
         ):
             reset_registry()
             from backend.main import create_app
