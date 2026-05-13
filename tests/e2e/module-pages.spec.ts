@@ -85,7 +85,6 @@ test.describe('P3-68: Module pages verification', () => {
         await page.goto(mod.path)
         // Wait for React to mount AppLayout before inspecting the heading tree.
         await page.locator('h1').first().waitFor({ state: 'visible' })
-        await page.waitForLoadState('networkidle')
 
         const headingLevels = await page.evaluate(() => {
           const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6')
@@ -125,7 +124,6 @@ test.describe('P3-68: Module pages verification', () => {
         // Wait for React to mount AppLayout so axe-core analyzes the fully
         // hydrated DOM rather than the empty `<div id="root">` shell.
         await page.locator('h1').first().waitFor({ state: 'visible' })
-        await page.waitForLoadState('networkidle')
 
         const results = await new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
