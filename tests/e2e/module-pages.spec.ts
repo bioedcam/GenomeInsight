@@ -15,18 +15,9 @@
  *   7. Gene Health    (/gene-health)
  */
 
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-
-/**
- * Wait until React has hydrated AppLayout. `networkidle` is unreliable here
- * because the dev server can return an empty `<div id="root">` shell and no
- * further requests follow, so the load state resolves before mount. Once the
- * page-level h1 is visible, AppLayout + the page component have rendered.
- */
-async function waitForReactHydration(page: Page): Promise<void> {
-  await page.locator('h1').first().waitFor({ state: 'visible' })
-}
+import { waitForReactHydration } from './helpers'
 
 // All 7 module pages with expected content
 const MODULE_PAGES = [

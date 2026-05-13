@@ -255,12 +255,10 @@ test.describe('P4-26c: WCAG 2.1 AA Audit', () => {
         await page.goto(pageDef.path)
         // This test inspects the hydrated DOM (counts interactive elements),
         // so it gates on h1 visibility rather than the file-wide `networkidle`
-        // pattern. `networkidle` can resolve before React mounts when the dev
-        // server returns an empty `<div id="root">` and no further requests
-        // follow; other tests in this spec stay on `networkidle` because they
+        // pattern; other tests in this spec stay on `networkidle` because they
         // assert on load-time behavior (errors, console output) rather than
         // hydrated content.
-        await page.locator('h1').first().waitFor({ state: 'visible' })
+        await waitForReactHydration(page)
 
         // Verify the page has interactive elements that can receive focus
         const interactive = page.locator('a, button, input, select, textarea, [tabindex="0"]')
