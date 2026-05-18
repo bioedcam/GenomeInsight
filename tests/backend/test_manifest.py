@@ -470,9 +470,7 @@ class TestMinAppVersionAdvisoryWarning:
     def _events_named(self, cap_logs, name):
         return [e for e in cap_logs if e.get("event") == name]
 
-    def test_warning_emits_when_below_threshold(
-        self, tmp_path: Path, monkeypatch
-    ):
+    def test_warning_emits_when_below_threshold(self, tmp_path: Path, monkeypatch):
         path = _write_manifest(tmp_path / "manifest.json", V2_PAYLOAD)
         monkeypatch.setenv(manifest_mod.MANIFEST_PATH_ENV, str(path))
         monkeypatch.setattr(manifest_mod, "_current_app_version", lambda: "0.1.0")
@@ -521,9 +519,7 @@ class TestMinAppVersionAdvisoryWarning:
 
         assert self._events_named(cap_logs, self.EVENT_NAME) == []
 
-    def test_malformed_min_app_version_does_not_raise(
-        self, tmp_path: Path, monkeypatch
-    ):
+    def test_malformed_min_app_version_does_not_raise(self, tmp_path: Path, monkeypatch):
         """An unparseable ``min_app_version`` must never raise or block loading."""
         payload = json.loads(json.dumps(V2_PAYLOAD))
         payload["bundles"]["vep_bundle"]["min_app_version"] = "not-a-version"
