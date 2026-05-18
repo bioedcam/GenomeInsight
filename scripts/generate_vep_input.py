@@ -53,7 +53,9 @@ try:
     from backend.ingestion.dispatcher import parse as _dispatcher_parse  # noqa: E402
 
     _HAS_DISPATCHER = True
-except ImportError:  # pragma: no cover - exercised only post-step-27
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised only post-step-27
+    if exc.name != "backend.ingestion.dispatcher":
+        raise
     _dispatcher_parse = None
     _HAS_DISPATCHER = False
 
@@ -226,6 +228,11 @@ def _iter_catalog_rows(input_path: Path) -> Iterator[tuple[str, str, int]]:
                 pos = int(pos_raw)
             except ValueError:
                 raise ValueError(f"Line {line_num}: non-numeric position {pos_raw!r}") from None
+            if pos <= 0:
+                raise ValueError(
+                    f"Line {line_num}: non-positive position {pos_raw!r} "
+                    "(VCF positions are 1-based)"
+                )
             yield rsid, chrom, pos
 
 
@@ -316,11 +323,11 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
 
-    if not args.input.exists():
-        print(f"Error: file not found: {args.input}", file=sys.stderr)
+    if not args.input.is_file():
+        print(f"Error: not a regular file: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    print_stats = args.stats or args.output is not None
+    print_stats = args.stats
 
     if args.rsid_catalog:
         generate_catalog_vcf(args.input, args.output, print_stats=print_stats)

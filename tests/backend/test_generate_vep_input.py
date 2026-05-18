@@ -125,8 +125,18 @@ def test_generate_vep_vcf_falls_back_to_23andme_without_dispatcher(
     monkeypatch.setattr(module, "_dispatcher_parse", None)
     monkeypatch.setattr(module, "_HAS_DISPATCHER", False)
 
+    real_parse_23andme = module.parse_23andme
+    call_count = {"n": 0}
+
+    def _spy(*args, **kwargs):
+        call_count["n"] += 1
+        return real_parse_23andme(*args, **kwargs)
+
+    monkeypatch.setattr(module, "parse_23andme", _spy)
+
     output_path = tmp_path / "fallback.vcf"
     stats = module.generate_vep_vcf(FIXTURES / "sample_23andme_v5.txt", output_path)
+    assert call_count["n"] == 1, "legacy parse_23andme must be invoked when dispatcher is absent"
     assert stats["total_parsed"] > 0
     assert output_path.exists()
 
@@ -174,6 +184,8 @@ def test_rsid_catalog_mode_emits_sorted_sites_only_vcf(tmp_path: Path) -> None:
         ("\t1\t100\n", "empty rsid"),
         ("rs1\t\t100\n", "empty chrom"),
         ("rs1\t1\tabc\n", "non-numeric position"),
+        ("rs1\t1\t0\n", "non-positive position"),
+        ("rs1\t1\t-5\n", "non-positive position"),
     ],
 )
 def test_rsid_catalog_rejects_malformed(tmp_path: Path, row: str, error_fragment: str) -> None:
