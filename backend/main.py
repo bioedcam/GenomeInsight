@@ -70,7 +70,7 @@ from backend.tasks.huey_tasks import recover_orphaned_jobs
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────

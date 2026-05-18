@@ -113,3 +113,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `run_vep_bundle_update` now records the manifest's `version` (semver — e.g. `"v2.0.0"`) in `database_versions['vep_bundle'].version` and `update_history` instead of the bundle's `bundle_metadata.build_date`. The build date is still displayed alongside the version (Plan §5.5).
 - When the downloaded SQLite carries a `bundle_metadata.bundle_version` that disagrees with the manifest, a structured warning `vep_bundle_metadata_version_mismatch` is logged (with `manifest_version`, `metadata_bundle_version`, `build_date`); the update never fails on this mismatch because the manifest is the authoritative contract. Pre-v2.0.0 bundles that omit `bundle_version` are tolerated silently.
+
+#### Step 7 — Bundle-version 409 gate on AncestryDNA uploads + version bump
+
+##### Added
+
+- `POST /api/ingest` now sniffs uploads for the `#ancestrydna` header and rejects them with **HTTP 409 `bundle_version_too_old`** when the installed `database_versions['vep_bundle'].version` is below `v2.0.0` (semver compare via `packaging.version.Version`). The structured payload carries `installed_version`, `required_version`, `vendor`, `update_url`, `size_bytes`, and `checksum_sha256` — sourced from the bundle manifest with a `database_registry` fallback (Plan §5.4). 23andMe uploads are unaffected.
+- New `tests/backend/test_bundle_gating.py` locks the three contract cases: AncestryDNA + v1 → 409 (payload-shape assertions), AncestryDNA + v2 → 202, 23andMe + v1 → 202.
+
+##### Changed
+
+- App version bumped from `0.1.0` → `0.2.0` in `pyproject.toml`, `backend/main.py::VERSION`, and `frontend/package.json` to align with the manifest `min_app_version: "0.2.0"` floor for the v2.0.0 bundle.
