@@ -329,10 +329,14 @@ def main(argv: list[str] | None = None) -> None:
 
     print_stats = args.stats
 
-    if args.rsid_catalog:
-        generate_catalog_vcf(args.input, args.output, print_stats=print_stats)
-    else:
-        generate_vep_vcf(args.input, args.output, print_stats=print_stats)
+    try:
+        if args.rsid_catalog:
+            generate_catalog_vcf(args.input, args.output, print_stats=print_stats)
+        else:
+            generate_vep_vcf(args.input, args.output, print_stats=print_stats)
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

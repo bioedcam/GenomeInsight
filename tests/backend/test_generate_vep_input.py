@@ -30,7 +30,9 @@ def _load_script_module():
 def _has_dispatcher() -> bool:
     try:
         import backend.ingestion.dispatcher  # noqa: F401
-    except ImportError:
+    except ModuleNotFoundError as exc:
+        if exc.name != "backend.ingestion.dispatcher":
+            raise
         return False
     return True
 
