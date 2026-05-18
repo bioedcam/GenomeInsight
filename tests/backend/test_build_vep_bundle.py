@@ -383,14 +383,17 @@ class TestParseVepVCF:
             "|4/4||ENST00000252486:c.388T>C"
             "|ENST00000252486:p.Cys130Arg|1|mane_select|NM_000041.4"
         )
-        # Same (rsid, alt) appears twice (simulating union overlap); a unique
-        # rsid appears once. Expected: 2 rows total, not 3.
+        # Same (rsid, alt) appears twice (simulating union overlap) with
+        # differing non-key fields (CSQ transcript); a unique rsid appears
+        # once. Expected: 2 rows total, not 3 — dedup is keyed by (rsid, alt),
+        # not by full-row equality.
+        csq_variant = csq.replace("ENST00000376592", "ENST00000376593")
         lines = [
             "##fileformat=VCFv4.2",
             meta,
             "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
             f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq}",
-            f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq}",
+            f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq_variant}",
             f"19\t44908684\trs429358\tT\tC\t.\t.\tCSQ={apoe_csq}",
         ]
         vcf_path = tmp_path / "union.vcf"
