@@ -5,8 +5,13 @@ This runbook describes how to rebuild and publish the VEP annotation bundle
 `bundles/manifest.json` so a running app can resolve it.
 
 Scope: this runbook covers the `vep_bundle` stream only. The LAI bundle has its
-own runbook at `docs/lai-bundle-release-runbook.md`. The two streams ship under
-independent semver tags and are released independently (Plan §2.1).
+own release runbook (`docs/lai-bundle-release-runbook.md`), shipped separately
+in PR-0c. The two streams ship under independent semver tags and are released
+independently (Plan §2.1).
+
+Conventions used in shell snippets: `<org>` stands for the GitHub owner that
+hosts the release (e.g., `bioedcam`); substitute the real org/user when running
+the commands.
 
 The rebuild itself is out-of-repo cluster work (offline Ensembl VEP run against
 the union site list); this repo carries the input-generation script, the
@@ -164,7 +169,7 @@ matches expectations (Plan §12.1 Validation gates). Sign-off blocks publication
 
 ```bash
 gh release create bundle-v2.0.0 \
-  --repo bioedcam/GenomeInsight \
+  --repo <org>/GenomeInsight \
   --title "VEP bundle v2.0.0" \
   --notes-file docs/release-notes/bundle-v2.0.0.md \
   --draft \
@@ -194,7 +199,7 @@ Open `bundles/manifest.json` and update the `vep_bundle` entry:
 "vep_bundle": {
   "version": "v2.0.0",
   "build_date": "YYYY-MM-DD",
-  "url": "https://github.com/bioedcam/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db",
+  "url": "https://github.com/<org>/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db",
   "sha256": "<64-hex from step 3.5>",
   "size_bytes": <bytes from step 3.5>,
   "min_app_version": "0.2.0"
@@ -269,10 +274,11 @@ python -c "
 from backend.db.manifest import fetch_manifest
 m = fetch_manifest()
 entry = m.bundles['vep_bundle']
-print(entry.version, entry.url, entry.sha256, entry.size_bytes, entry.min_app_version)
+print(entry.version, entry.url, entry.sha256, entry.size_bytes)
 assert entry.version == 'v2.0.0'
-assert entry.min_app_version == '0.2.0'
 "
+# Step 5 adds `min_app_version` to `BundleManifestEntry`; once it lands,
+# extend this smoke with: `assert entry.min_app_version == '0.2.0'`.
 ```
 
 The output should print the v2.0.0 entry exactly as recorded in the

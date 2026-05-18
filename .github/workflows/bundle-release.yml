@@ -87,12 +87,34 @@ jobs:
           fi
           echo "Tag matches manifest version: $tag"
 
-      - name: Download release asset
+      - name: Download release asset (verified by tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p artifacts
-          url="${{ steps.manifest.outputs.url }}"
-          echo "Fetching $url"
-          curl -fL --retry 3 --retry-delay 10 -o artifacts/vep_bundle.db "$url"
+          tag="${{ inputs.release_tag }}"
+          manifest_url="${{ steps.manifest.outputs.url }}"
+          asset_name="vep_bundle.db"
+          # Resolve the asset's authoritative download URL from the release
+          # specified by the input tag, instead of trusting the manifest URL
+          # blindly. A mismatch means the manifest points outside this tag.
+          release_url=$(gh release view "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json assets \
+            --jq ".assets[] | select(.name == \"${asset_name}\") | .url")
+          if [ -z "$release_url" ]; then
+            echo "::error::asset '${asset_name}' not found in release '$tag'"
+            exit 1
+          fi
+          if [ "$release_url" != "$manifest_url" ]; then
+            echo "::error::manifest URL ($manifest_url) does not match release '$tag' asset URL ($release_url)"
+            exit 1
+          fi
+          gh release download "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "${asset_name}" \
+            --dir artifacts \
+            --clobber
           ls -la artifacts/
 
       - name: Verify SHA-256
