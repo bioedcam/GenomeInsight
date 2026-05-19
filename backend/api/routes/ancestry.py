@@ -13,9 +13,10 @@ from functools import lru_cache
 
 import sqlalchemy as sa
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.api.dependencies import require_fresh_sample
 from backend.db.connection import get_registry
 from backend.db.tables import findings, haplogroup_assignments, samples
 
@@ -176,7 +177,7 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(require_fresh_sample)])
 def get_ancestry_findings(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> AncestryFindingResponse | None:
@@ -263,7 +264,7 @@ def get_ancestry_findings(
     )
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[Depends(require_fresh_sample)])
 def run_ancestry(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> AncestryRunResponse:
@@ -288,7 +289,7 @@ def run_ancestry(
     )
 
 
-@router.get("/pca-coordinates")
+@router.get("/pca-coordinates", dependencies=[Depends(require_fresh_sample)])
 def get_pca_coordinates_endpoint(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> PCACoordinatesResponse | None:
@@ -387,7 +388,7 @@ def _build_haplogroup_assignment_response(
     )
 
 
-@router.get("/haplogroups")
+@router.get("/haplogroups", dependencies=[Depends(require_fresh_sample)])
 def get_haplogroup_assignments(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> HaplogroupResponse:
@@ -425,7 +426,7 @@ def get_haplogroup_assignments(
     return HaplogroupResponse(assignments=assignments)
 
 
-@router.post("/haplogroups/run")
+@router.post("/haplogroups/run", dependencies=[Depends(require_fresh_sample)])
 def run_haplogroup(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> HaplogroupRunResponse:
@@ -520,7 +521,7 @@ def get_lai_status() -> LAIStatusResponse:
     )
 
 
-@router.post("/lai/{sample_id}")
+@router.post("/lai/{sample_id}", dependencies=[Depends(require_fresh_sample)])
 def trigger_lai_analysis(sample_id: int) -> LAITriggerResponse:
     """Trigger LAI analysis for a sample.
 
@@ -562,7 +563,7 @@ def trigger_lai_analysis(sample_id: int) -> LAITriggerResponse:
     )
 
 
-@router.get("/lai/{sample_id}/results")
+@router.get("/lai/{sample_id}/results", dependencies=[Depends(require_fresh_sample)])
 def get_lai_results(sample_id: int) -> LAIResultResponse | None:
     """Get LAI results for a sample.
 
@@ -591,7 +592,7 @@ def get_lai_results(sample_id: int) -> LAIResultResponse | None:
     )
 
 
-@router.get("/lai/{sample_id}/progress")
+@router.get("/lai/{sample_id}/progress", dependencies=[Depends(require_fresh_sample)])
 def get_lai_progress(sample_id: int) -> LAIProgressResponse | None:
     """Get LAI analysis progress for a sample.
 

@@ -22,16 +22,21 @@ import re
 from typing import Any
 
 import sqlalchemy as sa
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.analysis.ancestry import get_ancestry_matched_af_column, get_inferred_ancestry
+from backend.api.dependencies import require_fresh_sample
 from backend.db.connection import get_registry
 from backend.db.tables import annotated_variants, raw_variants, samples, tags, variant_tags
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/variants", tags=["variants"])
+router = APIRouter(
+    prefix="/variants",
+    tags=["variants"],
+    dependencies=[Depends(require_fresh_sample)],
+)
 
 # Canonical chromosome sort order — same as VCF export.
 CHROM_ORDER: dict[str, int] = {
