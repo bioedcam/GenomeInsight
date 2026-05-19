@@ -6,6 +6,7 @@ from backend.db.tables import (
     PREDEFINED_TAGS,
     annotated_variants,
     apoe_gate,
+    auto_update_settings,
     clinvar_variants,
     cpic_guidelines,
     database_versions,
@@ -30,13 +31,14 @@ class TestReferenceMetadata:
     """Verify reference_metadata contains all expected tables."""
 
     def test_reference_table_count(self):
-        assert len(reference_metadata.tables) == 21
+        assert len(reference_metadata.tables) == 22
 
     def test_reference_table_names(self):
         expected = {
             "samples",
             "jobs",
             "database_versions",
+            "auto_update_settings",
             "update_history",
             "downloads",
             "download_sessions",
@@ -99,6 +101,28 @@ class TestReferenceMetadata:
         pk_cols = [c.name for c in database_versions.primary_key.columns]
         assert pk_cols == ["db_name"]
 
+    def test_auto_update_settings_pk(self):
+        pk_cols = [c.name for c in auto_update_settings.primary_key.columns]
+        assert pk_cols == ["db_name"]
+
+    def test_auto_update_settings_columns(self):
+        col_names = [c.name for c in auto_update_settings.columns]
+        assert col_names == ["db_name", "enabled", "updated_at"]
+
+    def test_auto_update_settings_column_types(self):
+        cols = {c.name: c for c in auto_update_settings.columns}
+        assert isinstance(cols["db_name"].type, sa.Text)
+        assert isinstance(cols["enabled"].type, sa.Boolean)
+        assert isinstance(cols["updated_at"].type, sa.DateTime)
+        assert cols["updated_at"].type.timezone is True
+
+    def test_auto_update_settings_nullability(self):
+        cols = {c.name: c for c in auto_update_settings.columns}
+        # db_name is PK → implicitly NOT NULL
+        assert cols["db_name"].nullable is False
+        assert cols["enabled"].nullable is False
+        assert cols["updated_at"].nullable is False
+
     def test_uniprot_cache_pk(self):
         pk_cols = [c.name for c in uniprot_cache.primary_key.columns]
         assert pk_cols == ["accession"]
@@ -111,7 +135,7 @@ class TestSampleMetadata:
     """Verify sample_metadata_obj contains all expected tables."""
 
     def test_sample_table_count(self):
-        assert len(sample_metadata_obj.tables) == 13
+        assert len(sample_metadata_obj.tables) == 14
 
     def test_sample_table_names(self):
         expected = {
@@ -128,6 +152,7 @@ class TestSampleMetadata:
             "lai_results",
             "watched_variants",
             "variant_overlays",
+            "annotation_state",
         }
         assert set(sample_metadata_obj.tables.keys()) == expected
 

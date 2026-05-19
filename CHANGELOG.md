@@ -124,3 +124,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ##### Changed
 
 - App version bumped from `0.1.0` → `0.2.0` in `pyproject.toml`, `backend/main.py::VERSION`, and `frontend/package.json` to align with the manifest `min_app_version: "0.2.0"` floor for the v2.0.0 bundle.
+
+#### Step 8 — `annotation_state` per-sample kv table
+
+##### Added
+
+- New per-sample `annotation_state(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT now)` table declared on `sample_metadata_obj` in `backend/db/tables.py`. Wired into the existing `create_sample_tables(engine) → sample_metadata_obj.create_all(engine, checkfirst=True)` path so every fresh sample DB materialises the table without an Alembic migration; reopening an existing DB is a no-op that preserves any rows already written (Plan §7.1).
+- New `tests/backend/test_annotation_state.py` locks the schema (columns, primary key, nullability) and the lifecycle contracts: fresh-DB creation, idempotent reopen with row preservation, and `create_all(checkfirst=True)` repeat-call safety.
+- `tests/backend/test_tables.py` extended to assert the table is registered on `sample_metadata_obj` (table count 13 → 14, new name in the expected set).

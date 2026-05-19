@@ -76,6 +76,16 @@ database_versions = sa.Table(
     sa.Column("checksum_sha256", sa.Text),
 )
 
+# ── Auto-Update Settings ───────────────────────────────────────────────
+
+auto_update_settings = sa.Table(
+    "auto_update_settings",
+    reference_metadata,
+    sa.Column("db_name", sa.Text, primary_key=True),
+    sa.Column("enabled", sa.Boolean, nullable=False),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+)
+
 # ── Update History ─────────────────────────────────────────────────────
 
 update_history = sa.Table(
@@ -710,6 +720,16 @@ watched_variants = sa.Table(
     sa.Column("watched_at", sa.DateTime, server_default=sa.func.now()),
     sa.Column("clinvar_significance_at_watch", sa.Text),
     sa.Column("notes", sa.Text, server_default=""),
+)
+
+# ── Annotation State (kv table for per-sample annotation provenance) ──
+
+annotation_state = sa.Table(
+    "annotation_state",
+    sample_metadata_obj,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("value", sa.Text, nullable=False),
+    sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
 )
 
 # ── Variant Overlays (P4-12, vcfanno integration) ────────────────────
