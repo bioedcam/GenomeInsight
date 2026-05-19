@@ -4,10 +4,12 @@
  * - Per-DB size breakdown is rendered
  * - VEP bundle ~600 MB callout names AncestryDNA v2.0 union catalog
  * - Existing "approximately 4 GB" hint remains for the high-level summary
+ * - Continue button drives `useSetStoragePath` and onNext (non-blocked path)
+ * - Custom location radio surfaces the custom path input
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from './test-utils'
+import { fireEvent, render, screen, waitFor } from './test-utils'
 import StorageStep from '@/components/setup/StorageStep'
 
 const mockFetch = vi.fn()
@@ -82,5 +84,79 @@ describe('StorageStep — Step 15 disk-space pre-check', () => {
     expect(breakdown).toHaveTextContent(/600 MB/)
     expect(breakdown).toHaveTextContent(/AncestryDNA v2\.0/i)
     expect(breakdown).toHaveTextContent(/0\.2\.0\+/)
+  })
+
+  it('Continue button invokes set-storage-path and advances on a non-blocked result', async () => {
+    const onNext = vi.fn()
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.endsWith('/api/setup/storage-info')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockStorageInfo()),
+        })
+      }
+      if (typeof url === 'string' && url.endsWith('/api/setup/set-storage-path')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              status: 'ok',
+              path: '/home/test/.genomeinsight',
+              free_space_gb: 50,
+              message: 'OK',
+            }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<StorageStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Storage Location')).toBeInTheDocument()
+    })
+    // Wait for storageInfo to render so the Continue button is enabled.
+    await screen.findByText(/Disk Space OK/i)
+
+    fireEvent.click(screen.getByText(/Continue/i))
+
+    await waitFor(() => {
+      expect(onNext).toHaveBeenCalledOnce()
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/setup/set-storage-path',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('toggling the Custom location radio surfaces the custom path input', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockStorageInfo()),
+    })
+
+    render(<StorageStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/disk space ok/i)).toBeInTheDocument()
+    })
+
+    const customRadio = document.getElementById(
+      'storage-path-custom',
+    ) as HTMLInputElement
+    expect(customRadio).not.toBeNull()
+    fireEvent.click(customRadio)
+
+    const customInput = await screen.findByLabelText(/custom storage path/i)
+    expect(customInput).toBeInTheDocument()
+
+    fireEvent.change(customInput, { target: { value: '/data/genomeinsight' } })
+    expect((customInput as HTMLInputElement).value).toBe('/data/genomeinsight')
+
+    // Continue stays disabled while the custom path is empty — covers the
+    // (useCustomPath && !customPath.trim()) branch.
+    fireEvent.change(customInput, { target: { value: '   ' } })
+    const continueBtn = screen.getByRole('button', { name: /continue/i })
+    expect(continueBtn).toBeDisabled()
   })
 })

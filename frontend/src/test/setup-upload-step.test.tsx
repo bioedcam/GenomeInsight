@@ -8,6 +8,9 @@
  *   retried.
  * - 23andMe-style 422 errors still surface in the existing error block
  *   (no false-positive banner).
+ * - Success state renders parsed-variant summary and the dashboard CTA.
+ * - File picker rejects unsupported extensions before any network call.
+ * - Drop zone keyboard activation opens the file picker.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -152,5 +155,78 @@ describe('UploadStep — Step 15 bundle-gate banner', () => {
     expect(
       screen.queryByTestId('bundle-gate-banner'),
     ).not.toBeInTheDocument()
+  })
+
+  it('renders the parsed-summary success state on 200', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url === '/api/ingest') {
+        return jsonResponse(200, {
+          sample_id: 1,
+          variant_count: 712345,
+          nocall_count: 1234,
+          file_format: 'ancestrydna_v2.0',
+        })
+      }
+      return jsonResponse(200, {})
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    selectFile('AncestryDNA.txt')
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    expect(await screen.findByText('Sample Uploaded')).toBeInTheDocument()
+    expect(screen.getByText('712,345')).toBeInTheDocument()
+    expect(screen.getByText('1,234')).toBeInTheDocument()
+    expect(screen.getByText('ancestrydna_v2.0')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /go to dashboard/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('rejects unsupported extensions without calling /api/ingest', async () => {
+    mockFetch.mockImplementation(() => jsonResponse(500, {}))
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const file = new File(['bin'], 'genome.zip', {
+      type: 'application/zip',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    expect(
+      await screen.findByText(/please select a 23andme raw data file/i),
+    ).toBeInTheDocument()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('drop zone Enter / Space invokes the file picker', () => {
+    mockFetch.mockImplementation(() => jsonResponse(200, {}))
+    render(<UploadStep onBack={vi.fn()} />)
+
+    const dropZone = screen.getByRole('button', {
+      name: /select 23andme raw data file to upload/i,
+    })
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    // Replace the real click() with a no-op spy so happy-dom's activation
+    // behavior doesn't bounce back into our onClick handler and double-count.
+    const clickSpy = vi.spyOn(fileInput, 'click').mockImplementation(() => {})
+
+    fireEvent.keyDown(dropZone, { key: 'Enter' })
+    expect(clickSpy).toHaveBeenCalled()
+
+    clickSpy.mockClear()
+    fireEvent.keyDown(dropZone, { key: ' ' })
+    expect(clickSpy).toHaveBeenCalled()
+
+    // Non-activation keys must not open the picker.
+    clickSpy.mockClear()
+    fireEvent.keyDown(dropZone, { key: 'a' })
+    expect(clickSpy).not.toHaveBeenCalled()
   })
 })
