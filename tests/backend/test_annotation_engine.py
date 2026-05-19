@@ -63,8 +63,10 @@ from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
     annotated_variants,
     clinvar_variants,
+    database_versions,
     raw_variants,
     reference_metadata,
+    sample_metadata_table,
 )
 
 # ── Fixtures ────────────────────────────────────────────────────────────
@@ -304,6 +306,8 @@ class TestAnnotationEngineResult:
         assert r.total_variants == 0
         assert r.total_matched == 0
         assert r.errors == []
+        # §5.6 coverage telemetry — empty by default; only populated by run_annotation.
+        assert r.coverage_stats == {}
 
     def test_total_matched_equals_rows_written(self) -> None:
         r = AnnotationEngineResult(rows_written=42)
@@ -721,6 +725,166 @@ class TestRunAnnotation:
         result = run_annotation(sample_with_variants, mock_registry, batch_size=3)
         assert result.batches_processed >= 2
         assert result.rows_written > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Step 9 / Plan §5.6: AnnotationEngineResult.coverage_stats payload shape
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _stamp_bundle_version(reference_engine: sa.Engine, version: str) -> None:
+    """Insert a `vep_bundle` row into the reference DB's `database_versions`."""
+    with reference_engine.begin() as conn:
+        conn.execute(
+            database_versions.insert().values(db_name="vep_bundle", version=version)
+        )
+
+
+def _stamp_sample_metadata(sample_engine: sa.Engine, *, file_format: str | None) -> None:
+    """Insert the single sample_metadata row with a chosen file_format."""
+    with sample_engine.begin() as conn:
+        conn.execute(
+            sample_metadata_table.insert().values(
+                id=1,
+                name="fixture-sample",
+                file_format=file_format,
+            )
+        )
+
+
+class TestCoverageStatsPayload:
+    """Plan §5.6: `AnnotationEngineResult.coverage_stats` shape + content."""
+
+    _REQUIRED_TOP_KEYS = {
+        "bundle_version",
+        "total_variants",
+        "vep_bundle_rsid_hits",
+        "vep_bundle_coord_fallback_hits",
+        "vep_misses",
+        "by_source",
+    }
+    _REQUIRED_PER_SOURCE_KEYS = {
+        "vep_bundle_rsid_hits",
+        "vep_bundle_coord_fallback_hits",
+        "vep_misses",
+    }
+
+    def test_payload_shape_23andme(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """Unmerged 23andMe sample: single-key by_source under `"23andme"`."""
+        _stamp_bundle_version(mock_registry.reference_engine, "v2.0.0")
+        _stamp_sample_metadata(sample_with_variants, file_format="23andme_v5")
+
+        result = run_annotation(sample_with_variants, mock_registry)
+        stats = result.coverage_stats
+
+        assert set(stats.keys()) == self._REQUIRED_TOP_KEYS
+        assert stats["bundle_version"] == "v2.0.0"
+        assert stats["total_variants"] == result.total_variants
+        assert stats["vep_bundle_rsid_hits"] == result.vep_matched
+        assert stats["vep_bundle_coord_fallback_hits"] == 0
+        expected_misses = result.total_variants - result.vep_matched
+        assert stats["vep_misses"] == expected_misses
+
+        assert list(stats["by_source"].keys()) == ["23andme"]
+        per_source = stats["by_source"]["23andme"]
+        assert set(per_source.keys()) == self._REQUIRED_PER_SOURCE_KEYS
+        assert per_source["vep_bundle_rsid_hits"] == stats["vep_bundle_rsid_hits"]
+        assert per_source["vep_bundle_coord_fallback_hits"] == 0
+        assert per_source["vep_misses"] == stats["vep_misses"]
+
+    def test_payload_shape_ancestrydna(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """Unmerged AncestryDNA sample: single-key by_source under `"ancestrydna"`."""
+        _stamp_bundle_version(mock_registry.reference_engine, "v2.0.0")
+        _stamp_sample_metadata(sample_with_variants, file_format="ancestrydna_v2.0")
+
+        result = run_annotation(sample_with_variants, mock_registry)
+        stats = result.coverage_stats
+
+        assert list(stats["by_source"].keys()) == ["ancestrydna"]
+        assert stats["bundle_version"] == "v2.0.0"
+        # Rollup sums match the (single) per-source entry.
+        per_source = stats["by_source"]["ancestrydna"]
+        assert per_source["vep_bundle_rsid_hits"] == stats["vep_bundle_rsid_hits"]
+        assert per_source["vep_misses"] == stats["vep_misses"]
+
+    def test_rollup_consistency(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """Top-level rollup equals the sum across by_source per Plan §5.6."""
+        _stamp_bundle_version(mock_registry.reference_engine, "v2.0.0")
+        _stamp_sample_metadata(sample_with_variants, file_format="23andme_v5")
+
+        result = run_annotation(sample_with_variants, mock_registry)
+        stats = result.coverage_stats
+
+        rollup_rsid = sum(s["vep_bundle_rsid_hits"] for s in stats["by_source"].values())
+        rollup_coord = sum(
+            s["vep_bundle_coord_fallback_hits"] for s in stats["by_source"].values()
+        )
+        rollup_misses = sum(s["vep_misses"] for s in stats["by_source"].values())
+        assert rollup_rsid == stats["vep_bundle_rsid_hits"]
+        assert rollup_coord == stats["vep_bundle_coord_fallback_hits"]
+        assert rollup_misses == stats["vep_misses"]
+        assert (
+            stats["vep_bundle_rsid_hits"]
+            + stats["vep_bundle_coord_fallback_hits"]
+            + stats["vep_misses"]
+            == stats["total_variants"]
+        )
+
+    def test_missing_bundle_version_is_none(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """No `database_versions` row → `bundle_version` is None, payload still emitted."""
+        _stamp_sample_metadata(sample_with_variants, file_format="23andme_v5")
+
+        result = run_annotation(sample_with_variants, mock_registry)
+        stats = result.coverage_stats
+
+        assert stats["bundle_version"] is None
+        # Payload shape stays intact even when bundle version is unknown.
+        assert set(stats.keys()) == self._REQUIRED_TOP_KEYS
+        assert list(stats["by_source"].keys()) == ["23andme"]
+
+    def test_missing_file_format_yields_unknown_vendor(
+        self,
+        sample_with_variants: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """No sample_metadata row → vendor key defaults to `"unknown"`."""
+        _stamp_bundle_version(mock_registry.reference_engine, "v2.0.0")
+        # Intentionally do NOT insert sample_metadata.
+
+        result = run_annotation(sample_with_variants, mock_registry)
+        stats = result.coverage_stats
+
+        assert list(stats["by_source"].keys()) == ["unknown"]
+        assert stats["bundle_version"] == "v2.0.0"
+
+    def test_empty_sample_leaves_stats_empty(
+        self,
+        sample_engine: sa.Engine,
+        mock_registry: MagicMock,
+    ) -> None:
+        """Empty samples short-circuit before telemetry; coverage_stats stays `{}`."""
+        _stamp_bundle_version(mock_registry.reference_engine, "v2.0.0")
+        _stamp_sample_metadata(sample_engine, file_format="23andme_v5")
+
+        result = run_annotation(sample_engine, mock_registry)
+        assert result.total_variants == 0
+        assert result.coverage_stats == {}
 
 
 # ═══════════════════════════════════════════════════════════════════════

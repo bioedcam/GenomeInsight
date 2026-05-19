@@ -24,7 +24,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -42,7 +42,12 @@ from backend.annotation.gnomad import (
     lookup_gnomad_by_positions,
     lookup_gnomad_by_rsids,
 )
-from backend.db.tables import annotated_variants, raw_variants
+from backend.db.tables import (
+    annotated_variants,
+    database_versions,
+    raw_variants,
+    sample_metadata_table,
+)
 
 if TYPE_CHECKING:
     from backend.db.connection import DBRegistry
@@ -92,6 +97,9 @@ class AnnotationEngineResult:
     timing_gene_phenotype_s: float = 0.0
     timing_merge_s: float = 0.0
     timing_upsert_s: float = 0.0
+    # §5.6 coverage telemetry payload (populated at the end of run_annotation).
+    # Empty dict for runs that processed zero variants.
+    coverage_stats: dict[str, Any] = field(default_factory=dict)
 
     @property
     def total_matched(self) -> int:
@@ -586,6 +594,87 @@ def _timed_lookup(
     return res
 
 
+# ── Coverage telemetry (Plan §5.6) ───────────────────────────────────────
+
+
+def _read_bundle_version(registry: DBRegistry) -> str | None:
+    """Read `vep_bundle.version` from the reference DB's `database_versions`.
+
+    Returns ``None`` when the row is missing or the reference DB is
+    unavailable — telemetry collection must never abort the engine run.
+    """
+    try:
+        reference_engine = registry.reference_engine
+    except Exception:
+        logger.debug("coverage_stats_reference_engine_unavailable", exc_info=True)
+        return None
+    try:
+        with reference_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(database_versions.c.version).where(
+                    database_versions.c.db_name == "vep_bundle"
+                )
+            ).fetchone()
+    except Exception:
+        logger.debug("coverage_stats_bundle_version_query_failed", exc_info=True)
+        return None
+    return row.version if row is not None else None
+
+
+def _read_sample_file_format(sample_engine: sa.Engine) -> str | None:
+    """Read `file_format` from the per-sample `sample_metadata` row."""
+    try:
+        with sample_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(sample_metadata_table.c.file_format).where(
+                    sample_metadata_table.c.id == 1
+                )
+            ).fetchone()
+    except Exception:
+        logger.debug("coverage_stats_file_format_query_failed", exc_info=True)
+        return None
+    return row.file_format if row is not None else None
+
+
+def _build_coverage_stats(
+    sample_engine: sa.Engine,
+    registry: DBRegistry,
+    *,
+    total_variants: int,
+    vep_rsid_hits: int,
+    vep_coord_fallback_hits: int,
+) -> dict[str, Any]:
+    """Compose the Plan §5.6 coverage telemetry payload.
+
+    Top-level rollup mirrors the single-source counts; ``by_source`` keys
+    on the vendor derived from ``sample_metadata.file_format``
+    (``"23andme_v5" → "23andme"``, ``"ancestrydna_v2.0" → "ancestrydna"``).
+    Merged-sample dispatch (three-key ``S1``/``S2``/``both``) is gated on the
+    ``raw_variants.source`` column landing in step 63 + sample-merge service
+    in step 65; until then this function always emits the single-key shape.
+    """
+    vep_misses = max(total_variants - vep_rsid_hits - vep_coord_fallback_hits, 0)
+
+    bundle_version = _read_bundle_version(registry)
+    file_format = _read_sample_file_format(sample_engine)
+    vendor = file_format.split("_", 1)[0].lower() if file_format else "unknown"
+
+    per_source = {
+        "vep_bundle_rsid_hits": vep_rsid_hits,
+        "vep_bundle_coord_fallback_hits": vep_coord_fallback_hits,
+        "vep_misses": vep_misses,
+    }
+
+    return {
+        "bundle_version": bundle_version,
+        "total_variants": total_variants,
+        "vep_bundle_rsid_hits": vep_rsid_hits,
+        "vep_bundle_coord_fallback_hits": vep_coord_fallback_hits,
+        "vep_misses": vep_misses,
+        "by_source": {vendor: per_source},
+    }
+
+
 # ── Engine availability checks ───────────────────────────────────────────
 
 
@@ -807,7 +896,17 @@ def run_annotation(
 
     result.rows_written = total_written
 
-    # 9. WAL checkpoint
+    # 9. Coverage telemetry (Plan §5.6). VEP currently has no coord fallback;
+    # reserve the field at 0 so downstream consumers see the stable shape.
+    result.coverage_stats = _build_coverage_stats(
+        sample_engine,
+        registry,
+        total_variants=result.total_variants,
+        vep_rsid_hits=result.vep_matched,
+        vep_coord_fallback_hits=0,
+    )
+
+    # 10. WAL checkpoint
     _wal_checkpoint(sample_engine)
 
     logger.info(
@@ -829,6 +928,7 @@ def run_annotation(
             "timing_gene_phenotype_s": round(result.timing_gene_phenotype_s, 3),
             "timing_merge_s": round(result.timing_merge_s, 3),
             "timing_upsert_s": round(result.timing_upsert_s, 3),
+            "coverage_stats": result.coverage_stats,
         },
     )
 
