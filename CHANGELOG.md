@@ -141,3 +141,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `vep_bundle_coord_fallback_hits` is currently always `0` — reserved for the forthcoming VEP coord-fallback lookup so downstream consumers see a stable payload shape today.
 - The `annotation_engine_complete` structured log line now includes the `coverage_stats` payload so bio-validator regressions can grep hit-rate deltas directly from logs.
 - `tests/backend/test_annotation_engine.py` gains `TestCoverageStatsPayload` (six cases): default empty dict, 23andMe single-key shape with full key audit, AncestryDNA single-key shape, top-level/per-source rollup consistency (`rsid + coord + misses == total_variants`), missing-bundle-version fallback to `None`, missing-file-format fallback to `"unknown"`, and the empty-sample short-circuit that leaves `coverage_stats == {}`.
+
+#### Step 10 — Defer `annotation_state` upsert in Huey task
+
+##### Added
+
+- `run_annotation_task` now upserts both reserved `annotation_state` keys — `vep_bundle_version` (from `AnnotationEngineResult.coverage_stats['bundle_version']`, with a defensive `"v1.0.0"` fallback) and `annotation_bundle_coverage_json` (JSON-serialised coverage payload) — inside a single `sample_engine.begin()` transaction on the **success path** of the existing `try/except` around `run_all_analyses`. A raise from analysis bypasses the upsert via control flow, leaving `annotation_state` at its pre-run value so the staleness gate stays up and the user sees the re-annotate banner (Plan §7.3).
+- New `_upsert_annotation_state(conn, key, value)` helper in `backend/tasks/huey_tasks.py` (SQLite `ON CONFLICT DO UPDATE` via `sqlalchemy.dialects.sqlite.insert`) so multiple kv writes share one transaction.
+- `tests/backend/test_huey_annotation.py::TestAnnotationStateGate` (four cases): success path upserts both keys (`vep_bundle_version == "v2.0.0"`, JSON payload matches Plan §5.6 shape with single-key `by_source` and counts summing to `total_variants`); missing-`database_versions`-row falls back to `"v1.0.0"`; a `RuntimeError` raised from `run_all_analyses` leaves a pre-seeded `annotation_state` row untouched and `annotation_bundle_coverage_json` absent (gate stays up) while the job itself still marks `complete` (analysis is best-effort); and the SSE message stream emits `"Annotating…"` before `"Analyzing…"`.
+
+##### Changed
+
+- Two-phase SSE progress messages refreshed to match the Plan §7.3 vocabulary: the initial running message is now `"Annotating…"` (was `"Starting annotation"`) and the bridge into analysis modules is `"Analyzing…"` (was `"Running analysis modules..."`). Per-batch (`"Annotated X/Y variants"`) and per-module (`"Analyzing: <module> (i/n)"`) detail messages are unchanged.
