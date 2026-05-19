@@ -124,3 +124,17 @@ export interface IngestResult {
   nocall_count: number
   file_format: string
 }
+
+/**
+ * HTTP 409 payload returned when an AncestryDNA upload arrives and the
+ * installed VEP bundle is below v2.0.0 (Plan §5.4, ADNA-00d).
+ */
+export interface BundleGatePayload {
+  error: 'bundle_version_too_old'
+  installed_version: string
+  required_version: string
+  vendor: 'ancestrydna'
+  update_url: string
+  size_bytes: number
+  checksum_sha256: string | null
+}

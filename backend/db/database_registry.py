@@ -191,10 +191,13 @@ DATABASES: dict[str, DatabaseInfo] = {
     "vep_bundle": DatabaseInfo(
         name="vep_bundle",
         display_name="VEP Bundle",
-        description="Pre-computed variant effect predictions for 23andMe v5 rsids",
+        description=(
+            "Pre-computed variant effect predictions for the 23andMe v5 "
+            "∪ AncestryDNA v2.0 rsid catalog"
+        ),
         url="https://raw.githubusercontent.com/bioedcam/GenomeInsight/main/bundles/vep_bundle.db",
         filename="vep_bundle.db",
-        expected_size_bytes=12_000_000,  # ~12 MB
+        expected_size_bytes=600_000_000,  # ~600 MB (union catalog; v2.0.0+)
         required=False,
         phase=2,
         build_mode="bundled",

@@ -1,0 +1,156 @@
+/** Step 15 — Setup wizard bundle-update affordance (Plan §5.4, §12.1, ADNA-00d).
+ *
+ * Covers:
+ * - HTTP 409 bundle_version_too_old payload renders the in-wizard banner with
+ *   the required + installed versions and the manifest's update URL size hint.
+ * - The CTA fires `POST /api/updates/trigger` with `vep_bundle`.
+ * - After the trigger completes, the banner clears and the upload can be
+ *   retried.
+ * - 23andMe-style 422 errors still surface in the existing error block
+ *   (no false-positive banner).
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from './test-utils'
+import UploadStep from '@/components/setup/UploadStep'
+
+const BUNDLE_GATE_PAYLOAD = {
+  error: 'bundle_version_too_old',
+  installed_version: 'v1.0.0',
+  required_version: 'v2.0.0',
+  vendor: 'ancestrydna',
+  update_url: 'https://example.invalid/vep-bundle-v2.0.0.db',
+  size_bytes: 612_345_678,
+  checksum_sha256: 'a'.repeat(64),
+}
+
+const mockFetch = vi.fn()
+
+beforeEach(() => {
+  mockFetch.mockReset()
+  vi.stubGlobal('fetch', mockFetch)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+function selectFile(name = 'AncestryDNA.txt', content = 'fake content') {
+  const file = new File([content], name, { type: 'text/plain' })
+  const input = document.querySelector(
+    'input[type="file"]',
+  ) as HTMLInputElement
+  fireEvent.change(input, { target: { files: [file] } })
+}
+
+function jsonResponse(status: number, body: unknown) {
+  return Promise.resolve({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  })
+}
+
+describe('UploadStep — Step 15 bundle-gate banner', () => {
+  it('renders the bundle-gate banner when the API returns 409', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url === '/api/ingest') {
+        return jsonResponse(409, { detail: BUNDLE_GATE_PAYLOAD })
+      }
+      return jsonResponse(200, {})
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    selectFile()
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    const banner = await screen.findByTestId('bundle-gate-banner')
+    expect(banner).toBeInTheDocument()
+    expect(banner).toHaveTextContent(/Update VEP bundle/i)
+    expect(banner).toHaveTextContent(/612 MB/)
+    expect(banner).toHaveTextContent(/v2\.0\.0/)
+    expect(banner).toHaveTextContent(/v1\.0\.0/)
+    // Generic upload-failure block must stay hidden — 409 lives in the banner.
+    expect(screen.queryByText(/Upload failed: 409/)).not.toBeInTheDocument()
+  })
+
+  it('CTA fires the vep_bundle update trigger and clears the banner on success', async () => {
+    let triggerCalled = false
+    let jobStatusCalls = 0
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url === '/api/ingest') {
+        return jsonResponse(409, { detail: BUNDLE_GATE_PAYLOAD })
+      }
+      if (
+        typeof url === 'string' &&
+        url === '/api/updates/trigger' &&
+        init?.method === 'POST'
+      ) {
+        triggerCalled = true
+        const body = init.body ? JSON.parse(init.body as string) : {}
+        expect(body.db_name).toBe('vep_bundle')
+        return jsonResponse(202, {
+          job_id: 'job-bundle-update',
+          db_name: 'vep_bundle',
+          message: 'Update queued',
+        })
+      }
+      if (
+        typeof url === 'string' &&
+        url.startsWith('/api/updates/job/')
+      ) {
+        jobStatusCalls += 1
+        return jsonResponse(200, {
+          job_id: 'job-bundle-update',
+          status: 'complete',
+          progress_pct: 100,
+          message: 'Bundle updated',
+          error: null,
+        })
+      }
+      return jsonResponse(200, {})
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    selectFile()
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    const cta = await screen.findByTestId('bundle-gate-update-cta')
+    fireEvent.click(cta)
+
+    await waitFor(() => {
+      expect(triggerCalled).toBe(true)
+    })
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('bundle-gate-banner'),
+      ).not.toBeInTheDocument()
+    })
+    expect(jobStatusCalls).toBeGreaterThan(0)
+  })
+
+  it('keeps the existing error block for non-409 ingest failures', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url === '/api/ingest') {
+        return jsonResponse(422, { detail: 'Not a valid 23andMe file' })
+      }
+      return jsonResponse(200, {})
+    })
+
+    render(<UploadStep onBack={vi.fn()} />)
+
+    selectFile('genome_data.txt')
+    fireEvent.click(screen.getByText('Upload & Parse'))
+
+    expect(
+      await screen.findByText('Not a valid 23andMe file'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('bundle-gate-banner'),
+    ).not.toBeInTheDocument()
+  })
+})
