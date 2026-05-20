@@ -9,7 +9,12 @@ and exercises the LAI runner's filter + per-source accumulator. Asserts:
 
 The full Phase-0 fixture ``sample_ancestrydna_v2.txt`` is curated in step 34;
 this test uses an inline payload derived from the existing v1 fixture so step 22
-can ship independently. Soft-gate (degraded_coverage) cases land in step 23.
+can ship independently.
+
+Soft-gate (degraded_coverage) cases — Step 23 (Plan §6.7) — extend the file
+below: positive case asserts AncestryDNA + pre-v2.0.0 lai_bundle yields
+``degraded_coverage=True``; negative case asserts ``23andme_v5`` never carries
+the flag, regardless of bundle version.
 """
 
 from __future__ import annotations
@@ -23,6 +28,11 @@ from backend.analysis.lai import _read_sample_file_format, _read_sample_genotype
 from backend.analysis.lai_runner import LAIRunner
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import raw_variants, sample_metadata_table
+from backend.services.lai_coverage_gate import (
+    file_format_has_ancestrydna,
+    is_lai_coverage_degraded,
+    lai_bundle_below_v2,
+)
 
 # A minimal AncestryDNA-shaped payload (chrom/pos/genotype only; rsids picked
 # to overlap the runner stub's liftover map below). Includes mixed autosomal,
@@ -155,3 +165,73 @@ class TestAncestryDNARunnerTelemetry:
         per_source = {"": {"hits": 7, "drops": 2}}
         telemetry = LAIRunner._build_coverage_telemetry(per_source, "ancestrydna_v2.0")
         assert telemetry == {"ancestrydna": {"hits": 7, "drops": 2}}
+
+
+# ── Step 23 — Soft LAI staleness gate (Plan §6.7) ─────────────────────
+
+
+class TestFileFormatPredicate:
+    """`file_format_has_ancestrydna` recognizes the vendor prefix."""
+
+    @pytest.mark.parametrize(
+        "file_format",
+        ["ancestrydna_v2.0", "AncestryDNA_v2.0", "ANCESTRYDNA_V2.0", "ancestrydna"],
+    )
+    def test_positive_prefix(self, file_format):
+        assert file_format_has_ancestrydna(file_format) is True
+
+    @pytest.mark.parametrize(
+        "file_format",
+        ["23andme_v5", "23andme", "merged_v1", "", None, "unknown"],
+    )
+    def test_negative_prefix(self, file_format):
+        """23andMe — and every non-AncestryDNA value — never carries the flag."""
+        assert file_format_has_ancestrydna(file_format) is False
+
+
+class TestBundleVersionPredicate:
+    """`lai_bundle_below_v2` tolerates the 'v' prefix and bad values."""
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["v1.0.0", "1.0.0", "v1.1.0", "v1.9.9", "0.9.0"],
+    )
+    def test_below_v2(self, raw):
+        assert lai_bundle_below_v2(raw) is True
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["v2.0.0", "2.0.0", "v2.1.0", "3.0.0"],
+    )
+    def test_at_or_above_v2(self, raw):
+        assert lai_bundle_below_v2(raw) is False
+
+    @pytest.mark.parametrize("raw", ["", None, "unknown-pre-manifest", "garbage"])
+    def test_unparseable_short_circuits_false(self, raw):
+        """Unparseable values are advisory-only — never block."""
+        assert lai_bundle_below_v2(raw) is False
+
+
+class TestSoftGate:
+    """`is_lai_coverage_degraded` is the conjunction of the two predicates."""
+
+    def test_ancestrydna_plus_v1_bundle_is_degraded(self):
+        """Positive case: AncestryDNA + v1 bundle → degraded_coverage."""
+        assert is_lai_coverage_degraded("ancestrydna_v2.0", "v1.0.0") is True
+
+    def test_ancestrydna_plus_v2_bundle_is_clear(self):
+        """AncestryDNA on the matching bundle does not trigger the gate."""
+        assert is_lai_coverage_degraded("ancestrydna_v2.0", "v2.0.0") is False
+
+    @pytest.mark.parametrize(
+        "bundle_version",
+        ["v1.0.0", "v1.1.0", "v2.0.0", "v3.0.0", None, ""],
+    )
+    def test_23andme_never_carries_flag(self, bundle_version):
+        """Plan §6.7 negative case: 23andMe-only samples never degrade."""
+        assert is_lai_coverage_degraded("23andme_v5", bundle_version) is False
+
+    def test_missing_file_format_is_clear(self):
+        """Defensive: an empty file_format never degrades."""
+        assert is_lai_coverage_degraded(None, "v1.0.0") is False
+        assert is_lai_coverage_degraded("", "v1.0.0") is False

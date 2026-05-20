@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from backend.api.dependencies import require_fresh_sample
 from backend.db.connection import get_registry
 from backend.db.tables import findings, haplogroup_assignments, samples
+from backend.services.lai_coverage_gate import is_degraded_for_sample, is_degraded_globally
 
 logger = structlog.get_logger(__name__)
 
@@ -116,28 +117,47 @@ class HaplogroupRunResponse(BaseModel):
 
 
 class LAIStatusResponse(BaseModel):
-    """LAI bundle and Java availability status."""
+    """LAI bundle and Java availability status.
+
+    ``degraded_coverage`` is the Step-23 soft-gate flag (Plan §6.7): True
+    when the installed ``lai_bundle`` is pre-v2.0.0 *and* the install
+    holds at least one AncestryDNA-sourced sample. Powers the dashboard
+    `<AppUpdateBanner>` advisory message.
+    """
 
     bundle_downloaded: bool
     java_available: bool
     lai_available: bool
     message: str
+    degraded_coverage: bool = False
 
 
 class LAITriggerResponse(BaseModel):
-    """Response from triggering LAI analysis."""
+    """Response from triggering LAI analysis.
+
+    Carries the Step-23 ``degraded_coverage`` advisory flag (Plan §6.7)
+    so the LAI Findings page can render a per-sample banner during the
+    run. Always ``False`` on 23andMe-only samples.
+    """
 
     job_id: str
     message: str
+    degraded_coverage: bool = False
 
 
 class LAIResultResponse(BaseModel):
-    """LAI analysis results."""
+    """LAI analysis results.
+
+    Carries the Step-23 ``degraded_coverage`` advisory flag (Plan §6.7)
+    when the run was produced against a pre-v2.0.0 bundle for an
+    AncestryDNA-sourced sample.
+    """
 
     global_ancestry: dict
     chromosome_painting: dict
     metadata: dict
     created_at: str
+    degraded_coverage: bool = False
 
 
 class LAIProgressResponse(BaseModel):
@@ -148,6 +168,7 @@ class LAIProgressResponse(BaseModel):
     progress_pct: float
     message: str
     error: str | None = None
+    degraded_coverage: bool = False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -518,6 +539,7 @@ def get_lai_status() -> LAIStatusResponse:
         java_available=java_available,
         lai_available=lai_available,
         message=message,
+        degraded_coverage=is_degraded_globally(),
     )
 
 
@@ -560,6 +582,7 @@ def trigger_lai_analysis(sample_id: int) -> LAITriggerResponse:
     return LAITriggerResponse(
         job_id=job_id,
         message="LAI analysis started. Poll /lai/progress for updates.",
+        degraded_coverage=is_degraded_for_sample(sample_id),
     )
 
 
@@ -589,6 +612,7 @@ def get_lai_results(sample_id: int) -> LAIResultResponse | None:
         chromosome_painting=json.loads(row.chromosome_painting_json),
         metadata=json.loads(row.metadata_json),
         created_at=row.created_at.isoformat() if row.created_at else "",
+        degraded_coverage=is_degraded_for_sample(sample_id),
     )
 
 
@@ -621,4 +645,5 @@ def get_lai_progress(sample_id: int) -> LAIProgressResponse | None:
         progress_pct=row.progress_pct or 0.0,
         message=row.message or "",
         error=row.error,
+        degraded_coverage=is_degraded_for_sample(sample_id),
     )
