@@ -129,11 +129,16 @@ class TestParseV2Fixture:
 
     def test_variant_count_matches_data_rows(self) -> None:
         result = parse_ancestrydna(FIXTURE_V2)
-        # v2 fixture has 8 comment + 1 header + 35 data rows = 44 lines;
+        # v2 fixture (step 34 curation) has 8 comment + 1 header + 589 data
+        # rows = 598 lines: a 35-row locked block (APOE, MTHFR, chrX, chrY,
+        # chr25 PAR, chr26 MT, indels in both ID/DI orderings, legacy kgp*,
+        # full + partial no-calls) followed by 554 hand-curated rsIDs sampled
+        # from the real AncestryDNA V2.0 export — coordinates only, with
+        # every genotype field synthesized deterministically per Plan §16.2.
         # total_lines counts every line in the body loop (matching the
-        # 23andMe parser contract), skipped_lines counts comments + header.
-        assert len(result.variants) == 35
-        assert result.total_lines == 44
+        # 23andMe parser contract); skipped_lines counts comments + header.
+        assert len(result.variants) == 589
+        assert result.total_lines == 598
         assert result.skipped_lines == 9
         assert result.total_lines == result.skipped_lines + len(result.variants)
 
