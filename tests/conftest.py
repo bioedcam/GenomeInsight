@@ -36,16 +36,50 @@ def _real_lai_bundle_available() -> bool:
     return validate_lai_bundle(bundle_path)
 
 
+# Heuristic floor for "is this the real ~600 MB VEP bundle, not a mini fixture?"
+# Step 4 sets the production bundle size to ~600 MB; anything smaller than
+# 100 MB is treated as a development stub and the slow-tier test stays dormant.
+_REAL_VEP_BUNDLE_MIN_BYTES = 100_000_000
+
+
+def _real_vep_bundle_available() -> bool:
+    """Return True if the production VEP bundle is present at the expected path.
+
+    Mirrors :func:`_real_lai_bundle_available` for the VEP-only nightly
+    real-bundle test (step 42). Dev machines and PR-blocking CI typically have
+    no bundle (or only the ~12 MB mini bundle baked into ``tests/fixtures/``);
+    the nightly workflow downloads the real release asset into
+    ``data_dir/vep_bundle.db`` before invoking ``pytest -m slow``, at which
+    point this returns True and the dormant tests execute.
+    """
+    try:
+        from backend.config import get_settings
+    except Exception:
+        return False
+    try:
+        bundle_path = get_settings().vep_bundle_db_path
+    except Exception:
+        return False
+    try:
+        return bundle_path.is_file() and bundle_path.stat().st_size >= _REAL_VEP_BUNDLE_MIN_BYTES
+    except OSError:
+        return False
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Auto-skip tests whose runtime prerequisites are not present locally.
 
     - ``requires_java``: skipped when no Java runtime is on PATH.
-    - ``requires_real_bundle``: skipped when the production LAI bundle is
-      missing or fails validation (so the slow-tier tests stay dormant on
-      every PR-blocking run and only activate inside the nightly workflow).
+    - ``requires_real_bundle``: skipped when *neither* the production LAI
+      bundle *nor* the production VEP bundle is present locally — so the
+      slow-tier tests stay dormant on every PR-blocking run and only
+      activate inside the nightly workflow (step 42). Tests still
+      individually ``pytest.skip()`` when their specific bundle is the one
+      that's missing, which lets a developer who only has one of the two
+      bundles still exercise the matching test class.
     """
     java_ok = _java_available()
-    real_bundle_ok = _real_lai_bundle_available()
+    real_bundle_ok = _real_lai_bundle_available() or _real_vep_bundle_available()
     skip_java = pytest.mark.skip(reason="Java runtime not available")
     skip_real_bundle = pytest.mark.skip(
         reason="Real production bundle not available (slow-tier nightly only)"

@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Nightly slow-tier workflow (Step 42 / ADNA-09a):** `.github/workflows/nightly.yml` runs `pytest -m slow` at 04:00 UTC daily, caches the production VEP + LAI release assets by manifest `sha256`, and auto-files a GitHub Issue labeled `slow-tier-regression` on failure.
+- **AncestryDNA real-bundle accuracy test (Step 42):** `tests/backend/test_annotation_engine_ancestrydna_real_bundle.py` asserts ≥95% combined VEP hit-rate and ≥85% ClinVar P/LP hit-rate against the real `vep_bundle v2.0.0` over `synthetic_eur_ancestrydna.txt`. Dormant on PR-blocking runs; activates only inside the nightly workflow.
+- **VEP-bundle gate in `requires_real_bundle`:** `tests/conftest.py` now treats either the production LAI or VEP bundle as sufficient to wake the marker, with each test individually skipping if its specific bundle is missing.
 - **Ancestry Module v2 (AMv2):** Two-tier ancestry analysis system replacing the 128-AIM IDW approach.
   - **Tier 1 (Instant):** 5,000-AIM PCA projection with NNLS + kNN admixture estimation. Runs in < 1 second.
   - **Tier 2 (Deep Analysis):** Local ancestry inference via re-exported Gnomix models with Beagle phasing. Chromosome-level ancestry painting. Runs in ~15-30 minutes. Optional.
