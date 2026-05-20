@@ -36,6 +36,8 @@ from backend.ingestion.parser_ancestrydna import (
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 FIXTURE_V2 = FIXTURES / "sample_ancestrydna_v2.txt"
+FIXTURE_CRLF = FIXTURES / "sample_ancestrydna_crlf.txt"
+FIXTURE_NON_UTF8 = FIXTURES / "sample_ancestrydna_non_utf8_byte.txt"
 
 
 # --------------------------------------------------------------------------- #
@@ -175,6 +177,83 @@ class TestParseV2Fixture:
         by_rsid = {v.rsid: v for v in result.variants}
         assert by_rsid["rs3892097"].genotype == "AG"
 
+    def test_chr25_par_rows_collapse_to_x(self) -> None:
+        """Plan §8.6 #4 — every chr25 PAR row in the fixture lands on chrX.
+
+        The fixture carries five PAR rows (rs5778923, rs28736870, rs397514462,
+        rs7205, rs17842875). None should appear as chrom "25" after parsing.
+        """
+        result = parse_ancestrydna(FIXTURE_V2)
+        by_rsid = {v.rsid: v for v in result.variants}
+        par_rsids = (
+            "rs5778923",
+            "rs28736870",
+            "rs397514462",
+            "rs7205",
+            "rs17842875",
+        )
+        for rsid in par_rsids:
+            assert by_rsid[rsid].chrom == "X", rsid
+        assert not any(v.chrom == "25" for v in result.variants)
+
+    def test_chr26_rows_normalize_to_mt(self) -> None:
+        """AncestryDNA mitochondrial encoding (chrom column = 26) → "MT".
+
+        Asserts on every chr26 fixture row, not just one — locks the parser
+        normalization against silent regressions that might leave chrom="26"
+        for a subset of rows.
+        """
+        result = parse_ancestrydna(FIXTURE_V2)
+        mt_rsids = (
+            "rs9999003",
+            "rs78907894",
+            "rs199474657",
+            "rs199476119",
+            "rs199474672",
+            "rs111033173",
+            "rs369202065",
+            "rs3899188",
+            "rs2853497",
+            "rs28359175",
+            "rs193302985",
+        )
+        by_rsid = {v.rsid: v for v in result.variants}
+        for rsid in mt_rsids:
+            assert by_rsid[rsid].chrom == "MT", rsid
+        assert not any(v.chrom == "26" for v in result.variants)
+
+    def test_full_00_no_call_increments_nocall_count(self) -> None:
+        """Plan §8.6 #1 — explicit full-`0`/`0` row contributes to nocall_count.
+
+        Sibling of `test_no_calls_canonicalized`; locks the specific full-no-call
+        row (rs9999001 on chr1 with raw alleles `0`/`0`) so a regression that
+        flips the count without changing the canonical "--" output still trips.
+        """
+        result = parse_ancestrydna(FIXTURE_V2)
+        by_rsid = {v.rsid: v for v in result.variants}
+        assert by_rsid["rs9999001"].genotype == "--"
+        assert by_rsid["rs9999001"].chrom == "1"
+        # nocall_count covers BOTH no-call rows (full `0`/`0` + partial `C`/`0`).
+        assert result.nocall_count == 2
+
+    def test_kgp_rsids_in_fixture_pass_through_verbatim(self) -> None:
+        """Plan §8.5 — kgp* IDs in the committed fixture survive untouched.
+
+        Complements the inline ``test_kgp_rsids_pass_through_verbatim`` smoke
+        test by asserting against the real fixture rows used in downstream
+        annotation-engine coverage tests (step 40), so any mutation of kgp*
+        IDs at parse time would break the documented fall-through-to-coordinate
+        annotation path.
+        """
+        result = parse_ancestrydna(FIXTURE_V2)
+        by_rsid = {v.rsid: v for v in result.variants}
+        assert by_rsid["kgp12345678"].chrom == "1"
+        assert by_rsid["kgp12345678"].pos == 2000000
+        assert by_rsid["kgp12345678"].genotype == "AG"
+        assert by_rsid["kgp98765432"].chrom == "2"
+        assert by_rsid["kgp98765432"].pos == 3000000
+        assert by_rsid["kgp98765432"].genotype == "CT"
+
 
 # --------------------------------------------------------------------------- #
 # In-memory edge cases — PAR collapse, CRLF, trailing blanks, kgp* passthrough
@@ -264,6 +343,101 @@ def test_non_utf8_byte_in_comment_replaced(tmp_path: Path) -> None:
     result = parse_ancestrydna(p)
     assert len(result.variants) == 1
     assert result.variants[0].rsid == "rs1"
+
+
+# --------------------------------------------------------------------------- #
+# Committed-fixture parity — CRLF + non-UTF-8 byte (step 36; Plan §8.6 #8–9)
+# --------------------------------------------------------------------------- #
+
+
+class TestCommittedFixtureParity:
+    """Parses the committed CRLF and stray-byte fixtures and asserts every
+    ``ParseResult`` field matches the canonical LF fixture.
+
+    The inline tmp_path versions above (``test_crlf_line_endings``,
+    ``test_non_utf8_byte_in_comment_replaced``) lock the parser against
+    *synthetic* CRLF / stray-byte payloads. These tests lock it against the
+    *committed* fixture files referenced by Plan §16.1, so a fixture-curation
+    regression (someone re-saving the CRLF fixture as LF, or fixing the stray
+    byte under the impression that it was a mistake) is caught immediately
+    rather than silently re-asserting parser behavior against a passing copy.
+    """
+
+    def test_crlf_fixture_parses_identically_to_lf(self) -> None:
+        """Plan §8.6 #8 — every ``ParseResult`` field matches the LF fixture.
+
+        Vendor, version, build, the full variants list (order + values), and
+        every count field. The CRLF fixture is `sample_ancestrydna_v2.txt`
+        verbatim with `\\r\\n` line endings; ADNA-08 mandates that the parser
+        treat the two as interchangeable.
+        """
+        lf = parse_ancestrydna(FIXTURE_V2)
+        crlf = parse_ancestrydna(FIXTURE_CRLF)
+        assert lf.vendor == crlf.vendor
+        assert lf.version == crlf.version
+        assert lf.build == crlf.build
+        assert lf.variants == crlf.variants
+        assert lf.nocall_count == crlf.nocall_count
+        assert lf.total_lines == crlf.total_lines
+        assert lf.skipped_lines == crlf.skipped_lines
+
+    def test_non_utf8_byte_fixture_variants_byte_identical_to_lf(self) -> None:
+        """Plan §8.6 #9 — the `errors='replace'` contract is locked.
+
+        The committed non-UTF-8 fixture is the LF fixture with a single stray
+        `\\xff` inside the first comment line. The parser must complete and
+        return a variants list byte-identical to the LF fixture (the stray
+        byte sits in a comment, not in any variant row).
+        """
+        lf = parse_ancestrydna(FIXTURE_V2)
+        bad = parse_ancestrydna(FIXTURE_NON_UTF8)
+        assert bad.vendor is SourceVendor.ANCESTRYDNA
+        assert bad.version == "v2.0"
+        assert bad.build == "GRCh37"
+        assert bad.variants == lf.variants
+        assert bad.nocall_count == lf.nocall_count
+        # total_lines / skipped_lines match too — replacement char sits in a
+        # comment row, which contributes one skipped line on each side.
+        assert bad.total_lines == lf.total_lines
+        assert bad.skipped_lines == lf.skipped_lines
+
+
+# --------------------------------------------------------------------------- #
+# Truncated fixture parses cleanly (step 36; Plan §13.1 ADNA-08)
+# --------------------------------------------------------------------------- #
+
+
+def test_truncated_fixture_parses_to_expected_counts(tmp_path: Path) -> None:
+    """ADNA-08 — a truncated slice of the V2 fixture still parses cleanly.
+
+    Streams the head 50 lines of `sample_ancestrydna_v2.txt` (8 comment + 1
+    header + 41 data rows) into a tmp file, parses it, and asserts the
+    variant count matches the data-row count exactly. Locks the parser
+    against a regression where a truncated/in-progress download would emit
+    a misleading ``total_lines`` / ``len(variants)`` mismatch instead of a
+    clean partial parse.
+    """
+    head_lines = FIXTURE_V2.read_text(encoding="utf-8").splitlines(keepends=True)[:50]
+    truncated = tmp_path / "truncated_ancestrydna.txt"
+    truncated.write_text("".join(head_lines), encoding="utf-8")
+
+    result = parse_ancestrydna(truncated)
+    # 8 comment lines + 1 header + 41 data rows = 50 total.
+    assert result.total_lines == 50
+    assert result.skipped_lines == 9  # 8 comments + 1 header
+    assert len(result.variants) == 41
+    assert result.total_lines == result.skipped_lines + len(result.variants)
+    # First and last variant rows in the slice are deterministic.
+    assert result.variants[0].rsid == "rs4477212"
+    assert result.variants[0].chrom == "1"
+    # Last row of the head-50 slice is the second kgp* row at line 38 (data
+    # row 29), so the parsed list must include both kgp* IDs.
+    rsids = {v.rsid for v in result.variants}
+    assert {"kgp12345678", "kgp98765432"} <= rsids
+    # Vendor / version / build still resolve correctly on the truncated head.
+    assert result.vendor is SourceVendor.ANCESTRYDNA
+    assert result.version == "v2.0"
+    assert result.build == "GRCh37"
 
 
 # --------------------------------------------------------------------------- #
