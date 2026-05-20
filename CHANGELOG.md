@@ -105,6 +105,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## AncestryDNA Integration
 
+### Phase 1 — AncestryDNA Single-Sample Ingestion
+
+#### Step 26 — Shared parser types
+
+##### Added
+
+- New `backend/ingestion/base.py` (ADNA-01; Plan §8.2) declaring the parser-layer public surface that every Phase 1 sibling (the dispatcher in step 27, the chromosome normalizers in step 28, the 23andMe refactor in step 29, and the AncestryDNA parser in step 30) imports from: `SourceVendor` enum (`TWENTYTHREEANDME = "23andme"`, `ANCESTRYDNA = "ancestrydna"`), the frozen + slotted `ParsedVariant` dataclass (`rsid`, `chrom`, `pos`, `genotype`), the `ParseResult` dataclass with the freeform `version: str` field (the existing 23andMe `FormatVersion` enum stays vendor-internal per Plan §8.2 — refactor onto the shared string lands in step 29), and the four-class exception hierarchy `ParserError` → `UnsupportedFormatError` / `MalformedDataError` / `UnrecognizedVersionError`. `__all__` pins the public symbol set so downstream `from backend.ingestion.base import …` lines stay stable across the parser-layer refactor.
+- New `tests/backend/test_ingestion_base.py` (18 cases) locks the contract surface so step-27/28/29/30 regressions surface here first: `SourceVendor` enum values + membership + `SourceVendor("23andme")` round-trip; `ParsedVariant` field types + `dataclasses.FrozenInstanceError` on reassignment + `slots=True` (`__dict__` absent) + hashability with equality semantics; `ParseResult` minimal and full construction, version-is-string check that composes `f"{vendor.value}_{version}" == "ancestrydna_v2.0"` per Plan §8.7, and the default-`variants`-list non-sharing invariant (`field(default_factory=list)` rather than a class-level mutable default); exception hierarchy issubclass parametrize block + cross-sibling distinctness; `__all__` exact symbol audit.
+
+##### Notes
+
+- Scope is intentionally narrow per the per-step PR convention: this PR ships only the shared types module. The 23andMe parser's existing in-module `FormatVersion` / `ParsedVariant` / `ParseResult` / `ParserError` definitions stay untouched and continue to back `parse_23andme` until step 29 swaps them for these shared types (a full-sweep step per the cross-cutting list in CLAUDE.md). The dispatcher (step 27), chromosome normalizers (step 28), and AncestryDNA parser (step 30) consume the shared types directly.
+- Risk-register touch points (Plan §1.3): **R-04** (parser regression — refactor risk) — types-only addition with no runtime path changes, so no behavioral surface to regress on yet; the load-bearing contract assertions land in this step's test file so step-29 byte-identical-output assertions can rely on a stable shared-types layer.
+
 ### Phase 0 — Foundations
 
 #### Step 6 — `update_manager` writes manifest semver for VEP bundle
