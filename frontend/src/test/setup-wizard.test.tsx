@@ -1269,7 +1269,7 @@ describe('UploadStep', () => {
   it('shows drop zone with instructions', () => {
     render(<UploadStep onBack={vi.fn()} />)
     expect(
-      screen.getByText('Drop a 23andMe raw data file here'),
+      screen.getByText('Drop a 23andMe or AncestryDNA raw data file here'),
     ).toBeInTheDocument()
     expect(
       screen.getByText('or click to browse (.txt, .csv, .tsv)'),
@@ -1279,7 +1279,7 @@ describe('UploadStep', () => {
   it('has accessible drop zone', () => {
     render(<UploadStep onBack={vi.fn()} />)
     const dropZone = screen.getByRole('button', {
-      name: /select 23andme raw data file/i,
+      name: /select 23andme or ancestrydna raw data file/i,
     })
     expect(dropZone).toBeInTheDocument()
     expect(dropZone).toHaveAttribute('tabindex', '0')
@@ -1339,7 +1339,7 @@ describe('UploadStep', () => {
 
     expect(
       screen.getByText(
-        'Please select a 23andMe raw data file (.txt, .csv, or .tsv)',
+        'Please select a 23andMe or AncestryDNA raw data file (.txt, .csv, or .tsv)',
       ),
     ).toBeInTheDocument()
   })

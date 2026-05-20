@@ -198,7 +198,9 @@ describe('UploadStep — Step 15 bundle-gate banner', () => {
     fireEvent.change(input, { target: { files: [file] } })
 
     expect(
-      await screen.findByText(/please select a 23andme raw data file/i),
+      await screen.findByText(
+        /please select a 23andme or ancestrydna raw data file/i,
+      ),
     ).toBeInTheDocument()
     expect(mockFetch).not.toHaveBeenCalled()
   })
@@ -208,7 +210,7 @@ describe('UploadStep — Step 15 bundle-gate banner', () => {
     render(<UploadStep onBack={vi.fn()} />)
 
     const dropZone = screen.getByRole('button', {
-      name: /select 23andme raw data file to upload/i,
+      name: /select 23andme or ancestrydna raw data file to upload/i,
     })
     const fileInput = document.querySelector(
       'input[type="file"]',

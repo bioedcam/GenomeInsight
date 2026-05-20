@@ -107,6 +107,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Phase 1 — AncestryDNA Single-Sample Ingestion
 
+#### Step 32 — Wizard copy + remove AncestryDNA-planned rejection
+
+##### Changed
+
+- `frontend/src/components/setup/UploadStep.tsx` (ADNA-06; Plan §13.1) — wizard upload-step user-facing copy now names both vendors: the intro paragraph reads "Upload a 23andMe or AncestryDNA raw data file to get started, or skip to explore the dashboard first."; the drop-zone hint reads "Drop a 23andMe or AncestryDNA raw data file here"; the drop-zone `aria-label` reads "Select 23andMe or AncestryDNA raw data file to upload"; the unsupported-extension `fileError` reads "Please select a 23andMe or AncestryDNA raw data file (.txt, .csv, or .tsv)". The module docstring and the `ACCEPTED_EXTENSIONS` comment also pick up the AncestryDNA mention. The accepted extension list (`.txt` / `.csv` / `.tsv`) and the file-picker `accept` attribute are unchanged — AncestryDNA exports ship as `.txt` so no extension surface needed widening.
+
+##### Tests
+
+- `frontend/src/test/setup-wizard.test.tsx` — the `<UploadStep>` block's three vendor-string assertions were updated to match the new copy: the drop-zone-instruction `getByText` exact-string match, the drop-zone `getByRole('button', { name: … })` regex (`/select 23andme or ancestrydna raw data file/i`), and the invalid-extension `fileError` exact-string match. The other 86 cases in the file stay byte-identical green.
+- `frontend/src/test/setup-upload-step.test.tsx` — the "rejects unsupported extensions" case's `findByText` regex now reads `/please select a 23andme or ancestrydna raw data file/i`, and the keyboard-activation case's `getByRole('button', { name: … })` regex now reads `/select 23andme or ancestrydna raw data file to upload/i`. The other 4 cases (bundle-gate banner happy path, CTA-fires-trigger case, 422-error case, parsed-summary success case) stay byte-identical green.
+
+##### Notes
+
+- ADNA-07 (parser rejection branch removal) is a no-op for this step: step 29 already retired `parser_23andme.py`'s vendor-dispatch surface (including the "AncestryDNA is planned for a future release" rejection) into the dispatcher. The dispatcher now routes AncestryDNA to `parser_ancestrydna` end-to-end (step 30). A `grep -rn "AncestryDNA\|ancestrydna" frontend/src/` of the source tree shows the remaining references are positive (the bundle-gate banner, the LAI coverage telemetry surface, the storage-step DB-breakdown callout, the setup type definitions, and the AppUpdateBanner soft-gate message) — no rejection strings remain to clean up.
+- The current `SetupWizard.tsx` shell carries only the step-label scaffolding (Welcome / Import / Storage / Services / Databases / Upload) — no vendor-specific user copy lives in the parent. ADNA-06's wizard-copy surface is fully covered by `UploadStep.tsx`. The accompanying `StorageStep.tsx` already names both vendors in the DB-size breakdown (landed in step 15), so no further edits are needed there.
+- Scope discipline (per the per-step PR convention): no Python sources touched. The legacy `tests/fixtures/sample_ancestrydna.txt` retirement + `test_rejects_ancestrydna_with_message` flip is step 33 (ADNA-08a); the positive AncestryDNA `test_ingestion_api.py` extension is step 43 (ADNA-10); the E2E `setup-wizard-ancestrydna.spec.ts` Playwright flow is step 44 (ADNA-11). None of those land here.
+- Risk-register touch points (Plan §1.3): **R-04** (annotation pipeline regression — refactor risk) — the 23andMe upload happy path is locked unchanged. The bundle-gate banner (step 15, Plan §5.4) keeps its existing copy and `data-testid` handles; the existing six bundle-gate cases stay byte-identical green. **R-12** (UX regressions on shared wizard surfaces) — the drop-zone `accept` attribute, file-extension whitelist, and bundle-gate banner remain untouched.
+- Targeted local sweep (per CLAUDE.md SOP #8): step 32 is not on the canonical full-sweep list. Ran `npx vitest run src/test/setup-upload-step.test.tsx src/test/setup-wizard.test.tsx` (89/89 green). ESLint clean on every touched file.
+
 #### Step 31 — Ingest route → dispatcher
 
 ##### Changed

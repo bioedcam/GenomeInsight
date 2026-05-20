@@ -1,8 +1,9 @@
 /** Setup wizard Step 6 — Upload sample file + redirect to dashboard (P1-19g).
  *
- * Accepts a 23andMe raw data file via drag-and-drop or file picker.
- * On successful parse, shows variant count and offers to go to the dashboard.
- * Upload is optional — users can skip and upload later from the main UI.
+ * Accepts a 23andMe or AncestryDNA raw data file via drag-and-drop or file
+ * picker. On successful parse, shows variant count and offers to go to the
+ * dashboard. Upload is optional — users can skip and upload later from the
+ * main UI.
  */
 
 import { useCallback, useRef, useState } from 'react'
@@ -26,7 +27,7 @@ interface UploadStepProps {
   onBack: () => void
 }
 
-/** Accepted file extensions for 23andMe raw data. */
+/** Accepted file extensions for 23andMe or AncestryDNA raw data. */
 const ACCEPTED_EXTENSIONS = ['.txt', '.csv', '.tsv']
 
 function isValidFile(filename: string): boolean {
@@ -63,7 +64,7 @@ export default function UploadStep({ onBack }: UploadStepProps) {
       setBundleGate(null)
     } else {
       setFileError(
-        'Please select a 23andMe raw data file (.txt, .csv, or .tsv)',
+        'Please select a 23andMe or AncestryDNA raw data file (.txt, .csv, or .tsv)',
       )
     }
   }, [])
@@ -197,8 +198,8 @@ export default function UploadStep({ onBack }: UploadStepProps) {
           Upload Sample
         </h2>
         <p className="text-sm text-muted-foreground">
-          Upload a 23andMe raw data file to get started, or skip to explore
-          the dashboard first.
+          Upload a 23andMe or AncestryDNA raw data file to get started, or
+          skip to explore the dashboard first.
         </p>
       </div>
 
@@ -216,7 +217,7 @@ export default function UploadStep({ onBack }: UploadStepProps) {
         }}
         role="button"
         tabIndex={0}
-        aria-label="Select 23andMe raw data file to upload"
+        aria-label="Select 23andMe or AncestryDNA raw data file to upload"
         className={cn(
           'rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors',
           dragActive
@@ -228,7 +229,7 @@ export default function UploadStep({ onBack }: UploadStepProps) {
         <p className="mt-3 text-sm font-medium text-foreground">
           {selectedFile
             ? selectedFile.name
-            : 'Drop a 23andMe raw data file here'}
+            : 'Drop a 23andMe or AncestryDNA raw data file here'}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {selectedFile
