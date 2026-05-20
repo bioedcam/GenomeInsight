@@ -74,4 +74,5 @@ markers = [
     "e2e: marks end-to-end tests",
     "integration: marks integration tests",
     "requires_java: marks tests that need a real Java runtime (skipped when unavailable)",
+    "requires_real_bundle: marks tests that need the real production LAI/VEP bundle on disk (skipped when absent; consumed by the nightly slow-tier workflow)",
 ]
