@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, CheckCircle, Download, Globe, Info, Loader2, Play } from "lucide-react"
+import { Toaster } from "sonner"
 import PageLoading from "@/components/ui/PageLoading"
 import PageError from "@/components/ui/PageError"
 import PageEmpty from "@/components/ui/PageEmpty"
@@ -27,6 +28,7 @@ import HaplogroupCard from "@/components/ancestry/HaplogroupCard"
 import AnalysisDetails from "@/components/ancestry/AnalysisDetails"
 import ChromosomePainting from "@/components/charts/ChromosomePainting"
 import AncestryPieChart from "@/components/charts/AncestryPieChart"
+import LAICoverageTelemetryPanel from "@/components/ancestry/LAICoverageTelemetryPanel"
 import { POPULATION_LABELS } from "@/components/ancestry/constants"
 
 export default function AncestryView() {
@@ -141,6 +143,11 @@ export default function AncestryView() {
 
   return (
     <div className="p-6">
+      {/* Toast surface — sonner Toaster mount for per-sample LAI advisories
+          (Plan §6.6 high-dropout warning). Page-scoped so other modules are
+          not affected by the additional Toaster instance. */}
+      <Toaster position="bottom-right" theme="system" closeButton />
+
       {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
         <div
@@ -382,6 +389,14 @@ export default function AncestryView() {
                         <CheckCircle className="h-4 w-4" />
                         Chromosome painting complete
                       </div>
+
+                      {/* LAI coverage telemetry (Step 24, Plan §6.7) */}
+                      {laiResultsQuery.data.coverage_telemetry && (
+                        <LAICoverageTelemetryPanel
+                          telemetry={laiResultsQuery.data.coverage_telemetry}
+                          sampleId={sampleId}
+                        />
+                      )}
 
                       {/* Chromosome Painting */}
                       <ChromosomePainting painting={laiResultsQuery.data.chromosome_painting} />

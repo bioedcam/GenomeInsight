@@ -145,12 +145,45 @@ class LAITriggerResponse(BaseModel):
     degraded_coverage: bool = False
 
 
+class LAICoverageSourceTelemetry(BaseModel):
+    """Per-source LAI rsID hit / drop counts (Plan §6.6, §6.7).
+
+    Unmerged samples emit a single bucket keyed by vendor
+    (e.g. ``"ancestrydna"`` / ``"23andme"``). Merged samples emit the
+    three uppercase buckets ``S1`` / ``S2`` / ``both`` matching
+    ``raw_variants.source``.
+    """
+
+    hits: int = 0
+    drops: int = 0
+
+
+class LAICoverageTelemetry(BaseModel):
+    """LAI coverage telemetry surfaced to ``AncestryView`` (Plan §6.7).
+
+    Step 24's `AncestryView` reads this payload to render
+    "X of Y rsIDs mapped to bundle (Z% dropout)" — and a three-row
+    source-breakdown table for merged samples. ``drop_rate_warning``
+    drives the per-sample reduced-coverage toast (Plan §6.6 threshold
+    of 15%).
+    """
+
+    per_source: dict[str, LAICoverageSourceTelemetry] = {}
+    total_hits: int = 0
+    total_drops: int = 0
+    drop_rate: float = 0.0
+    drop_rate_warning: bool = False
+
+
 class LAIResultResponse(BaseModel):
     """LAI analysis results.
 
     Carries the Step-23 ``degraded_coverage`` advisory flag (Plan §6.7)
     when the run was produced against a pre-v2.0.0 bundle for an
-    AncestryDNA-sourced sample.
+    AncestryDNA-sourced sample. The Step-24 ``coverage_telemetry`` field
+    surfaces the per-source rsID hit/drop counts emitted by the runner
+    (Plan §6.6, §6.7) so the LAI Findings page can show the dropout
+    summary and merged-sample breakdown table.
     """
 
     global_ancestry: dict
@@ -158,6 +191,7 @@ class LAIResultResponse(BaseModel):
     metadata: dict
     created_at: str
     degraded_coverage: bool = False
+    coverage_telemetry: LAICoverageTelemetry | None = None
 
 
 class LAIProgressResponse(BaseModel):
@@ -586,6 +620,51 @@ def trigger_lai_analysis(sample_id: int) -> LAITriggerResponse:
     )
 
 
+def _parse_coverage_telemetry(metadata: dict) -> LAICoverageTelemetry | None:
+    """Lift the runner's per-source telemetry out of ``metadata`` (Plan §6.6).
+
+    The Step-22 runner mirrors ``coverage_telemetry`` into the metadata
+    blob alongside ``drop_rate`` and ``drop_rate_warning``. Older results
+    (pre-Step-22 runs) lack those keys; in that case we return ``None`` so
+    the frontend can skip the section entirely.
+    """
+    raw = metadata.get("coverage_telemetry")
+    if not isinstance(raw, dict) or not raw:
+        return None
+
+    per_source: dict[str, LAICoverageSourceTelemetry] = {}
+    total_hits = 0
+    total_drops = 0
+    for key, counts in raw.items():
+        if not isinstance(counts, dict):
+            continue
+        hits = int(counts.get("hits", 0) or 0)
+        drops = int(counts.get("drops", 0) or 0)
+        per_source[str(key)] = LAICoverageSourceTelemetry(hits=hits, drops=drops)
+        total_hits += hits
+        total_drops += drops
+
+    if not per_source:
+        return None
+
+    raw_drop_rate = metadata.get("drop_rate")
+    if isinstance(raw_drop_rate, int | float):
+        drop_rate = float(raw_drop_rate)
+    else:
+        denom = total_hits + total_drops
+        drop_rate = (total_drops / denom) if denom else 0.0
+
+    drop_rate_warning = bool(metadata.get("drop_rate_warning", drop_rate > 0.15))
+
+    return LAICoverageTelemetry(
+        per_source=per_source,
+        total_hits=total_hits,
+        total_drops=total_drops,
+        drop_rate=round(drop_rate, 4),
+        drop_rate_warning=drop_rate_warning,
+    )
+
+
 @router.get("/lai/{sample_id}/results", dependencies=[Depends(require_fresh_sample)])
 def get_lai_results(sample_id: int) -> LAIResultResponse | None:
     """Get LAI results for a sample.
@@ -607,12 +686,14 @@ def get_lai_results(sample_id: int) -> LAIResultResponse | None:
     if row is None:
         return None
 
+    metadata = json.loads(row.metadata_json)
     return LAIResultResponse(
         global_ancestry=json.loads(row.global_ancestry_json),
         chromosome_painting=json.loads(row.chromosome_painting_json),
-        metadata=json.loads(row.metadata_json),
+        metadata=metadata,
         created_at=row.created_at.isoformat() if row.created_at else "",
         degraded_coverage=is_degraded_for_sample(sample_id),
+        coverage_telemetry=_parse_coverage_telemetry(metadata),
     )
 
 

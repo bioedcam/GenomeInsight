@@ -121,11 +121,38 @@ export interface ChromosomePaintingSegment {
   hap1_color: string
 }
 
+/** Per-source LAI rsID hit / drop counts (Step 24, Plan §6.6/§6.7).
+ *
+ * Unmerged samples emit a single bucket keyed by vendor
+ * (e.g. `"ancestrydna"` / `"23andme"`). Merged samples emit the three
+ * uppercase buckets `S1` / `S2` / `both` matching `raw_variants.source`.
+ */
+export interface LAICoverageSourceTelemetry {
+  hits: number
+  drops: number
+}
+
+/** LAI coverage telemetry surfaced to `AncestryView` (Step 24, Plan §6.7).
+ *
+ * Powers the "X of Y rsIDs mapped to bundle (Z% dropout)" summary line
+ * and the three-row source-breakdown table for merged samples. The
+ * `drop_rate_warning` flag triggers the per-sample reduced-coverage
+ * toast (Plan §6.6 — drop rate above 15%).
+ */
+export interface LAICoverageTelemetry {
+  per_source: Record<string, LAICoverageSourceTelemetry>
+  total_hits: number
+  total_drops: number
+  drop_rate: number
+  drop_rate_warning: boolean
+}
+
 /** LAI analysis results.
  *
  * `degraded_coverage` (Step 23, Plan §6.7) is True when the run was
  * produced against a pre-v2.0.0 bundle for an AncestryDNA-sourced
- * sample.
+ * sample. `coverage_telemetry` (Step 24, Plan §6.7) carries the
+ * per-source rsID hit/drop counts the runner emits on every LAI run.
  */
 export interface LAIResultResponse {
   global_ancestry: Record<string, LAIGlobalAncestryEntry>
@@ -133,6 +160,7 @@ export interface LAIResultResponse {
   metadata: Record<string, unknown>
   created_at: string
   degraded_coverage?: boolean
+  coverage_telemetry?: LAICoverageTelemetry | null
 }
 
 /** LAI analysis progress. */
