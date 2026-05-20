@@ -165,6 +165,52 @@ class TestRegenerateFixtures:
             count = conn.execute("SELECT count(*) FROM vep_annotations").fetchone()[0]
         assert count >= 50, f"Expected >=50 VEP rows, got {count}"
 
+    def test_mini_vep_bundle_covers_ancestrydna_rsids(self, tmp_path: Path) -> None:
+        """Step 39: mini bundle covers every rsID in ``sample_ancestrydna_v2.txt``
+        except the defensive ``kgp*`` rows.
+
+        The kgp rows are intentionally absent so step 40's ADNA-09 regression test
+        exercises the coordinate-fallback path. Every other rsID — including those
+        on remapped chromosomes 23/24/25/26 (X/Y/PAR→X/MT) — must round-trip
+        from the fixture into ``vep_annotations``.
+        """
+        fixture = FIXTURES_DIR / "sample_ancestrydna_v2.txt"
+        non_kgp_rsids: set[str] = set()
+        kgp_rsids: set[str] = set()
+        for raw in fixture.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or line.startswith("rsid\t"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 5:
+                continue
+            rsid = parts[0]
+            if rsid.startswith("kgp"):
+                kgp_rsids.add(rsid)
+            else:
+                non_kgp_rsids.add(rsid)
+
+        assert non_kgp_rsids, "fixture parsed zero non-kgp rsIDs — check parsing"
+        assert kgp_rsids, "fixture parsed zero kgp rsIDs — coord-fallback case missing"
+
+        _run_script(tmp_path)
+        with sqlite3.connect(str(tmp_path / "mini_vep_bundle.db")) as conn:
+            bundle_rsids: set[str] = {
+                row[0]
+                for row in conn.execute("SELECT rsid FROM vep_annotations").fetchall()
+            }
+
+        missing = non_kgp_rsids - bundle_rsids
+        assert not missing, (
+            f"Mini VEP bundle missing {len(missing)} AncestryDNA rsIDs "
+            f"(first 10: {sorted(missing)[:10]})"
+        )
+        unexpected_kgp = kgp_rsids & bundle_rsids
+        assert not unexpected_kgp, (
+            f"kgp* rsIDs must not be in the mini bundle (coord-fallback path): "
+            f"{sorted(unexpected_kgp)}"
+        )
+
     def test_mini_vep_bundle_carries_v2_0_0_metadata(self, tmp_path: Path) -> None:
         """Phase 0 closure (Step 18): mini bundle mirrors v2.0.0 schema.
 
