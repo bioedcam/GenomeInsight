@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Ingest API AncestryDNA happy-path test (Step 43 / ADNA-10; Plan §13.1):** `tests/backend/test_ingestion_api.py::TestIngestAncestryDNA` POSTs `tests/fixtures/sample_ancestrydna_v2.txt` to `/api/ingest` against a TestClient seeded with `database_versions['vep_bundle'] = v2.0.0` (new `_seed_vep_bundle_v2` helper + `ancestrydna_client` fixture) and asserts 202 status, `file_format == "ancestrydna_v2.0"`, and `variant_count == 589`. Paired with the 409-gated cases in `test_bundle_gating.py` (Step 7); together they pin both legs of the Plan §5.4 vendor-scoped bundle gate.
 - **Nightly slow-tier workflow (Step 42 / ADNA-09a):** `.github/workflows/nightly.yml` runs `pytest -m slow` at 04:00 UTC daily, caches the production VEP + LAI release assets by manifest `sha256`, and auto-files a GitHub Issue labeled `slow-tier-regression` on failure.
 - **AncestryDNA real-bundle accuracy test (Step 42):** `tests/backend/test_annotation_engine_ancestrydna_real_bundle.py` asserts ≥95% combined VEP hit-rate and ≥85% ClinVar P/LP hit-rate against the real `vep_bundle v2.0.0` over `synthetic_eur_ancestrydna.txt`. Dormant on PR-blocking runs; activates only inside the nightly workflow.
 - **VEP-bundle gate in `requires_real_bundle`:** `tests/conftest.py` now treats either the production LAI or VEP bundle as sufficient to wake the marker, with each test individually skipping if its specific bundle is missing.
