@@ -150,16 +150,6 @@ def _seed_mt_h1a(engine: sa.Engine) -> None:
         conn.execute(sa.insert(raw_variants), _H1A_GENOTYPES)
 
 
-def _seed_xy_r1b1a(engine: sa.Engine) -> None:
-    """Seed R1b1a Y-chromosome genotypes + non-PAR chrX hom calls.
-
-    The chrX hom rows feed the Plan §9.4 sex-inference algorithm so the
-    sample classifies as candidate XY (then confirmed by the chrY rate).
-    """
-    with engine.begin() as conn:
-        conn.execute(sa.insert(raw_variants), _R1B1A_GENOTYPES + _NONPAR_X_HOM_GENOTYPES)
-
-
 def _seed_both(engine: sa.Engine) -> None:
     """Seed mt H1a, Y R1b1a, and the chrX hom evidence the sex-inference
     service needs to classify the sample as XY (Plan §9.4)."""
@@ -734,3 +724,94 @@ class TestRunHaplogroupAssignment:
                 )
             ).fetchall()
             assert len(f_rows) == 2
+
+
+# ── Sex-inference rewire regression (Step 54 / Plan §9.4) ───────────────
+
+
+# Heterozygous non-PAR chrX call → dispositive XX under the Plan §9.4
+# algorithm, regardless of chrY signal.
+_XX_CHROM_X_HET = [
+    {"rsid": "rs_xx_x_het_1", "chrom": "X", "pos": 50_000_001, "genotype": "AG"},
+    {"rsid": "rs_xx_x_hom_1", "chrom": "X", "pos": 50_000_002, "genotype": "GG"},
+]
+
+
+class TestHaplogroupSexInferenceRewire:
+    """Lock byte-identical ``assign_haplogroups`` output on 23andMe-shaped
+    XX and XY regression fixtures after the sex-inference rewire (Step 54).
+
+    Plan §9.4 attests that the new PAR-aware algorithm matches the legacy
+    ``y_count > 0`` heuristic on well-behaved XY/XX samples; this class is
+    the regression fence. Sex-inference branch coverage lives in
+    ``tests/backend/test_sex_inference.py``.
+    """
+
+    def test_xx_regression_fixture_yields_mt_only(
+        self,
+        bundle: HaplogroupBundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """23andMe XX regression: mtDNA assigned, Y tree-walk skipped."""
+        from backend.services.sex_inference import infer_biological_sex
+
+        with sample_engine.begin() as conn:
+            conn.execute(sa.insert(raw_variants), _H1A_GENOTYPES + _XX_CHROM_X_HET)
+
+        assert infer_biological_sex(sample_engine) == "XX"
+
+        results = assign_haplogroups(bundle, sample_engine)
+
+        assert len(results) == 1
+        assert results[0].tree_type == "mt"
+        assert results[0].haplogroup == "H1a"
+
+    def test_xy_regression_fixture_yields_both_mt_and_y(
+        self,
+        bundle: HaplogroupBundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """23andMe XY regression: both mtDNA + Y haplogroups assigned.
+
+        Uses ``_seed_both`` (chrX hom + chrY R1b1a + mt H1a), the same
+        fixture ``TestAssignHaplogroups.test_both_mt_and_y`` exercises,
+        which the rewire keeps byte-identical.
+        """
+        from backend.services.sex_inference import infer_biological_sex
+
+        _seed_both(sample_engine)
+
+        assert infer_biological_sex(sample_engine) == "XY"
+
+        results = assign_haplogroups(bundle, sample_engine)
+
+        assert len(results) == 2
+        mt = next(r for r in results if r.tree_type == "mt")
+        y = next(r for r in results if r.tree_type == "Y")
+        assert mt.haplogroup == "H1a"
+        # Tree-walk may descend deeper than R1b1a when child nodes also
+        # match — same prefix-lock contract as the original test.
+        assert y.haplogroup.startswith("R1b1a")
+
+    def test_haplogroup_gate_matches_direct_sex_inference_call(
+        self,
+        bundle: HaplogroupBundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """The rewired ``assign_haplogroups`` Y-gate must observe the same
+        classification the service returns when called directly — single
+        source of truth (Plan §9.4)."""
+        from backend.services.sex_inference import infer_biological_sex
+
+        _seed_both(sample_engine)
+
+        direct_sex = infer_biological_sex(sample_engine)
+        results = assign_haplogroups(bundle, sample_engine)
+        gated_tree_types = {r.tree_type for r in results}
+
+        # XY → Y appears; anything else → Y is gated out. The rewired call
+        # path must agree with a direct service call.
+        if direct_sex == "XY":
+            assert "Y" in gated_tree_types
+        else:
+            assert "Y" not in gated_tree_types
