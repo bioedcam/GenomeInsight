@@ -29,16 +29,57 @@ const SAMPLE_DETAIL = {
   extra: { ethnicity: "European" },
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status < 400,
+    status,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+    clone() {
+      return this
+    },
+  } as unknown as Response
+}
+
+/** Returns a fetch implementation that routes /api/samples + /api/individuals
+ * to the canned responses defined per-test, while keeping default no-op
+ * responses for the individuals routes the assign-to-individual dropdown
+ * (Step 51) added to SampleMetadataEditor. */
+function makeRouter(handlers: {
+  samples?: (init?: RequestInit) => Response | Promise<Response>
+  sampleDetail?: (id: number, init?: RequestInit) => Response | Promise<Response>
+}) {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString()
+    const method = (init?.method ?? "GET").toUpperCase()
+    if (url === "/api/samples" && method === "GET" && handlers.samples) {
+      return Promise.resolve(handlers.samples(init))
+    }
+    const detailMatch = /^\/api\/samples\/(\d+)$/.exec(url)
+    if (detailMatch && handlers.sampleDetail) {
+      return Promise.resolve(
+        handlers.sampleDetail(Number(detailMatch[1]), init),
+      )
+    }
+    if (url === "/api/individuals" && method === "GET") {
+      return Promise.resolve(jsonResponse([]))
+    }
+    if (/^\/api\/individuals\/\d+$/.test(url) && method === "GET") {
+      return Promise.resolve(jsonResponse({ detail: "not found" }, 404))
+    }
+    return Promise.resolve(jsonResponse({ detail: "unhandled" }, 500))
+  }
+}
+
 beforeEach(() => {
   mockFetch.mockReset()
 })
 
 describe("SampleMetadataEditor", () => {
   it("shows empty state when no samples", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve([]),
-    })
+    mockFetch.mockImplementation(
+      makeRouter({ samples: () => jsonResponse([]) }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -47,10 +88,9 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("renders sample list with names", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(SAMPLE_LIST),
-    })
+    mockFetch.mockImplementation(
+      makeRouter({ samples: () => jsonResponse(SAMPLE_LIST) }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -59,15 +99,12 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("expands edit form on edit button click", async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_DETAIL),
-      })
+    mockFetch.mockImplementation(
+      makeRouter({
+        samples: () => jsonResponse(SAMPLE_LIST),
+        sampleDetail: () => jsonResponse(SAMPLE_DETAIL),
+      }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -82,10 +119,9 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("shows delete confirmation dialog on delete click", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(SAMPLE_LIST),
-    })
+    mockFetch.mockImplementation(
+      makeRouter({ samples: () => jsonResponse(SAMPLE_LIST) }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -101,10 +137,9 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("cancels delete when cancel button is clicked", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(SAMPLE_LIST),
-    })
+    mockFetch.mockImplementation(
+      makeRouter({ samples: () => jsonResponse(SAMPLE_LIST) }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -125,15 +160,12 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("displays metadata fields in edit form", async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_DETAIL),
-      })
+    mockFetch.mockImplementation(
+      makeRouter({
+        samples: () => jsonResponse(SAMPLE_LIST),
+        sampleDetail: () => jsonResponse(SAMPLE_DETAIL),
+      }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -151,15 +183,12 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("save button is disabled when no changes", async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_DETAIL),
-      })
+    mockFetch.mockImplementation(
+      makeRouter({
+        samples: () => jsonResponse(SAMPLE_LIST),
+        sampleDetail: () => jsonResponse(SAMPLE_DETAIL),
+      }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -174,28 +203,17 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("calls update mutation with changed fields on save", async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_DETAIL),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ ...SAMPLE_DETAIL, notes: "Updated note" }),
-      })
-      // React Query invalidation re-fetches
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ ...SAMPLE_DETAIL, notes: "Updated note" }),
-      })
+    mockFetch.mockImplementation(
+      makeRouter({
+        samples: () => jsonResponse(SAMPLE_LIST),
+        sampleDetail: (_id, init) => {
+          if ((init?.method ?? "GET").toUpperCase() === "PATCH") {
+            return jsonResponse({ ...SAMPLE_DETAIL, notes: "Updated note" })
+          }
+          return jsonResponse(SAMPLE_DETAIL)
+        },
+      }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
@@ -226,15 +244,12 @@ describe("SampleMetadataEditor", () => {
   })
 
   it("save button is enabled after making changes", async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_LIST),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(SAMPLE_DETAIL),
-      })
+    mockFetch.mockImplementation(
+      makeRouter({
+        samples: () => jsonResponse(SAMPLE_LIST),
+        sampleDetail: () => jsonResponse(SAMPLE_DETAIL),
+      }),
+    )
 
     render(<SampleMetadataEditor />)
     await waitFor(() => {
