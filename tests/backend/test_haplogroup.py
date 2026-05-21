@@ -7,8 +7,12 @@ Covers:
   - T3-34: haplogroup_assignments table populated correctly after ancestry module runs
   - Bundle loading and parsing
   - Tree-walk algorithm correctness
-  - Sex inference from Y-chromosome variant presence
   - Findings storage in both haplogroup_assignments and findings tables
+
+Sex inference itself is tested in ``tests/backend/test_sex_inference.py``
+since the helper moved to ``backend/services/sex_inference.py`` at Step 54
+(see Plan §9.4). Haplogroup fixtures here include the chrX evidence the
+PAR-aware algorithm needs to confirm XY.
 """
 
 from __future__ import annotations
@@ -27,7 +31,6 @@ from backend.analysis.ancestry import (
     HaplogroupTraversalStep,
     _check_node_match,
     _collect_rsids,
-    _infer_sex_from_variants,
     _parse_tree_node,
     _tree_walk,
     assign_haplogroups,
@@ -99,6 +102,18 @@ _H1A_GENOTYPES = [
     {"rsid": "i5013404", "chrom": "MT", "pos": 13404, "genotype": "CC"},
 ]
 
+# Non-PAR chrX hom calls needed for the Plan §9.4 sex-inference algorithm
+# (Step 54) to classify a sample as candidate XY. Positions sit well past
+# PAR1 (ends at 2,699,520) and before PAR2 (starts at 154,931,044). Two
+# rows is enough — the algorithm requires "≥1 non-PAR chrX typed and every
+# typed call homozygous", and these two rows leave the legacy ``Y count >
+# 0`` heuristic with the same result (no chrY signal needed for the
+# legacy gate; the algorithm only reads chrX here).
+_NONPAR_X_HOM_GENOTYPES = [
+    {"rsid": "rs_haplo_x_hom_1", "chrom": "X", "pos": 50_000_001, "genotype": "AA"},
+    {"rsid": "rs_haplo_x_hom_2", "chrom": "X", "pos": 50_000_002, "genotype": "GG"},
+]
+
 # Known genotype fixture for R1b1a path in Y-chromosome:
 # Y-Adam → CT → F → K → K2 → P → R → R1 → R1b → R1b1 → R1b1a
 _R1B1A_GENOTYPES = [
@@ -136,14 +151,19 @@ def _seed_mt_h1a(engine: sa.Engine) -> None:
 
 
 def _seed_xy_r1b1a(engine: sa.Engine) -> None:
-    """Seed R1b1a Y-chromosome genotypes into raw_variants."""
+    """Seed R1b1a Y-chromosome genotypes + non-PAR chrX hom calls.
+
+    The chrX hom rows feed the Plan §9.4 sex-inference algorithm so the
+    sample classifies as candidate XY (then confirmed by the chrY rate).
+    """
     with engine.begin() as conn:
-        conn.execute(sa.insert(raw_variants), _R1B1A_GENOTYPES)
+        conn.execute(sa.insert(raw_variants), _R1B1A_GENOTYPES + _NONPAR_X_HOM_GENOTYPES)
 
 
 def _seed_both(engine: sa.Engine) -> None:
-    """Seed both mt H1a and Y R1b1a genotypes."""
-    all_rows = _H1A_GENOTYPES + _R1B1A_GENOTYPES
+    """Seed mt H1a, Y R1b1a, and the chrX hom evidence the sex-inference
+    service needs to classify the sample as XY (Plan §9.4)."""
+    all_rows = _H1A_GENOTYPES + _R1B1A_GENOTYPES + _NONPAR_X_HOM_GENOTYPES
     with engine.begin() as conn:
         conn.execute(sa.insert(raw_variants), all_rows)
 
@@ -439,40 +459,6 @@ class TestTreeWalk:
         assert "H" in haplogroups_in_path
         assert "H1" in haplogroups_in_path
         assert "H1a" in haplogroups_in_path
-
-
-# ── Sex inference tests ─────────────────────────────────────────────────
-
-
-class TestInferSex:
-    """Test sex inference from Y-chromosome variant presence."""
-
-    def test_xx_no_y_variants(self, sample_engine: sa.Engine) -> None:
-        """No Y-chromosome variants → XX."""
-        _seed_mt_h1a(sample_engine)
-        sex = _infer_sex_from_variants(sample_engine)
-        assert sex == "XX"
-
-    def test_xy_with_y_variants(self, sample_engine: sa.Engine) -> None:
-        """Y-chromosome variants present → XY."""
-        _seed_both(sample_engine)
-        sex = _infer_sex_from_variants(sample_engine)
-        assert sex == "XY"
-
-    def test_xy_nocall_y_variants(self, sample_engine: sa.Engine) -> None:
-        """Y-chromosome variants with no-call genotypes → XX."""
-        with sample_engine.begin() as conn:
-            conn.execute(
-                sa.insert(raw_variants),
-                [{"rsid": "rs_y1", "chrom": "Y", "pos": 1000, "genotype": "--"}],
-            )
-        sex = _infer_sex_from_variants(sample_engine)
-        assert sex == "XX"
-
-    def test_empty_database(self, sample_engine: sa.Engine) -> None:
-        """Empty database → XX."""
-        sex = _infer_sex_from_variants(sample_engine)
-        assert sex == "XX"
 
 
 # ── Full haplogroup assignment tests ────────────────────────────────────

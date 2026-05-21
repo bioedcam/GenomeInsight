@@ -1455,3 +1455,170 @@ class TestMIDWarning:
         assert ancestry["EUR"]["confidence"] > 0.8
         # Populations with 0 windows should have 0 confidence
         assert ancestry["AFR"]["confidence"] == 0.0
+
+
+# ── Haplogroup sex-inference rewire (Step 54 / Plan §9.4) ─────────────────
+
+
+class TestHaplogroupSexInferenceRewire:
+    """Lock byte-identical ``assign_haplogroups`` output on 23andMe-shaped XX
+    and XY regression fixtures after the sex-inference rewire (Step 54).
+
+    Plan §9.4 attests that the new PAR-aware algorithm matches the legacy
+    ``y_count > 0`` heuristic on well-behaved XY/XX samples; this class is
+    the regression fence. Sex-inference branch coverage lives in
+    ``tests/backend/test_sex_inference.py``.
+    """
+
+    # mtDNA H1a defining SNPs along the L3 → N → R → R0 → HV → H → H1 → H1a
+    # path. Mirrors tests/backend/test_haplogroup.py::_H1A_GENOTYPES verbatim
+    # so the post-rewire pipeline yields identical mt haplogroup output.
+    _H1A_GENOTYPES = [
+        {"rsid": "i5000769", "chrom": "MT", "pos": 769, "genotype": "GG"},
+        {"rsid": "i5001018", "chrom": "MT", "pos": 1018, "genotype": "AA"},
+        {"rsid": "i5016311", "chrom": "MT", "pos": 16311, "genotype": "CC"},
+        {"rsid": "i5008701", "chrom": "MT", "pos": 8701, "genotype": "GG"},
+        {"rsid": "i5009540", "chrom": "MT", "pos": 9540, "genotype": "CC"},
+        {"rsid": "rs1000318", "chrom": "MT", "pos": 10740, "genotype": "TT"},
+        {"rsid": "i5010873", "chrom": "MT", "pos": 10873, "genotype": "CC"},
+        {"rsid": "i5015301", "chrom": "MT", "pos": 15301, "genotype": "AA"},
+        {"rsid": "i5012705", "chrom": "MT", "pos": 12705, "genotype": "CC"},
+        {"rsid": "rs1000622", "chrom": "MT", "pos": 13824, "genotype": "TT"},
+        {"rsid": "i5000073", "chrom": "MT", "pos": 73, "genotype": "GG"},
+        {"rsid": "i5014766", "chrom": "MT", "pos": 14766, "genotype": "TT"},
+        {"rsid": "i5002706", "chrom": "MT", "pos": 2706, "genotype": "GG"},
+        {"rsid": "rs1000687", "chrom": "MT", "pos": 13252, "genotype": "TT"},
+        {"rsid": "i5003010", "chrom": "MT", "pos": 3010, "genotype": "AA"},
+        {"rsid": "rs1000390", "chrom": "MT", "pos": 13290, "genotype": "TT"},
+        {"rsid": "i5013404", "chrom": "MT", "pos": 13404, "genotype": "CC"},
+    ]
+
+    # Y R1b1a defining SNPs along Y-Adam → CT → F → K → K2 → P → R → R1 →
+    # R1b → R1b1 → R1b1a. Mirrors test_haplogroup.py::_R1B1A_GENOTYPES.
+    _R1B1A_GENOTYPES = [
+        {"rsid": "rs2032652", "chrom": "Y", "pos": 21869271, "genotype": "TT"},
+        {"rsid": "rs13304168", "chrom": "Y", "pos": 23058920, "genotype": "GG"},
+        {"rsid": "rs3900", "chrom": "Y", "pos": 14413839, "genotype": "CC"},
+        {"rsid": "rs2032631", "chrom": "Y", "pos": 14416951, "genotype": "CC"},
+        {"rsid": "rs1000147", "chrom": "Y", "pos": 41031901, "genotype": "AA"},
+        {"rsid": "rs2032658", "chrom": "Y", "pos": 15025620, "genotype": "AA"},
+        {"rsid": "rs1000546", "chrom": "Y", "pos": 36452173, "genotype": "TT"},
+        {"rsid": "rs2032624", "chrom": "Y", "pos": 15022755, "genotype": "AA"},
+        {"rsid": "rs1000867", "chrom": "Y", "pos": 32170896, "genotype": "TT"},
+        {"rsid": "rs9786184", "chrom": "Y", "pos": 2887824, "genotype": "AA"},
+        {"rsid": "rs1000331", "chrom": "Y", "pos": 20085901, "genotype": "TT"},
+        {"rsid": "rs1000247", "chrom": "Y", "pos": 20503721, "genotype": "AA"},
+        {"rsid": "rs9461019", "chrom": "Y", "pos": 22741842, "genotype": "TT"},
+        {"rsid": "rs1000154", "chrom": "Y", "pos": 39970128, "genotype": "GG"},
+    ]
+
+    # 23andMe-shaped XX fixture: heterozygous non-PAR chrX call (dispositive
+    # XX under the Plan §9.4 algorithm) + mt H1a. No chrY rows.
+    _XX_CHROM_X = [
+        {"rsid": "rs_xx_x_het_1", "chrom": "X", "pos": 50_000_001, "genotype": "AG"},
+        {"rsid": "rs_xx_x_hom_1", "chrom": "X", "pos": 50_000_002, "genotype": "GG"},
+    ]
+
+    # 23andMe-shaped XY fixture: all non-PAR chrX homozygous + the R1b1a Y
+    # rows yielding y_rate = 1.0, comfortably above _THRESHOLD_XY_CONFIRM.
+    _XY_CHROM_X_HOM = [
+        {"rsid": "rs_xy_x_hom_1", "chrom": "X", "pos": 50_000_001, "genotype": "AA"},
+        {"rsid": "rs_xy_x_hom_2", "chrom": "X", "pos": 50_000_002, "genotype": "GG"},
+    ]
+
+    @pytest.fixture()
+    def haplogroup_bundle(self):
+        from backend.analysis.ancestry import load_haplogroup_bundle
+
+        bundle_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "backend"
+            / "data"
+            / "panels"
+            / "haplogroup_bundle.json"
+        )
+        return load_haplogroup_bundle(bundle_path)
+
+    @pytest.fixture()
+    def sample_engine(self) -> sa.Engine:
+        from backend.db.sample_schema import create_sample_tables
+
+        engine = sa.create_engine("sqlite://")
+        create_sample_tables(engine)
+        return engine
+
+    def _seed(self, engine: sa.Engine, rows: list[dict]) -> None:
+        with engine.begin() as conn:
+            conn.execute(sa.insert(raw_variants), rows)
+
+    def test_xx_regression_fixture_yields_mt_only(
+        self,
+        haplogroup_bundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """23andMe XX regression: mtDNA assigned, Y tree-walk skipped."""
+        from backend.analysis.ancestry import assign_haplogroups
+        from backend.services.sex_inference import infer_biological_sex
+
+        self._seed(sample_engine, self._H1A_GENOTYPES + self._XX_CHROM_X)
+
+        assert infer_biological_sex(sample_engine) == "XX"
+
+        results = assign_haplogroups(haplogroup_bundle, sample_engine)
+
+        assert len(results) == 1
+        assert results[0].tree_type == "mt"
+        assert results[0].haplogroup == "H1a"
+
+    def test_xy_regression_fixture_yields_both_mt_and_y(
+        self,
+        haplogroup_bundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """23andMe XY regression: both mtDNA + Y haplogroups assigned."""
+        from backend.analysis.ancestry import assign_haplogroups
+        from backend.services.sex_inference import infer_biological_sex
+
+        self._seed(
+            sample_engine,
+            self._H1A_GENOTYPES + self._R1B1A_GENOTYPES + self._XY_CHROM_X_HOM,
+        )
+
+        assert infer_biological_sex(sample_engine) == "XY"
+
+        results = assign_haplogroups(haplogroup_bundle, sample_engine)
+
+        assert len(results) == 2
+        mt = next(r for r in results if r.tree_type == "mt")
+        y = next(r for r in results if r.tree_type == "Y")
+        assert mt.haplogroup == "H1a"
+        # Tree-walk may descend deeper than R1b1a when child nodes also match,
+        # so we lock to the prefix — same contract as the original test.
+        assert y.haplogroup.startswith("R1b1a")
+
+    def test_haplogroup_gate_matches_direct_sex_inference_call(
+        self,
+        haplogroup_bundle,
+        sample_engine: sa.Engine,
+    ) -> None:
+        """The rewired ``assign_haplogroups`` Y-gate must observe the same
+        classification the service returns when called directly — single
+        source of truth (Plan §9.4)."""
+        from backend.analysis.ancestry import assign_haplogroups
+        from backend.services.sex_inference import infer_biological_sex
+
+        self._seed(
+            sample_engine,
+            self._H1A_GENOTYPES + self._R1B1A_GENOTYPES + self._XY_CHROM_X_HOM,
+        )
+
+        direct_sex = infer_biological_sex(sample_engine)
+        results = assign_haplogroups(haplogroup_bundle, sample_engine)
+        gated_tree_types = {r.tree_type for r in results}
+
+        # XY → Y appears; anything else → Y is gated out. The rewired call
+        # path must agree with a direct service call.
+        if direct_sex == "XY":
+            assert "Y" in gated_tree_types
+        else:
+            assert "Y" not in gated_tree_types
