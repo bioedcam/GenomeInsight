@@ -13,6 +13,12 @@
 - Idempotent on re-run: pre-existing rows are not overwritten
 - Missing / corrupt per-sample DBs are logged and skipped (no raise)
 - No reference-DB schema change; downgrade leaves rows in place
+
+009 covers (AncestryDNA Plan §9.2):
+- ``individuals`` table created with expected columns + defaults
+- ``samples.individual_id`` nullable FK column added with index
+- ``ON DELETE SET NULL`` cascade fires when an individual is deleted
+- Upgrade → downgrade → upgrade leaves the DB in a known-good shape
 """
 
 from __future__ import annotations
@@ -527,3 +533,148 @@ class TestMigration008Helpers:
         # When data_dir is None (e.g. :memory: bind), relative paths fall
         # through to the literal path.
         assert module._resolve_sample_db_path("sample_x.db", None) == Path("sample_x.db")
+
+
+# ── 009: individuals table + samples.individual_id FK ─────────────────
+
+
+def _samples_fk_to_individuals(reference_db: Path) -> tuple[str, str, str] | None:
+    """Return (from_col, to_table, on_delete) for the FK on samples, if present."""
+    with sqlite3.connect(str(reference_db)) as conn:
+        rows = conn.execute("PRAGMA foreign_key_list(samples)").fetchall()
+    for row in rows:
+        # (id, seq, table, from, to, on_update, on_delete, match)
+        if row[2] == "individuals":
+            return (row[3], row[2], row[6])
+    return None
+
+
+def _sample_indexes(reference_db: Path) -> set[str]:
+    with sqlite3.connect(str(reference_db)) as conn:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='index' AND tbl_name='samples' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
+class TestMigration009Individuals:
+    def test_creates_individuals_table_with_expected_columns(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+
+        assert "individuals" in _tables(db)
+
+        cols = _columns(db, "individuals")
+        assert cols["id"]["pk"] is True
+        assert cols["display_name"]["notnull"] is True
+        # nullable text columns
+        assert cols["notes"]["notnull"] is False
+        assert cols["biological_sex"]["notnull"] is False
+        assert cols["created_at"]["notnull"] is False
+        assert cols["updated_at"]["notnull"] is False
+
+    def test_notes_default_seeds_empty_string(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        with sqlite3.connect(str(db)) as conn:
+            conn.execute("INSERT INTO individuals (display_name) VALUES ('Ada')")
+            row = conn.execute("SELECT notes FROM individuals WHERE display_name='Ada'").fetchone()
+        assert row == ("",)
+
+    def test_adds_individual_id_column_to_samples(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        cols = _columns(db, "samples")
+        assert "individual_id" in cols
+        assert cols["individual_id"]["notnull"] is False
+
+    def test_samples_fk_targets_individuals_with_set_null(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        fk = _samples_fk_to_individuals(db)
+        assert fk == ("individual_id", "individuals", "SET NULL")
+
+    def test_index_on_samples_individual_id_created(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        assert "ix_samples_individual_id" in _sample_indexes(db)
+
+    def test_fk_set_null_fires_on_individual_delete(self, tmp_path: Path) -> None:
+        """Plan §9.2: deleting an individual NULLs samples.individual_id."""
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        with sqlite3.connect(str(db)) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute(
+                "INSERT INTO individuals (id, display_name) VALUES (1, 'Ada')"
+            )
+            conn.execute(
+                "INSERT INTO samples (id, name, db_path, individual_id) "
+                "VALUES (1, 's1', '/tmp/s1.db', 1)"
+            )
+            conn.commit()
+            conn.execute("DELETE FROM individuals WHERE id = 1")
+            conn.commit()
+            row = conn.execute(
+                "SELECT individual_id FROM samples WHERE id = 1"
+            ).fetchone()
+        assert row == (None,)
+
+    def test_existing_samples_get_null_individual_id(self, tmp_path: Path) -> None:
+        """Pre-009 rows surface as 'Unassigned' (individual_id IS NULL)."""
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="008")
+        with sqlite3.connect(str(db)) as conn:
+            conn.execute(
+                "INSERT INTO samples (id, name, db_path) "
+                "VALUES (42, 'legacy', '/tmp/legacy.db')"
+            )
+            conn.commit()
+
+        _upgrade(db, revision="009")
+
+        with sqlite3.connect(str(db)) as conn:
+            row = conn.execute(
+                "SELECT individual_id FROM samples WHERE id = 42"
+            ).fetchone()
+        assert row == (None,)
+
+    def test_downgrade_drops_index_column_and_table(self, tmp_path: Path) -> None:
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        _downgrade(db, "008")
+
+        assert "individuals" not in _tables(db)
+        assert "individual_id" not in _columns(db, "samples")
+        assert "ix_samples_individual_id" not in _sample_indexes(db)
+
+    def test_upgrade_downgrade_upgrade_round_trip(self, tmp_path: Path) -> None:
+        """Round-trip leaves a known-good schema: FK + index + table all back."""
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="009")
+        _downgrade(db, "008")
+        _upgrade(db, revision="009")
+
+        assert "individuals" in _tables(db)
+        assert "individual_id" in _columns(db, "samples")
+        assert "ix_samples_individual_id" in _sample_indexes(db)
+        assert _samples_fk_to_individuals(db) == (
+            "individual_id",
+            "individuals",
+            "SET NULL",
+        )
+
+    def test_idempotent_when_run_to_head_twice(self, tmp_path: Path) -> None:
+        """Alembic short-circuits re-runs at head; schema is stable across calls."""
+        db = tmp_path / "reference.db"
+        _upgrade(db, revision="head")
+        before_tables = _tables(db)
+        before_samples_cols = set(_columns(db, "samples").keys())
+        before_indexes = _sample_indexes(db)
+
+        _upgrade(db, revision="head")
+
+        assert _tables(db) == before_tables
+        assert set(_columns(db, "samples").keys()) == before_samples_cols
+        assert _sample_indexes(db) == before_indexes

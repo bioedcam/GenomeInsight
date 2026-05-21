@@ -22,6 +22,23 @@ import sqlalchemy as sa
 
 reference_metadata = sa.MetaData()
 
+# ── Individuals (sample aggregation; AncestryDNA Plan §9.2) ────────────
+
+individuals = sa.Table(
+    "individuals",
+    reference_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("display_name", sa.Text, nullable=False),
+    sa.Column("notes", sa.Text, server_default=""),
+    sa.Column(
+        "biological_sex",
+        sa.Text,
+        comment="'XX' | 'XY' | NULL — inferred or user-set",
+    ),
+    sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column("updated_at", sa.DateTime),
+)
+
 # ── Sample Registry ────────────────────────────────────────────────────
 
 samples = sa.Table(
@@ -32,9 +49,17 @@ samples = sa.Table(
     sa.Column("db_path", sa.Text, nullable=False, unique=True),
     sa.Column("file_format", sa.Text),
     sa.Column("file_hash", sa.Text),
+    sa.Column(
+        "individual_id",
+        sa.Integer,
+        sa.ForeignKey("individuals.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
     sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
     sa.Column("updated_at", sa.DateTime),
 )
+
+sa.Index("ix_samples_individual_id", samples.c.individual_id)
 
 # ── Jobs (Huey ↔ FastAPI IPC) ─────────────────────────────────────────
 

@@ -31,10 +31,11 @@ class TestReferenceMetadata:
     """Verify reference_metadata contains all expected tables."""
 
     def test_reference_table_count(self):
-        assert len(reference_metadata.tables) == 22
+        assert len(reference_metadata.tables) == 23
 
     def test_reference_table_names(self):
         expected = {
+            "individuals",
             "samples",
             "jobs",
             "database_versions",
