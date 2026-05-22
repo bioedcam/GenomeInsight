@@ -27,8 +27,10 @@ import sqlalchemy as sa
 
 from backend.db.sample_schema import (
     SAMPLE_SCHEMA_VERSION,
+    create_sample_tables,
     ensure_sample_schema_current,
 )
+from backend.db.tables import raw_variants as raw_variants_table
 
 V8_PROVENANCE_COLUMNS = (
     "source",
@@ -293,3 +295,185 @@ class TestFreshSampleStillCreatesV8Surfaces:
         with sample_engine.connect() as conn:
             row = conn.execute(sa.text("PRAGMA user_version")).fetchone()
         assert row[0] == SAMPLE_SCHEMA_VERSION
+
+
+def _new_engine(db_path: Path) -> sa.Engine:
+    return sa.create_engine(f"sqlite:///{db_path}")
+
+
+def _pk_columns(engine: sa.Engine, table: str) -> list[str]:
+    return sa.inspect(engine).get_pk_constraint(table)["constrained_columns"]
+
+
+class TestIsMergedSampleFactory:
+    """Step 64 — ``is_merged_sample`` factory parameter on
+    ``create_sample_tables``.
+
+    AncestryDNA Plan §10.4(a): merged-sample ``raw_variants`` uses
+    ``(chrom, pos)`` as the primary key (the canonical merge key); unmerged
+    sample DBs keep the historical ``rsid`` PK. Every other sample-DB table
+    is identical across both branches.
+    """
+
+    def test_default_is_unmerged_rsid_pk(self, tmp_path: Path) -> None:
+        engine = _new_engine(tmp_path / "default.db")
+        create_sample_tables(engine)
+
+        assert _pk_columns(engine, "raw_variants") == ["rsid"]
+
+    def test_explicit_unmerged_keeps_rsid_pk(self, tmp_path: Path) -> None:
+        engine = _new_engine(tmp_path / "unmerged.db")
+        create_sample_tables(engine, is_merged_sample=False)
+
+        assert _pk_columns(engine, "raw_variants") == ["rsid"]
+
+    def test_merged_uses_chrom_pos_pk(self, tmp_path: Path) -> None:
+        engine = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(engine, is_merged_sample=True)
+
+        assert _pk_columns(engine, "raw_variants") == ["chrom", "pos"]
+
+    def test_merged_db_has_full_v8_surface(self, tmp_path: Path) -> None:
+        """A merged DB still ships every v8 column + the merge_provenance
+        table — the PK is the *only* difference vs. the unmerged shape."""
+        engine = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(engine, is_merged_sample=True)
+
+        cols = _column_names(engine, "raw_variants")
+        for col in V8_PROVENANCE_COLUMNS:
+            assert col in cols
+        for col in ("rsid", "chrom", "pos", "genotype"):
+            assert col in cols
+
+        inspector = sa.inspect(engine)
+        assert "merge_provenance" in inspector.get_table_names()
+        # annotated_variants stays rsid-PK per Plan §10.4(a) invariant.
+        assert _pk_columns(engine, "annotated_variants") == ["rsid"]
+
+    def test_merged_db_stamped_at_v8(self, tmp_path: Path) -> None:
+        engine = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(engine, is_merged_sample=True)
+
+        with engine.connect() as conn:
+            row = conn.execute(sa.text("PRAGMA user_version")).fetchone()
+        assert row[0] == SAMPLE_SCHEMA_VERSION
+
+    def test_merged_pk_rejects_duplicate_coordinate(self, tmp_path: Path) -> None:
+        """(chrom, pos) PK rejects a second insert at the same coordinate even
+        when the rsid differs — proves the PK swapped sides."""
+        engine = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(engine, is_merged_sample=True)
+
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                    "VALUES ('rs100', '1', 12345, 'AG')"
+                )
+            )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                        "VALUES ('rs999', '1', 12345, 'CT')"
+                    )
+                )
+
+    def test_merged_pk_allows_duplicate_rsid_across_coordinates(
+        self, tmp_path: Path
+    ) -> None:
+        """The mirror of the previous test: the same rsid at two different
+        coordinates is now legal (it would have collided under the old
+        ``rsid`` PK). Locks the swapped-PK semantics from the other side."""
+        engine = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(engine, is_merged_sample=True)
+
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                    "VALUES (:rsid, :chrom, :pos, :gt)"
+                ),
+                [
+                    {"rsid": "rs100", "chrom": "1", "pos": 12345, "gt": "AG"},
+                    {"rsid": "rs100", "chrom": "2", "pos": 67890, "gt": "CT"},
+                ],
+            )
+
+        with engine.connect() as conn:
+            count = conn.execute(sa.text("SELECT COUNT(*) FROM raw_variants")).scalar()
+        assert count == 2
+
+    def test_unmerged_pk_rejects_duplicate_rsid(self, tmp_path: Path) -> None:
+        """Negative control: the default (unmerged) PK is still ``rsid``, so
+        a duplicate-rsid insert continues to fail. Pins the regression
+        boundary: ``is_merged_sample=False`` must not silently lift this."""
+        engine = _new_engine(tmp_path / "unmerged.db")
+        create_sample_tables(engine, is_merged_sample=False)
+
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                    "VALUES ('rs100', '1', 12345, 'AG')"
+                )
+            )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                        "VALUES ('rs100', '2', 67890, 'CT')"
+                    )
+                )
+
+    def test_standard_reader_returns_rows_from_both(self, tmp_path: Path) -> None:
+        """The module-level ``raw_variants`` Table object — the import every
+        annotation reader uses (``backend/annotation/{clinvar,vep_bundle,
+        dbsnp,vcfanno_runner}.py``, ``backend/ingestion/vcf_export.py``) —
+        must continue to read rows out of *both* PK variants. PK is a
+        constraint, not a query requirement, so ``sa.select(raw_variants)``
+        should round-trip identical rows regardless of the on-disk PK."""
+        rows = [
+            {"rsid": "rs429358", "chrom": "19", "pos": 45411941, "gt": "TT"},
+            {"rsid": "rs7412", "chrom": "19", "pos": 45412079, "gt": "CC"},
+            {"rsid": "rs1801133", "chrom": "1", "pos": 11856378, "gt": "AG"},
+        ]
+
+        unmerged = _new_engine(tmp_path / "unmerged.db")
+        create_sample_tables(unmerged, is_merged_sample=False)
+        merged = _new_engine(tmp_path / "merged.db")
+        create_sample_tables(merged, is_merged_sample=True)
+
+        for engine in (unmerged, merged):
+            with engine.begin() as conn:
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                        "VALUES (:rsid, :chrom, :pos, :gt)"
+                    ),
+                    rows,
+                )
+
+        select_stmt = sa.select(
+            raw_variants_table.c.rsid,
+            raw_variants_table.c.chrom,
+            raw_variants_table.c.pos,
+            raw_variants_table.c.genotype,
+        ).order_by(raw_variants_table.c.rsid)
+
+        with unmerged.connect() as conn:
+            unmerged_rows = conn.execute(select_stmt).all()
+        with merged.connect() as conn:
+            merged_rows = conn.execute(select_stmt).all()
+
+        assert unmerged_rows == merged_rows
+        assert len(unmerged_rows) == 3
+        assert {r.rsid for r in unmerged_rows} == {
+            "rs429358",
+            "rs7412",
+            "rs1801133",
+        }

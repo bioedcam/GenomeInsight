@@ -27,7 +27,28 @@ logger = structlog.get_logger(__name__)
 SAMPLE_SCHEMA_VERSION = 8
 
 
-def create_sample_tables(engine: sa.Engine) -> None:
+# AncestryDNA Plan §10.4(a): merged-sample raw_variants uses (chrom, pos) PK
+# instead of rsid PK so the canonical merge key matches the physical PK. The
+# in-place v7→v8 upgrade path (existing single-vendor sample DBs) keeps rsid
+# PK forever per the plan's "divergence does not apply to in-place v7→v8
+# upgrades" clause; this DDL only fires when create_sample_tables is invoked
+# with is_merged_sample=True, which only the sample-merge service does.
+_RAW_VARIANTS_MERGED_DDL = """
+CREATE TABLE raw_variants (
+    rsid TEXT NOT NULL,
+    chrom TEXT NOT NULL,
+    pos INTEGER NOT NULL,
+    genotype TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    concordance TEXT NOT NULL DEFAULT '',
+    discordant_alt_genotype TEXT NOT NULL DEFAULT '',
+    alt_rsid TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (chrom, pos)
+)
+"""
+
+
+def create_sample_tables(engine: sa.Engine, *, is_merged_sample: bool = False) -> None:
     """Create all per-sample tables in the given SQLite database.
 
     Sets WAL journal mode, creates tables from the Core definitions,
@@ -35,10 +56,25 @@ def create_sample_tables(engine: sa.Engine) -> None:
 
     Args:
         engine: SQLAlchemy engine connected to a sample database file.
+        is_merged_sample: When ``True``, materialises ``raw_variants`` with
+            a composite ``(chrom, pos)`` primary key instead of the default
+            ``rsid`` PK (AncestryDNA Plan §10.4a). Passed by
+            ``backend/services/sample_merge.py`` when creating a freshly
+            merged sample DB; defaults to ``False`` for every other caller
+            (regular file ingest, fixtures, tests).
     """
     with engine.connect() as conn:
         conn.execute(sa.text("PRAGMA journal_mode=WAL"))
         conn.commit()
+
+    if is_merged_sample:
+        # Pre-create raw_variants with (chrom, pos) PK via raw DDL; the
+        # subsequent sample_metadata_obj.create_all(checkfirst=True) sees
+        # the table already exists and skips it, while still creating every
+        # other table (annotated_variants, merge_provenance, annotation_state,
+        # tags, watched_variants, etc.) from the module-level definitions.
+        with engine.begin() as conn:
+            conn.execute(sa.text(_RAW_VARIANTS_MERGED_DDL))
 
     # Create all tables defined in sample_metadata_obj
     sample_metadata_obj.create_all(engine, checkfirst=True)
