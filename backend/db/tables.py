@@ -475,6 +475,35 @@ raw_variants = sa.Table(
     sa.Column("chrom", sa.Text, nullable=False),
     sa.Column("pos", sa.Integer, nullable=False),
     sa.Column("genotype", sa.Text, nullable=False),
+    # Provenance columns (AncestryDNA Plan §10.4b). Populated only for merged
+    # samples; unmerged samples carry empty-string defaults.
+    sa.Column(
+        "source",
+        sa.Text,
+        nullable=False,
+        server_default="",
+        comment="'S1' | 'S2' | 'both' | '' (unmerged)",
+    ),
+    sa.Column(
+        "concordance",
+        sa.Text,
+        nullable=False,
+        server_default="",
+        comment="'match' | 'filled_nocall' | 'discordant' | 'unique' | ''",
+    ),
+    sa.Column(
+        "discordant_alt_genotype",
+        sa.Text,
+        nullable=False,
+        server_default="",
+    ),
+    sa.Column(
+        "alt_rsid",
+        sa.Text,
+        nullable=False,
+        server_default="",
+        comment="Rejected rsid at a collapsed locus",
+    ),
 )
 
 sa.Index("idx_raw_chrom_pos", raw_variants.c.chrom, raw_variants.c.pos)
@@ -745,6 +774,45 @@ watched_variants = sa.Table(
     sa.Column("watched_at", sa.DateTime, server_default=sa.func.now()),
     sa.Column("clinvar_significance_at_watch", sa.Text),
     sa.Column("notes", sa.Text, server_default=""),
+)
+
+# ── Merge Provenance (single-row, present only on merged samples) ─────
+# AncestryDNA Plan §10.4c. Created on every sample DB but only populated by
+# the merge service on merged samples. CheckConstraint enforces single row.
+
+merge_provenance = sa.Table(
+    "merge_provenance",
+    sample_metadata_obj,
+    sa.Column("id", sa.Integer, primary_key=True),
+    sa.Column("merged_at", sa.DateTime, server_default=sa.func.now()),
+    sa.Column(
+        "strategy",
+        sa.Text,
+        nullable=False,
+        comment="prefer_23andme | prefer_ancestrydna | flag_only",
+    ),
+    sa.Column(
+        "source_sample_ids",
+        sa.Text,
+        nullable=False,
+        comment="JSON array, ordered [S1, S2]",
+    ),
+    sa.Column(
+        "source_file_hashes",
+        sa.Text,
+        nullable=False,
+        comment="JSON array, ordered [S1, S2] — same order as source_sample_ids",
+    ),
+    sa.Column(
+        "concordance_summary",
+        sa.Text,
+        nullable=False,
+        comment=(
+            "JSON {match, filled_nocall, discordant, unique_S1, unique_S2, "
+            "collapsed_rsid}"
+        ),
+    ),
+    sa.CheckConstraint("id = 1", name="single_row_merge_provenance"),
 )
 
 # ── Annotation State (kv table for per-sample annotation provenance) ──

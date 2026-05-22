@@ -22,7 +22,9 @@ logger = structlog.get_logger(__name__)
 
 # Current schema version. Bump when new tables/columns are added to sample_metadata_obj.
 # v7: Add watched_variants table (P4-21g — VUS tracking)
-SAMPLE_SCHEMA_VERSION = 7
+# v8: Add provenance columns to raw_variants + merge_provenance table
+#     (AncestryDNA Plan §10.4 — multi-source sample merging)
+SAMPLE_SCHEMA_VERSION = 8
 
 
 def create_sample_tables(engine: sa.Engine) -> None:
@@ -162,6 +164,33 @@ def _add_missing_columns(engine: sa.Engine, from_version: int) -> bool:
                 logger.info(
                     "liftover_columns_added",
                     columns=["chrom_grch38", "pos_grch38"],
+                    from_version=from_version,
+                )
+                added = True
+
+    if from_version < 8:
+        # AncestryDNA Plan §10.4b: provenance columns on raw_variants.
+        # Unmerged samples keep '' defaults; merge service populates on
+        # newly-created merged sample DBs.
+        added_provenance = False
+        inspector = sa.inspect(engine)
+        if "raw_variants" in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns("raw_variants")}
+            new_cols = ("source", "concordance", "discordant_alt_genotype", "alt_rsid")
+            with engine.begin() as conn:
+                for col in new_cols:
+                    if col not in existing_cols:
+                        conn.execute(
+                            sa.text(
+                                f"ALTER TABLE raw_variants ADD COLUMN {col} "
+                                "TEXT NOT NULL DEFAULT ''"
+                            )
+                        )
+                        added_provenance = True
+            if added_provenance:
+                logger.info(
+                    "raw_variants_provenance_columns_added",
+                    columns=list(new_cols),
                     from_version=from_version,
                 )
                 added = True

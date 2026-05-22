@@ -31,8 +31,7 @@ import sqlalchemy as sa
 
 from backend.analysis.lai import _read_sample_file_format, _read_sample_genotypes
 from backend.analysis.lai_runner import LAIRunner
-from backend.db.sample_schema import create_sample_tables
-from backend.db.tables import raw_variants, sample_metadata_table
+from backend.db.tables import sample_metadata_table
 
 # ── Shared payload ───────────────────────────────────────────────────────
 
@@ -62,14 +61,33 @@ def runner() -> LAIRunner:
 
 
 def _build_pre_phase3_engine(file_format: str) -> sa.Engine:
-    """Build an in-memory sample DB on the current (pre-step-63) schema.
+    """Build an in-memory sample DB on the v7 (pre-step-63) raw_variants schema.
 
-    ``raw_variants`` has no ``source`` column on the current schema —
-    ``_read_sample_genotypes`` must default ``source`` to ``""``.
+    Step 63 added the four provenance columns (``source``, ``concordance``,
+    ``discordant_alt_genotype``, ``alt_rsid``) to the *current* schema. This
+    fixture explicitly constructs a v7-shaped ``raw_variants`` (no provenance
+    columns) so the backward-compat read path remains exercised — older sample
+    DBs in the wild that haven't yet been through the v7→v8 migration must
+    still surface ``source=""`` from ``_read_sample_genotypes``.
+
+    The ``sample_metadata`` row stamps the requested ``file_format`` so the
+    runner's vendor derivation has a real value to consume.
     """
     engine = sa.create_engine("sqlite://")
-    create_sample_tables(engine)
     with engine.begin() as conn:
+        # v7 raw_variants — exactly four columns, no provenance surface.
+        conn.execute(
+            sa.text(
+                """CREATE TABLE raw_variants (
+                    rsid TEXT PRIMARY KEY,
+                    chrom TEXT NOT NULL,
+                    pos INTEGER NOT NULL,
+                    genotype TEXT NOT NULL
+                )"""
+            )
+        )
+        # sample_metadata is unchanged across v7/v8; reuse the live declaration.
+        sample_metadata_table.create(conn, checkfirst=True)
         conn.execute(
             sample_metadata_table.insert().values(
                 id=1,
@@ -78,7 +96,13 @@ def _build_pre_phase3_engine(file_format: str) -> sa.Engine:
                 file_hash="compat_hash",
             )
         )
-        conn.execute(raw_variants.insert(), _VENDOR_NEUTRAL_ROWS)
+        conn.execute(
+            sa.text(
+                "INSERT INTO raw_variants (rsid, chrom, pos, genotype) "
+                "VALUES (:rsid, :chrom, :pos, :genotype)"
+            ),
+            _VENDOR_NEUTRAL_ROWS,
+        )
     return engine
 
 

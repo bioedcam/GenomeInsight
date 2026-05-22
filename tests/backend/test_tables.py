@@ -136,7 +136,7 @@ class TestSampleMetadata:
     """Verify sample_metadata_obj contains all expected tables."""
 
     def test_sample_table_count(self):
-        assert len(sample_metadata_obj.tables) == 14
+        assert len(sample_metadata_obj.tables) == 15
 
     def test_sample_table_names(self):
         expected = {
@@ -154,12 +154,23 @@ class TestSampleMetadata:
             "watched_variants",
             "variant_overlays",
             "annotation_state",
+            "merge_provenance",
         }
         assert set(sample_metadata_obj.tables.keys()) == expected
 
     def test_raw_variants_columns(self):
         col_names = [c.name for c in raw_variants.columns]
-        assert col_names == ["rsid", "chrom", "pos", "genotype"]
+        # v8 (Step 63) added the four provenance columns (Plan §10.4b).
+        assert col_names == [
+            "rsid",
+            "chrom",
+            "pos",
+            "genotype",
+            "source",
+            "concordance",
+            "discordant_alt_genotype",
+            "alt_rsid",
+        ]
 
     def test_raw_variants_pk(self):
         pk_cols = [c.name for c in raw_variants.primary_key.columns]
