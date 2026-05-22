@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.analysis.ancestry import get_ancestry_matched_af_column, get_inferred_ancestry
+from backend.analysis.zygosity import is_no_call
 from backend.api.dependencies import require_fresh_sample
 from backend.db.connection import get_registry
 from backend.db.tables import annotated_variants, raw_variants, samples, tags, variant_tags
@@ -504,18 +505,25 @@ class QCStatsResponse(BaseModel):
     per_chromosome: list[ChromosomeQCStats]
 
 
-def _classify_genotype(genotype: str) -> str:
+def _classify_genotype(genotype: str | None) -> str:
     """Classify a genotype string as het, hom, or nocall.
 
-    23andMe genotypes:
-      - "--" or "" → nocall
-      - Single character ("A") → haploid (hom for stats)
-      - Two identical chars ("AA") → homozygous
-      - Two different chars ("AG") → heterozygous
-      - "D" or "I" (indels) → treated as hom
-      - "DI" or "ID" → treated as het
+    Routes recognition through the shared
+    :func:`backend.analysis.zygosity.is_no_call` helper so that AncestryDNA's
+    ``"00"`` rows and the indel codes ``"DD"`` / ``"II"`` / ``"DI"`` / ``"ID"``
+    count toward the QC no-call bucket (Plan §11.3) rather than inflating the
+    homozygous / heterozygous denominators. Pre-Phase-3 these codes were
+    silently bucketed as ``hom`` (``"DD"`` / ``"II"``) or ``het`` (``"DI"`` /
+    ``"ID"``) and AncestryDNA ``"00"`` was ``het`` — wrong for every flavor
+    of QC interpretation. This is the single QC site held to a non-byte-
+    identical contract by the MRG-01a sweep.
+
+    Remaining classification (after the no-call filter):
+      - Single base call (``"A"``, ``"D"``, ``"I"``) → haploid, bucketed as ``hom``
+      - Two identical chars (``"AA"``) → homozygous
+      - Two different chars (``"AG"``) → heterozygous
     """
-    if not genotype or genotype == "--":
+    if is_no_call(genotype):
         return "nocall"
     if len(genotype) == 1:
         return "hom"

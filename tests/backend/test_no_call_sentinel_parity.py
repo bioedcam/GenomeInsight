@@ -50,6 +50,7 @@ from backend.analysis.apoe import (
 from backend.analysis.lai_runner import LAIRunner
 from backend.analysis.pharmacogenomics import _count_alt_alleles
 from backend.analysis.prs import _count_effect_allele
+from backend.api.routes.variants import _classify_genotype
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import raw_variants
 
@@ -196,3 +197,76 @@ def test_lai_runner_filter_genotypes_parity() -> None:
     assert filter_fn(None, gts_dash) == []
     assert filter_fn(None, gts_q) == []
     assert filter_fn(None, gts_dash) == filter_fn(None, gts_q)
+
+
+# ── variants._classify_genotype QC reclassification (Step 62 / Plan §11.3) ──
+#
+# Unlike every other site in this file, ``_classify_genotype`` is *not*
+# byte-identical under the MRG-01a adoption: ``"00"`` and the indel codes
+# (``"DD"``/``"II"``/``"DI"``/``"ID"``) reclassify from het/hom to nocall so
+# AncestryDNA + merged-sample QC denominators stop double-counting unscoreable
+# rows as het/hom. The parametrize block below locks the new mapping; the
+# `??` merge sentinel additionally rides the same nocall path so the QC bucket
+# stays transparent to Step 65's flag_only output.
+
+_CLASSIFY_GENOTYPE_NOCALL_INPUTS: list[str | None] = [
+    # Step 62 reclassification — these were het/hom pre-MRG-01a.
+    "00",
+    "DD",
+    "II",
+    "DI",
+    "ID",
+    # Existing nocall rows — were already nocall via the legacy `not genotype
+    # or genotype == "--"` short-circuit OR fall newly into nocall via
+    # is_no_call() (e.g. "-" / "0", which used to be classified `hom` because
+    # `len(genotype) == 1`). Listed here so the contract reads as a single
+    # union of every no-call sentinel.
+    "--",
+    "??",
+    "-",
+    "0",
+    "",
+    None,
+]
+
+
+@pytest.mark.parametrize(
+    "genotype",
+    _CLASSIFY_GENOTYPE_NOCALL_INPUTS,
+    ids=lambda g: "None" if g is None else (g or "empty"),
+)
+def test_classify_genotype_reclassifies_to_nocall(genotype: str | None) -> None:
+    """``_classify_genotype`` returns ``"nocall"`` for every no-call sentinel.
+
+    Plan §11.3: the QC-stats classifier adopts ``is_no_call()`` so AncestryDNA's
+    ``"00"`` row, the indel codes, and the ``??`` merge sentinel each bucket
+    into the no-call denominator instead of inflating het/hom counts.
+    """
+    assert _classify_genotype(genotype) == "nocall"
+
+
+_CLASSIFY_GENOTYPE_CALLED_INPUTS: list[tuple[str, str]] = [
+    # Diploid het / hom rows are unaffected by the reclassification — locking
+    # them here proves the change is scoped to the no-call boundary.
+    ("AA", "hom"),
+    ("GG", "hom"),
+    ("AG", "het"),
+    ("CT", "het"),
+    # Single-char haploid SNP calls stay hom — they are not in the no-call set.
+    ("A", "hom"),
+    ("G", "hom"),
+    # Single-char indel alleles also stay hom — they're scoreable haploid
+    # calls; only the *two-char* indel codes flip to nocall.
+    ("D", "hom"),
+    ("I", "hom"),
+]
+
+
+@pytest.mark.parametrize(
+    "genotype,expected",
+    _CLASSIFY_GENOTYPE_CALLED_INPUTS,
+    ids=[g for g, _ in _CLASSIFY_GENOTYPE_CALLED_INPUTS],
+)
+def test_classify_genotype_called_rows_unchanged(genotype: str, expected: str) -> None:
+    """Called rows (het / hom) retain their pre-MRG-01a classification."""
+    assert _classify_genotype(genotype) == expected
