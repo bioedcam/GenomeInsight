@@ -1,17 +1,18 @@
 """Sample management API endpoints (P1-13, P4-21f).
 
-GET    /api/samples              — List all samples
-GET    /api/samples/{sample_id}  — Get single sample details (with full metadata)
-PATCH  /api/samples/{sample_id}  — Update sample metadata (name, notes, date, source, extra)
-DELETE /api/samples/{sample_id}  — Delete a sample and its database file
+- ``GET    /api/samples`` — list all samples.
+- ``GET    /api/samples/{sample_id}`` — single sample + full metadata.
+- ``GET    /api/samples/{sample_id}/merged-children`` — merged samples
+  referencing this row (Step 66 / Plan §10.8).
+- ``PATCH  /api/samples/{sample_id}`` — update sample metadata.
+- ``DELETE /api/samples/{sample_id}`` — delete + cascade to merged children
+  (Step 66 / Plan §10.8).
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, date, datetime
-from pathlib import Path
 
 import sqlalchemy as sa
 from fastapi import APIRouter, HTTPException
@@ -19,8 +20,10 @@ from pydantic import BaseModel, field_validator
 
 from backend.db.connection import get_registry
 from backend.db.tables import sample_metadata_table, samples
-
-logger = logging.getLogger(__name__)
+from backend.services.sample_delete import (
+    delete_sample_with_cascade,
+    list_merged_children,
+)
 
 router = APIRouter(prefix="/samples", tags=["samples"])
 
@@ -195,30 +198,39 @@ async def update_sample(sample_id: int, body: SampleUpdate) -> SampleResponse:
     return _enrich_with_sample_metadata(response, registry)
 
 
+class MergedChildResponse(BaseModel):
+    id: int
+    name: str
+
+
+@router.get("/{sample_id}/merged-children")
+async def list_sample_merged_children(sample_id: int) -> list[MergedChildResponse]:
+    """List merged samples that reference this sample as a source.
+
+    Frontend uses this to surface the cascade impact on the per-row delete
+    confirmation (AncestryDNA Plan §10.8; Step 66 / MRG-02a). Returns ``[]``
+    when the sample has never been merged.
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        row = conn.execute(
+            sa.select(samples.c.id).where(samples.c.id == sample_id)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
+    children = list_merged_children(registry, sample_id)
+    return [MergedChildResponse(id=c.id, name=c.name) for c in children]
+
+
 @router.delete("/{sample_id}", status_code=204)
 async def delete_sample(sample_id: int) -> None:
-    """Delete a sample: remove DB file and deregister from reference.db."""
+    """Delete a sample and cascade to any merged children referencing it.
+
+    AncestryDNA Plan §10.8 / Step 66: a single-confirmation cascade removes
+    every ``file_format='merged_v1'`` sample whose ``merge_provenance``
+    lists this row in ``source_sample_ids`` before tearing down the source.
+    """
     registry = get_registry()
-    settings = registry.settings
-
-    with registry.reference_engine.begin() as conn:
-        row = conn.execute(sa.select(samples).where(samples.c.id == sample_id)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
-
-        # Remove from registry
-        conn.execute(samples.delete().where(samples.c.id == sample_id))
-
-    # Delete the sample database file
-    sample_db_path = settings.data_dir / row.db_path
-    if sample_db_path.exists():
-        # Dispose engine if cached
-        registry.dispose_sample_engine(sample_db_path)
-        # Remove the file (and WAL/SHM files)
-        sample_db_path.unlink(missing_ok=True)
-        wal_path = Path(f"{sample_db_path}-wal")
-        shm_path = Path(f"{sample_db_path}-shm")
-        wal_path.unlink(missing_ok=True)
-        shm_path.unlink(missing_ok=True)
-
-    logger.info("Deleted sample %d (%s)", sample_id, row.name)
+    result = delete_sample_with_cascade(registry, sample_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")

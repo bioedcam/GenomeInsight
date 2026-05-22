@@ -1,7 +1,12 @@
 /** React Query hooks for sample management and file ingestion (P1-13, P1-16). */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Sample, SampleUpdate, IngestResult } from "@/types/samples"
+import type {
+  IngestResult,
+  MergedChild,
+  Sample,
+  SampleUpdate,
+} from "@/types/samples"
 
 export function useSamples() {
   return useQuery({
@@ -94,5 +99,24 @@ export function useDeleteSample() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["samples"] })
     },
+  })
+}
+
+/** Merged samples that reference this sample as a source (Plan §10.8 / Step 66).
+ *
+ * Returns ``[]`` when the sample has never been merged. The delete
+ * confirmation hook uses this to surface the cascade count + names before
+ * the user commits.
+ */
+export function useSampleMergedChildren(sampleId: number | null) {
+  return useQuery({
+    queryKey: ["samples", sampleId, "merged-children"],
+    queryFn: async (): Promise<MergedChild[]> => {
+      const res = await fetch(`/api/samples/${sampleId}/merged-children`)
+      if (!res.ok) throw new Error("Failed to fetch merged children")
+      return (await res.json()) as MergedChild[]
+    },
+    enabled: sampleId != null,
+    staleTime: 0,
   })
 }

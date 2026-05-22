@@ -106,6 +106,11 @@ _SAMPLES_OPT_OUT_PATHS = frozenset(
         ("GET", "/api/samples/{sample_id}"),
         ("PATCH", "/api/samples/{sample_id}"),
         ("DELETE", "/api/samples/{sample_id}"),
+        # Step 66 / MRG-02a — cascade preview. Registry-level walk over
+        # samples.file_format == 'merged_v1'; not analysis output. Must
+        # stay reachable when the source is stale so the user can delete
+        # without first re-annotating.
+        ("GET", "/api/samples/{sample_id}/merged-children"),
     }
 )
 # Analysis-scoped subroutes (gated). Some are introduced in later steps;

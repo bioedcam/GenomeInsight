@@ -10,7 +10,13 @@ import { Pencil, Trash2, Save, X, ChevronDown, ChevronUp, Plus, AlertTriangle } 
 import { useQueries } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { formatFileFormat } from "@/lib/format"
-import { useSamples, useSample, useUpdateSample, useDeleteSample } from "@/api/samples"
+import {
+  useSamples,
+  useSample,
+  useSampleMergedChildren,
+  useUpdateSample,
+  useDeleteSample,
+} from "@/api/samples"
 import {
   individualsKeys,
   useCreateIndividual,
@@ -300,6 +306,13 @@ function DeleteSampleConfirm({
   onDeleted: () => void
 }) {
   const deleteSample = useDeleteSample()
+  const mergedChildrenQuery = useSampleMergedChildren(sampleId)
+  const mergedChildren = mergedChildrenQuery.data ?? []
+  const cascadeCount = mergedChildren.length
+  const confirmLabel =
+    cascadeCount > 0
+      ? `Delete Sample + ${cascadeCount} Merged`
+      : "Delete Sample"
 
   function handleConfirm() {
     deleteSample.mutate(sampleId, { onSuccess: onDeleted })
@@ -322,17 +335,50 @@ function DeleteSampleConfirm({
             This will permanently remove the sample database file and all associated data
             (variants, annotations, findings, tags). This action cannot be undone.
           </p>
+          {mergedChildrenQuery.isLoading && (
+            <p
+              className="mt-2 text-xs text-red-700 dark:text-red-400"
+              data-testid={`delete-cascade-loading-${sampleId}`}
+            >
+              Checking for merged samples…
+            </p>
+          )}
+          {cascadeCount > 0 && (
+            <div
+              className="mt-3 rounded-md border border-red-400 dark:border-red-700 bg-red-100 dark:bg-red-950/60 p-3"
+              data-testid={`delete-cascade-${sampleId}`}
+            >
+              <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                Will also delete {cascadeCount} merged{" "}
+                {cascadeCount === 1 ? "sample" : "samples"}:
+              </p>
+              <ul className="mt-1 list-disc pl-5 text-sm text-red-700 dark:text-red-300 space-y-0.5">
+                {mergedChildren.map((child) => (
+                  <li
+                    key={child.id}
+                    data-testid={`delete-cascade-child-${child.id}`}
+                  >
+                    {child.name}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+                These merged samples were built from this source and cannot
+                be reconstructed without it.
+              </p>
+            </div>
+          )}
         </div>
       </div>
       <div className="flex gap-3">
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={deleteSample.isPending}
+          disabled={deleteSample.isPending || mergedChildrenQuery.isLoading}
           className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
           data-testid="delete-confirm-btn"
         >
-          {deleteSample.isPending ? "Deleting..." : "Delete Sample"}
+          {deleteSample.isPending ? "Deleting..." : confirmLabel}
         </button>
         <button
           type="button"
