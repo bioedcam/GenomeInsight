@@ -81,6 +81,7 @@ import structlog
 from scipy.optimize import nnls as _scipy_nnls
 
 from backend.analysis.evidence import ANCESTRY_EVIDENCE_LEVEL
+from backend.analysis.zygosity import is_no_call
 from backend.db.tables import (
     annotated_variants,
     findings,
@@ -1409,7 +1410,7 @@ def _check_node_match(
     snps_present = 0
     for snp in node.defining_snps:
         genotype = genotype_map.get(snp.rsid)
-        if genotype and genotype not in ("--", "00", "II", "DD", "DI", "ID"):
+        if genotype is not None and not is_no_call(genotype):
             # Check if derived allele is present in genotype
             if snp.allele.upper() in genotype.upper():
                 snps_present += 1

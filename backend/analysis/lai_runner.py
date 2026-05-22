@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import structlog
 
+from backend.analysis.zygosity import is_no_call
+
 if TYPE_CHECKING:
     from backend.analysis.gnomix_inference import ChromosomeResult
 
@@ -278,7 +280,7 @@ class LAIRunner:
             genotype = str(gt["genotype"])
             if chrom not in autosomal_chroms:
                 continue
-            if genotype == "--" or len(genotype) != 2:
+            if is_no_call(genotype) or len(genotype) != 2:
                 continue
             a1, a2 = genotype[0], genotype[1]
             if a1 not in "ACGT" or a2 not in "ACGT":
