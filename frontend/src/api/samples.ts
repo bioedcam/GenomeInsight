@@ -15,6 +15,7 @@ import type {
 import type {
   ConcordanceReportResponse,
   MergeProvenanceResponse,
+  MigrateFromSourcesResponse,
   StaleSampleDetail,
 } from "@/types/individuals"
 
@@ -218,6 +219,39 @@ export function useConcordanceReport(
     },
     enabled: sampleId != null,
     placeholderData: keepPreviousData,
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+/** Post-merge re-watch candidates for a merged sample (Plan §10.6 / §10.7;
+ * Step 72 / MRG-13). Lists every `watched_variants` row from the merged
+ * sample's source samples whose rsid is not present on the merged sample
+ * — the rsid-collapse case carries the merged sample's chosen rsid in
+ * `rsid_on_merged_or_null`, the source-private case carries `null`.
+ *
+ * The route is gated by `require_fresh_merged_sample`, so an in-flight
+ * annotation cascade returns 423; the modal layers the SSE annotation
+ * channel on top via `enabled` so it never fires until annotation
+ * reports `status='complete'`. A 423 caught here is rendered as a
+ * benign "still annotating" banner by the modal (race condition with
+ * the SSE gate). */
+export function useMigrateFromSources(
+  mergedId: number | null,
+  enabled: boolean,
+) {
+  return useQuery<MigrateFromSourcesResponse, SamplesApiError>({
+    queryKey: ["samples", mergedId, "migrate-from-sources"],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/samples/${mergedId}/watched-variants/migrate-from-sources`,
+      )
+      if (!res.ok) {
+        await parseSamplesError(res, "Failed to fetch migration candidates")
+      }
+      return (await res.json()) as MigrateFromSourcesResponse
+    },
+    enabled: mergedId != null && enabled,
     staleTime: Infinity,
     retry: false,
   })

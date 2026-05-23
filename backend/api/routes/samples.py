@@ -8,6 +8,8 @@
   for a merged sample (Step 68 / Plan §10.6).
 - ``GET    /api/samples/{sample_id}/concordance-report`` — paginated discordant
   loci with gene context (Step 68 / Plan §10.6).
+- ``GET    /api/samples/{merged_id}/watched-variants/migrate-from-sources`` —
+  post-merge re-watch candidates (Step 72 / Plan §10.6, §10.7).
 - ``PATCH  /api/samples/{sample_id}`` — update sample metadata.
 - ``DELETE /api/samples/{sample_id}`` — delete + cascade to merged children
   (Step 66 / Plan §10.8).
@@ -16,13 +18,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, date, datetime
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
-from backend.api.dependencies import require_fresh_sample
+from backend.api.dependencies import require_fresh_merged_sample, require_fresh_sample
 from backend.db.connection import get_registry
 from backend.db.tables import (
     annotated_variants,
@@ -30,11 +33,14 @@ from backend.db.tables import (
     raw_variants,
     sample_metadata_table,
     samples,
+    watched_variants,
 )
 from backend.services.sample_delete import (
     delete_sample_with_cascade,
     list_merged_children,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/samples", tags=["samples"])
 
@@ -478,3 +484,186 @@ async def delete_sample(sample_id: int) -> None:
     result = delete_sample_with_cascade(registry, sample_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
+
+
+# ── Post-merge VUS re-watch (Plan §10.6 / Step 72 / MRG-13) ────────────
+
+
+class MigrateCandidate(BaseModel):
+    """One row from a source sample's ``watched_variants`` not carried over
+    to the merged sample (Plan §10.6, §10.7).
+
+    The merged sample DB is built fresh during merge; its ``watched_variants``
+    table starts empty. ``rsid_on_merged_or_null`` is the rsid the merged
+    sample carries at the same ``(chrom, pos)`` — populated when the locus
+    survives the merge under a different rsid (the rsid-collapse case), and
+    ``None`` when the locus is absent from the merged sample altogether
+    (private to the source).
+    """
+
+    rsid_on_source: str
+    notes_on_source: str
+    sample_id: int
+    chrom: str
+    pos: int
+    rsid_on_merged_or_null: str | None = None
+
+
+class MigrateFromSourcesResponse(BaseModel):
+    """Plan §10.6 payload — `{candidates: [...]}`."""
+
+    candidates: list[MigrateCandidate]
+
+
+@router.get(
+    "/{merged_id}/watched-variants/migrate-from-sources",
+    dependencies=[Depends(require_fresh_merged_sample)],
+)
+async def list_migrate_from_sources(merged_id: int) -> MigrateFromSourcesResponse:
+    """Return source-sample ``watched_variants`` rows not present on the merged sample.
+
+    AncestryDNA Plan §10.6 / §10.7 (MRG-13). Tags & watches do not propagate
+    across merges (the four rsid-PK tables are independent across sample
+    DBs), so the dashboard surfaces a `<PostMergeRewatchModal>` on the
+    new sample's first render. The modal drives the actual re-watch via
+    the existing ``POST /api/watches`` route — this read-only endpoint
+    only enumerates the candidates.
+
+    Gated by :func:`backend.api.dependencies.require_fresh_merged_sample`
+    (the Plan §7.5 dependency, aliased for the ``{merged_id}`` path). The
+    drift guard in ``tests/backend/test_stale_sample_dependency.py``
+    keeps the route classified.
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        merged_row = conn.execute(
+            sa.select(samples.c.id, samples.c.db_path).where(
+                samples.c.id == merged_id
+            )
+        ).fetchone()
+    if merged_row is None:
+        raise HTTPException(
+            status_code=404, detail=f"Sample {merged_id} not found."
+        )
+
+    prov_row = _read_merge_provenance(registry, merged_id)
+    if prov_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample {merged_id} has no merge provenance.",
+        )
+
+    try:
+        source_sample_ids = json.loads(prov_row.source_sample_ids)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"merge_provenance JSON malformed for sample {merged_id}.",
+        ) from exc
+
+    merged_db_path = registry.settings.data_dir / merged_row.db_path
+    merged_engine = registry.get_sample_engine(merged_db_path)
+
+    # Pull the merged sample's full rsid set + coordinate→rsid map once so
+    # the per-candidate lookups are pure dict access.
+    with merged_engine.connect() as conn:
+        merged_rsids: set[str] = {
+            row.rsid
+            for row in conn.execute(
+                sa.select(raw_variants.c.rsid)
+            ).fetchall()
+        }
+        merged_coord_to_rsid: dict[tuple[str, int], str] = {
+            (row.chrom, int(row.pos)): row.rsid
+            for row in conn.execute(
+                sa.select(
+                    raw_variants.c.chrom,
+                    raw_variants.c.pos,
+                    raw_variants.c.rsid,
+                )
+            ).fetchall()
+        }
+
+    candidates: list[MigrateCandidate] = []
+
+    for src_id_raw in source_sample_ids:
+        try:
+            src_id = int(src_id_raw)
+        except (TypeError, ValueError):
+            logger.warning(
+                "merge_provenance carries non-integer source id %r for "
+                "merged sample %s — skipping.",
+                src_id_raw,
+                merged_id,
+            )
+            continue
+
+        with registry.reference_engine.connect() as conn:
+            src_row = conn.execute(
+                sa.select(samples.c.db_path).where(samples.c.id == src_id)
+            ).fetchone()
+        if src_row is None:
+            logger.warning(
+                "merge_provenance references missing source sample %d "
+                "for merged sample %d — skipping.",
+                src_id,
+                merged_id,
+            )
+            continue
+
+        src_db_path = registry.settings.data_dir / src_row.db_path
+        if not src_db_path.exists():
+            logger.warning(
+                "Source sample %d DB file missing at %s — skipping.",
+                src_id,
+                src_db_path,
+            )
+            continue
+
+        src_engine = registry.get_sample_engine(src_db_path)
+        try:
+            with src_engine.connect() as conn:
+                # LEFT JOIN watched_variants → raw_variants so we capture
+                # (chrom, pos) of the watched rsid in a single query.
+                rows = conn.execute(
+                    sa.select(
+                        watched_variants.c.rsid,
+                        watched_variants.c.notes,
+                        raw_variants.c.chrom,
+                        raw_variants.c.pos,
+                    )
+                    .select_from(
+                        watched_variants.outerjoin(
+                            raw_variants,
+                            watched_variants.c.rsid == raw_variants.c.rsid,
+                        )
+                    )
+                ).fetchall()
+        except sa.exc.OperationalError:
+            # Pre-v7 source DB without ``watched_variants`` — no candidates
+            # to surface.
+            continue
+
+        for row in rows:
+            if row.rsid in merged_rsids:
+                continue
+            if row.chrom is None or row.pos is None:
+                # Watched rsid has no raw_variants row on the source — we
+                # cannot resolve a coordinate, so no migration path exists.
+                # Skip silently; the watch lingers on the source sample.
+                continue
+            chrom = str(row.chrom)
+            pos = int(row.pos)
+            rsid_on_merged = merged_coord_to_rsid.get((chrom, pos))
+            candidates.append(
+                MigrateCandidate(
+                    rsid_on_source=row.rsid,
+                    notes_on_source=row.notes or "",
+                    sample_id=src_id,
+                    chrom=chrom,
+                    pos=pos,
+                    rsid_on_merged_or_null=rsid_on_merged,
+                )
+            )
+
+    return MigrateFromSourcesResponse(candidates=candidates)

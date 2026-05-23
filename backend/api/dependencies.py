@@ -123,3 +123,18 @@ def require_fresh_sample(sample_id: int) -> int:
         "reannotate_url": f"/api/annotation/{sample_id}",
     }
     raise HTTPException(status_code=423, detail=detail)
+
+
+def require_fresh_merged_sample(merged_id: int) -> int:
+    """``require_fresh_sample`` alias for ``{merged_id}``-pathed routes.
+
+    Plan §10.6's post-merge re-watch route is spelled
+    ``GET /api/samples/{merged_id}/watched-variants/migrate-from-sources``
+    — the ``merged_id`` name pins the route to merged samples. FastAPI
+    binds a dependency's parameters by name against the request's
+    path / query parameters, so :func:`require_fresh_sample` (which
+    takes ``sample_id``) cannot be wired directly there. This thin
+    wrapper exists solely so the route can declare
+    ``Depends(require_fresh_merged_sample)`` and have the gate fire.
+    """
+    return require_fresh_sample(merged_id)

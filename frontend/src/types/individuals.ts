@@ -134,6 +134,26 @@ export interface ConcordanceReportResponse {
   discordant_loci: DiscordantLocus[]
 }
 
+/** One source-sample `watched_variants` row that the merge dropped because
+ * the original rsid is not present on the merged sample (Plan §10.6,
+ * §10.7 / Step 72). The modal surfaces these so the user can re-watch
+ * each locus on the merged sample with one click — backed by the
+ * existing `POST /api/watches` route. `rsid_on_merged_or_null` is set
+ * when the locus survives under a different rsid (the rsid-collapse
+ * case); `null` when the locus is private to the source. */
+export interface MigrateFromSourcesCandidate {
+  rsid_on_source: string
+  notes_on_source: string
+  sample_id: number
+  chrom: string
+  pos: number
+  rsid_on_merged_or_null: string | null
+}
+
+export interface MigrateFromSourcesResponse {
+  candidates: MigrateFromSourcesCandidate[]
+}
+
 /** 423 detail surfaced by `require_fresh_sample` when a source sample's
  * `annotation_state.vep_bundle_version` is older than the installed bundle
  * (Plan §7.5). Mirrored from the FastAPI dependency's structured payload. */
