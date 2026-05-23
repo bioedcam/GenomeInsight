@@ -1,4 +1,4 @@
-"""Individuals API endpoints (AncestryDNA Plan §9.2, §9.3, §10.6; Steps 47, 67).
+"""Individuals API endpoints (AncestryDNA Plan §9.2, §9.3, §10.6; Steps 47, 67, 68).
 
 An ``individuals`` row groups one or more ``samples`` rows under a single
 biological subject (e.g., a 23andMe export plus an AncestryDNA export from
@@ -16,6 +16,7 @@ DELETE /api/individuals/{id}               — Null out linked samples.individua
 POST   /api/individuals/{id}/link-sample   — Body {sample_id}; 409 if linked elsewhere
 POST   /api/individuals/{id}/unlink-sample — Body {sample_id}
 POST   /api/individuals/{id}/merge/preview — Plan §10.6 dry-run summary + duration estimate
+POST   /api/individuals/{id}/merge         — Plan §10.6 commit — materialise the merged sample
 
 The DELETE handler explicitly nulls ``samples.individual_id`` before
 deleting the parent row. This makes the SET-NULL behavior independent of
@@ -36,11 +37,12 @@ from pydantic import BaseModel, Field
 
 from backend.db.connection import get_registry
 from backend.db.tables import findings as findings_table
-from backend.db.tables import individuals, samples
+from backend.db.tables import individuals, jobs, samples
 from backend.services.sample_merge import (
     InvalidMergeRequestError,
     MergeStrategy,
     StaleSourceError,
+    merge_samples,
     preview_merge,
 )
 
@@ -137,6 +139,31 @@ class MergePreviewResponse(BaseModel):
 
     concordance_summary: dict[str, int]
     est_duration_seconds: int
+
+
+class MergeCommitRequest(BaseModel):
+    """Body for ``POST /api/individuals/{id}/merge`` (Plan §10.6).
+
+    Extends :class:`MergePreviewRequest` with ``display_name``, which the
+    wizard collects on the confirm step and persists on the new
+    ``samples`` row created by :func:`backend.services.sample_merge.merge_samples`.
+    """
+
+    source_sample_ids: list[int] = Field(..., min_length=2, max_length=2)
+    strategy: _MERGE_STRATEGY
+    display_name: str = Field(..., min_length=1)
+
+
+class MergeCommitResponse(BaseModel):
+    """Payload returned by the commit route (Plan §10.6).
+
+    ``merged_sample_id`` is the new ``samples.id``; ``job_id`` mirrors the
+    annotation job enqueued by the service (Plan §10.5 step 8). The frontend
+    polls ``GET /api/annotation/status/{job_id}`` for SSE progress.
+    """
+
+    merged_sample_id: int
+    job_id: str
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -570,3 +597,72 @@ def preview_merge_endpoint(
         raise HTTPException(status_code=423, detail=exc.detail) from exc
 
     return MergePreviewResponse(**result)
+
+
+# ── Merge commit (Plan §10.6; Step 68 / MRG-04) ──────────────────────
+
+
+def _latest_annotation_job_id(conn: sa.Connection, sample_id: int) -> str:
+    """Return the most recently enqueued annotation job_id for ``sample_id``.
+
+    Plan §10.6 surfaces ``{merged_sample_id, job_id}``; the job is enqueued
+    inside :func:`backend.services.sample_merge.merge_samples` (Plan §10.5
+    step 8) which does not bubble the id out. Reading it back from the
+    ``jobs`` table preserves the service's signature and tolerates the
+    "enqueue failed → no job row" branch by returning ``''`` so the wizard
+    can render a fallback rather than crash.
+    """
+    row = conn.execute(
+        sa.select(jobs.c.job_id)
+        .where(jobs.c.sample_id == sample_id)
+        .where(jobs.c.job_type == "annotation")
+        .order_by(jobs.c.created_at.desc())
+        .limit(1)
+    ).fetchone()
+    return row.job_id if row else ""
+
+
+@router.post("/{individual_id}/merge", status_code=201)
+def commit_merge_endpoint(
+    individual_id: int, body: MergeCommitRequest
+) -> MergeCommitResponse:
+    """Materialise the merged sample DB and enqueue annotation (Plan §10.6).
+
+    Body: ``{source_sample_ids: [a, b], strategy, display_name}``.
+    Response: ``{merged_sample_id, job_id}``.
+
+    Shares the §10.5 step-1–4 validation pipeline with
+    :func:`preview_merge_endpoint`, then performs steps 5–8 (write
+    ``samples`` row, materialise the per-sample DB with the merged-sample
+    layout, write the single ``merge_provenance`` row, enqueue the
+    annotation job).
+
+    Error surface:
+
+    * 404 — individual does not exist.
+    * 422 — :class:`InvalidMergeRequestError` (shape / membership /
+      annotation-status failure, or empty ``display_name``).
+    * 423 — :class:`StaleSourceError`; body carries the structured payload
+      Plan §7.5 declares for ``require_fresh_sample``.
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        _require_individual(conn, individual_id)
+
+    try:
+        merged_sample_id = merge_samples(
+            registry,
+            source_sample_ids=body.source_sample_ids,
+            individual_id=individual_id,
+            strategy=MergeStrategy(body.strategy),
+            display_name=body.display_name,
+        )
+    except InvalidMergeRequestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except StaleSourceError as exc:
+        raise HTTPException(status_code=423, detail=exc.detail) from exc
+
+    with registry.reference_engine.connect() as conn:
+        job_id = _latest_annotation_job_id(conn, merged_sample_id)
+
+    return MergeCommitResponse(merged_sample_id=merged_sample_id, job_id=job_id)

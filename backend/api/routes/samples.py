@@ -4,6 +4,10 @@
 - ``GET    /api/samples/{sample_id}`` — single sample + full metadata.
 - ``GET    /api/samples/{sample_id}/merged-children`` — merged samples
   referencing this row (Step 66 / Plan §10.8).
+- ``GET    /api/samples/{sample_id}/merge-provenance`` — merge_provenance row
+  for a merged sample (Step 68 / Plan §10.6).
+- ``GET    /api/samples/{sample_id}/concordance-report`` — paginated discordant
+  loci with gene context (Step 68 / Plan §10.6).
 - ``PATCH  /api/samples/{sample_id}`` — update sample metadata.
 - ``DELETE /api/samples/{sample_id}`` — delete + cascade to merged children
   (Step 66 / Plan §10.8).
@@ -15,11 +19,18 @@ import json
 from datetime import UTC, date, datetime
 
 import sqlalchemy as sa
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
+from backend.api.dependencies import require_fresh_sample
 from backend.db.connection import get_registry
-from backend.db.tables import sample_metadata_table, samples
+from backend.db.tables import (
+    annotated_variants,
+    merge_provenance,
+    raw_variants,
+    sample_metadata_table,
+    samples,
+)
 from backend.services.sample_delete import (
     delete_sample_with_cascade,
     list_merged_children,
@@ -220,6 +231,239 @@ async def list_sample_merged_children(sample_id: int) -> list[MergedChildRespons
         raise HTTPException(status_code=404, detail=f"Sample {sample_id} not found.")
     children = list_merged_children(registry, sample_id)
     return [MergedChildResponse(id=c.id, name=c.name) for c in children]
+
+
+class MergeProvenanceResponse(BaseModel):
+    """``merge_provenance`` row as returned by ``GET .../merge-provenance``.
+
+    Plan §10.4 (c) shape — ``source_sample_ids`` / ``source_file_hashes`` /
+    ``concordance_summary`` are decoded from their on-disk JSON strings so
+    the wizard can consume the response directly.
+    """
+
+    merged_at: str
+    strategy: str
+    source_sample_ids: list[int]
+    source_file_hashes: list[str]
+    concordance_summary: dict[str, int]
+
+
+class DiscordantLocus(BaseModel):
+    """One row in the concordance-report's paginated ``discordant_loci`` array."""
+
+    rsid: str
+    chrom: str
+    pos: int
+    genotype: str
+    discordant_alt_genotype: str
+    alt_rsid: str
+    gene_symbol: str | None = None
+    consequence: str | None = None
+    clinvar_significance: str | None = None
+
+
+class ConcordanceReportResponse(BaseModel):
+    """Paginated concordance-report payload (Plan §10.6)."""
+
+    concordance_summary: dict[str, int]
+    total_discordant: int
+    limit: int
+    offset: int
+    discordant_loci: list[DiscordantLocus]
+
+
+_CONCORDANCE_REPORT_DEFAULT_LIMIT = 50
+_CONCORDANCE_REPORT_MAX_LIMIT = 500
+
+
+def _read_merge_provenance(registry: object, sample_id: int) -> sa.Row | None:
+    """Open the per-sample DB read-only and fetch the single ``merge_provenance`` row.
+
+    Returns ``None`` when the sample exists but has no provenance row (i.e.
+    not a merged sample) — the route maps that to HTTP 404 per Plan §10.6.
+    """
+    settings = registry.settings  # type: ignore[attr-defined]
+    with registry.reference_engine.connect() as conn:  # type: ignore[attr-defined]
+        sample_row = conn.execute(
+            sa.select(samples.c.db_path).where(samples.c.id == sample_id)
+        ).fetchone()
+    if sample_row is None:
+        return None
+    sample_db_path = settings.data_dir / sample_row.db_path
+    if not sample_db_path.exists():
+        return None
+    engine = registry.get_sample_engine(sample_db_path)  # type: ignore[attr-defined]
+    with engine.connect() as conn:
+        try:
+            return conn.execute(sa.select(merge_provenance)).fetchone()
+        except sa.exc.OperationalError:
+            # ``merge_provenance`` table was added in schema v8; very old
+            # per-sample DBs that have not yet been upgraded won't carry
+            # it, in which case "no provenance" is the correct answer.
+            return None
+
+
+@router.get(
+    "/{sample_id}/merge-provenance",
+    dependencies=[Depends(require_fresh_sample)],
+)
+async def get_merge_provenance(sample_id: int) -> MergeProvenanceResponse:
+    """Return the ``merge_provenance`` row if this sample was merged, else 404.
+
+    Plan §10.6: the merged-sample artefact is queryable independently of
+    the originating individual, so the route lives under ``/api/samples``
+    rather than ``/api/individuals``. Read-only; gated by
+    :func:`backend.api.dependencies.require_fresh_sample` per Plan §7.5.
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        sample_row = conn.execute(
+            sa.select(samples.c.id).where(samples.c.id == sample_id)
+        ).fetchone()
+    if sample_row is None:
+        raise HTTPException(
+            status_code=404, detail=f"Sample {sample_id} not found."
+        )
+
+    prov_row = _read_merge_provenance(registry, sample_id)
+    if prov_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample {sample_id} has no merge provenance.",
+        )
+
+    try:
+        source_sample_ids = json.loads(prov_row.source_sample_ids)
+        source_file_hashes = json.loads(prov_row.source_file_hashes)
+        concordance_summary = json.loads(prov_row.concordance_summary)
+    except (json.JSONDecodeError, TypeError) as exc:
+        # On-disk corruption — surface 500 rather than crash with a raw
+        # JSONDecodeError. Plan §10.4 (c) treats the JSON columns as
+        # written-by-merge-service only, so this should be unreachable.
+        raise HTTPException(
+            status_code=500,
+            detail=f"merge_provenance JSON malformed for sample {sample_id}.",
+        ) from exc
+
+    return MergeProvenanceResponse(
+        merged_at=str(prov_row.merged_at) if prov_row.merged_at else "",
+        strategy=prov_row.strategy,
+        source_sample_ids=source_sample_ids,
+        source_file_hashes=source_file_hashes,
+        concordance_summary=concordance_summary,
+    )
+
+
+@router.get(
+    "/{sample_id}/concordance-report",
+    dependencies=[Depends(require_fresh_sample)],
+)
+async def get_concordance_report(
+    sample_id: int,
+    limit: int = Query(
+        _CONCORDANCE_REPORT_DEFAULT_LIMIT,
+        ge=1,
+        le=_CONCORDANCE_REPORT_MAX_LIMIT,
+        description="Page size (1–500, default 50).",
+    ),
+    offset: int = Query(0, ge=0, description="Page offset (default 0)."),
+) -> ConcordanceReportResponse:
+    """Paginated discordant-loci report with gene context (Plan §10.6).
+
+    Returns ``concordance_summary`` (from ``merge_provenance``), the total
+    number of discordant rows (for client-side pagination), and a page of
+    ``discordant_loci`` rows ordered by ``(chrom, pos)`` ascending. Each
+    row LEFT-JOINs ``annotated_variants`` so the table can show gene +
+    consequence + ClinVar significance alongside the conflict.
+
+    Default ``limit`` is 50; max is 500 (FastAPI's ``Query(le=500)``
+    surfaces 422 for ``limit=501`` per Plan §10.6).
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        sample_row = conn.execute(
+            sa.select(samples.c.id, samples.c.db_path).where(
+                samples.c.id == sample_id
+            )
+        ).fetchone()
+    if sample_row is None:
+        raise HTTPException(
+            status_code=404, detail=f"Sample {sample_id} not found."
+        )
+
+    prov_row = _read_merge_provenance(registry, sample_id)
+    if prov_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample {sample_id} has no merge provenance.",
+        )
+
+    try:
+        concordance_summary = json.loads(prov_row.concordance_summary)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"merge_provenance JSON malformed for sample {sample_id}.",
+        ) from exc
+
+    sample_db_path = registry.settings.data_dir / sample_row.db_path
+    engine = registry.get_sample_engine(sample_db_path)
+
+    discordant_filter = raw_variants.c.concordance == "discordant"
+    with engine.connect() as conn:
+        total_discordant = conn.execute(
+            sa.select(sa.func.count())
+            .select_from(raw_variants)
+            .where(discordant_filter)
+        ).scalar_one()
+
+        # LEFT JOIN so loci absent from annotated_variants still appear (gene
+        # context simply renders as null on the wizard's table).
+        loci_query = (
+            sa.select(
+                raw_variants.c.rsid,
+                raw_variants.c.chrom,
+                raw_variants.c.pos,
+                raw_variants.c.genotype,
+                raw_variants.c.discordant_alt_genotype,
+                raw_variants.c.alt_rsid,
+                annotated_variants.c.gene_symbol,
+                annotated_variants.c.consequence,
+                annotated_variants.c.clinvar_significance,
+            )
+            .select_from(
+                raw_variants.outerjoin(
+                    annotated_variants,
+                    raw_variants.c.rsid == annotated_variants.c.rsid,
+                )
+            )
+            .where(discordant_filter)
+            .order_by(raw_variants.c.chrom.asc(), raw_variants.c.pos.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        loci_rows = conn.execute(loci_query).fetchall()
+
+    return ConcordanceReportResponse(
+        concordance_summary=concordance_summary,
+        total_discordant=int(total_discordant),
+        limit=limit,
+        offset=offset,
+        discordant_loci=[
+            DiscordantLocus(
+                rsid=row.rsid,
+                chrom=row.chrom,
+                pos=int(row.pos),
+                genotype=row.genotype,
+                discordant_alt_genotype=row.discordant_alt_genotype,
+                alt_rsid=row.alt_rsid,
+                gene_symbol=row.gene_symbol,
+                consequence=row.consequence,
+                clinvar_significance=row.clinvar_significance,
+            )
+            for row in loci_rows
+        ],
+    )
 
 
 @router.delete("/{sample_id}", status_code=204)
