@@ -1,4 +1,4 @@
-"""Individuals API endpoints (AncestryDNA Plan §9.2, §9.3; Step 47 / IND-03).
+"""Individuals API endpoints (AncestryDNA Plan §9.2, §9.3, §10.6; Steps 47, 67).
 
 An ``individuals`` row groups one or more ``samples`` rows under a single
 biological subject (e.g., a 23andMe export plus an AncestryDNA export from
@@ -15,6 +15,7 @@ PATCH  /api/individuals/{id}               — Edit display_name / notes / biolo
 DELETE /api/individuals/{id}               — Null out linked samples.individual_id, then delete
 POST   /api/individuals/{id}/link-sample   — Body {sample_id}; 409 if linked elsewhere
 POST   /api/individuals/{id}/unlink-sample — Body {sample_id}
+POST   /api/individuals/{id}/merge/preview — Plan §10.6 dry-run summary + duration estimate
 
 The DELETE handler explicitly nulls ``samples.individual_id`` before
 deleting the parent row. This makes the SET-NULL behavior independent of
@@ -36,6 +37,12 @@ from pydantic import BaseModel, Field
 from backend.db.connection import get_registry
 from backend.db.tables import findings as findings_table
 from backend.db.tables import individuals, samples
+from backend.services.sample_merge import (
+    InvalidMergeRequestError,
+    MergeStrategy,
+    StaleSourceError,
+    preview_merge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +110,33 @@ class LinkConflictDetail(BaseModel):
     individual_id: int
     individual_display_name: str
     message: str
+
+
+# Plan §10.3: the three merge strategies the wizard picks between. Mirrored
+# from :class:`backend.services.sample_merge.MergeStrategy` as a string
+# Literal so FastAPI's auto-validation rejects unknown values with 422
+# before the request reaches the service.
+_MERGE_STRATEGY = Literal["prefer_23andme", "prefer_ancestrydna", "flag_only"]
+
+
+class MergePreviewRequest(BaseModel):
+    """Body for ``POST /api/individuals/{id}/merge/preview`` (Plan §10.6)."""
+
+    source_sample_ids: list[int] = Field(..., min_length=2, max_length=2)
+    strategy: _MERGE_STRATEGY
+
+
+class MergePreviewResponse(BaseModel):
+    """Wizard-facing payload returned by the preview route (Plan §10.6).
+
+    ``concordance_summary`` is the §10.4 (c) ``concordance_summary`` shape
+    that :class:`~backend.services.sample_merge._ConcordanceSummary` writes
+    into ``merge_provenance.concordance_summary``; ``est_duration_seconds``
+    is the wizard's "this will take ~N seconds" hint on the confirm step.
+    """
+
+    concordance_summary: dict[str, int]
+    est_duration_seconds: int
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -494,3 +528,45 @@ def unlink_sample(individual_id: int, body: LinkSampleRequest) -> IndividualDeta
         linked_samples=[_linked_sample_payload(s) for s in linked],
         aggregated_findings_count=_aggregate_findings_count(linked),
     )
+
+
+# ── Merge preview (Plan §10.6; Step 67 / MRG-03) ─────────────────────
+
+
+@router.post("/{individual_id}/merge/preview")
+def preview_merge_endpoint(
+    individual_id: int, body: MergePreviewRequest
+) -> MergePreviewResponse:
+    """Dry-run the §10.2 / §10.3 merge semantics and return the wizard payload.
+
+    Validation surface is identical to ``POST /api/individuals/{id}/merge``
+    (Step 68) — same membership / status / staleness checks — but nothing
+    is written: no new ``samples`` row, no per-sample DB, no
+    ``merge_provenance``. Fed by :func:`backend.services.sample_merge.preview_merge`,
+    which calls the shared ``_compute_merge_plan`` pipeline.
+
+    Error surface:
+
+    * 404 — individual does not exist.
+    * 422 — :class:`InvalidMergeRequestError` (shape, membership, or
+      annotation-status failure).
+    * 423 — :class:`StaleSourceError`; body carries the structured payload
+      Plan §7.5 declares for ``require_fresh_sample``.
+    """
+    registry = get_registry()
+    with registry.reference_engine.connect() as conn:
+        _require_individual(conn, individual_id)
+
+    try:
+        result = preview_merge(
+            registry,
+            source_sample_ids=body.source_sample_ids,
+            individual_id=individual_id,
+            strategy=MergeStrategy(body.strategy),
+        )
+    except InvalidMergeRequestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except StaleSourceError as exc:
+        raise HTTPException(status_code=423, detail=exc.detail) from exc
+
+    return MergePreviewResponse(**result)

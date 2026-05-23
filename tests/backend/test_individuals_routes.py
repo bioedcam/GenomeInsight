@@ -1,4 +1,4 @@
-"""Tests for the individuals API endpoints (Steps 47 + 55; Plan §9.2, §9.3, §14.1).
+"""Tests for the individuals API endpoints (Steps 47, 55, 67; Plan §9.2, §9.3, §10.6, §14.1).
 
 Step 47 / IND-03 covered:
 - (a) Happy paths for all seven endpoints (list, create, detail, patch,
@@ -20,6 +20,13 @@ Step 55 / IND-09a edge-case extensions (``TestEdgeCases``):
   per-sample rather than deduped (Plan §9.5 carve-out).
 - 409 link-elsewhere preserves the original attachment across repeated
   relink attempts.
+
+Step 67 / MRG-03 smoke coverage of ``POST /api/individuals/{id}/merge/preview``
+(``TestMergePreviewRoute``): 404 on nonexistent individual, 422 on
+shape/membership/status failures, FastAPI pydantic validation on the
+body shape. The exhaustive surface (full happy-path payload, stale-source
+423, missing-state fallback) lives in ``test_sample_merge_preview.py``
+which lands in Step 73.
 
 Sex-inference + haplogroup parity lives in step 54; migration 009
 round-trip in step 46.
@@ -724,3 +731,89 @@ class TestEdgeCases:
         # them. linked_samples carries the per-sample provenance.
         assert detail["aggregated_findings_count"] == 2
         assert sorted(s["id"] for s in detail["linked_samples"]) == sorted([sample_a, sample_b])
+
+
+# ── (e) Step 67 / MRG-03 — merge preview route smoke surface ─────────
+
+
+class TestMergePreviewRoute:
+    """Route plumbing for ``POST /api/individuals/{id}/merge/preview``.
+
+    Validates Plan §10.6 routing: the route exists, FastAPI's pydantic
+    layer rejects mis-shaped bodies before the service runs, the route
+    surfaces 404 / 422 from the individual + service layers. Happy-path
+    payload assertion (concordance counts + ``est_duration_seconds``)
+    against a hand-curated fixture is the dual-upload fixture's job in
+    step 75; that's why this class only covers the routing surface here.
+    """
+
+    def test_nonexistent_individual_returns_404(
+        self, individuals_client: TestClient
+    ) -> None:
+        sample1_id = individuals_client.sample1_id  # type: ignore[attr-defined]
+        sample2_id = individuals_client.sample2_id  # type: ignore[attr-defined]
+        resp = individuals_client.post(
+            "/api/individuals/9999/merge/preview",
+            json={
+                "source_sample_ids": [sample1_id, sample2_id],
+                "strategy": "flag_only",
+            },
+        )
+        assert resp.status_code == 404
+        assert "9999" in resp.json()["detail"]
+
+    def test_invalid_strategy_returns_422(
+        self, individuals_client: TestClient
+    ) -> None:
+        ind = individuals_client.post(
+            "/api/individuals", json={"display_name": "Owner"}
+        ).json()
+        sample1_id = individuals_client.sample1_id  # type: ignore[attr-defined]
+        sample2_id = individuals_client.sample2_id  # type: ignore[attr-defined]
+        resp = individuals_client.post(
+            f"/api/individuals/{ind['id']}/merge/preview",
+            json={
+                "source_sample_ids": [sample1_id, sample2_id],
+                "strategy": "bogus_strategy",
+            },
+        )
+        # Pydantic Literal rejects the unknown value before the service runs.
+        assert resp.status_code == 422
+
+    def test_wrong_source_count_returns_422(
+        self, individuals_client: TestClient
+    ) -> None:
+        ind = individuals_client.post(
+            "/api/individuals", json={"display_name": "Owner"}
+        ).json()
+        sample1_id = individuals_client.sample1_id  # type: ignore[attr-defined]
+        resp = individuals_client.post(
+            f"/api/individuals/{ind['id']}/merge/preview",
+            json={
+                "source_sample_ids": [sample1_id],
+                "strategy": "flag_only",
+            },
+        )
+        # min_length=2 on the pydantic model rejects the single-id list.
+        assert resp.status_code == 422
+
+    def test_samples_not_linked_to_individual_return_422(
+        self, individuals_client: TestClient
+    ) -> None:
+        # The fixture's two seeded samples are unlinked (individual_id is
+        # NULL). Asking to preview-merge them against a freshly-created
+        # individual surfaces the §10.5 step-1 membership failure as 422.
+        ind = individuals_client.post(
+            "/api/individuals", json={"display_name": "Owner"}
+        ).json()
+        sample1_id = individuals_client.sample1_id  # type: ignore[attr-defined]
+        sample2_id = individuals_client.sample2_id  # type: ignore[attr-defined]
+        resp = individuals_client.post(
+            f"/api/individuals/{ind['id']}/merge/preview",
+            json={
+                "source_sample_ids": [sample1_id, sample2_id],
+                "strategy": "flag_only",
+            },
+        )
+        assert resp.status_code == 422
+        assert "not linked" in resp.json()["detail"]

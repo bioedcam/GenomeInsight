@@ -46,7 +46,9 @@ from backend.services.sample_merge import (
     MergeStrategy,
     StaleSourceError,
     _compute_file_hash,
+    _estimate_duration_seconds,
     merge_samples,
+    preview_merge,
 )
 
 # ── Test-scoped registry that the singleton-using ``staleness`` service sees ──
@@ -872,6 +874,141 @@ class TestAnnotationEnqueue:
             "merge_annotation_enqueue_failed" in record.message
             for record in caplog.records
         )
+
+
+class TestPreviewMerge:
+    """Plan §10.6 / Step 67: ``preview_merge`` dry-run helper.
+
+    Exhaustive surface (every Plan §10.5 step-1 failure mode + missing
+    ``annotation_state`` fallback) lives in
+    ``tests/backend/test_sample_merge_preview.py`` (Step 73 / MRG-03a).
+    This class only locks the helper-split contract introduced in this
+    step: the dry-run returns the same concordance counts the commit path
+    writes into ``merge_provenance.concordance_summary``, packages
+    ``est_duration_seconds`` per the §10.6 contract, and never writes a
+    samples row or per-sample DB.
+    """
+
+    def test_estimate_duration_floor_is_baseline(self) -> None:
+        # Zero rows → just the baseline (annotation-queue overhead).
+        assert _estimate_duration_seconds(0) == 5
+
+    def test_estimate_duration_scales_with_row_count(self) -> None:
+        # ~25k rows/sec amortised against the Step 85 perf budget.
+        assert _estimate_duration_seconds(25_000) == 6
+        assert _estimate_duration_seconds(700_000) == 33
+
+    def test_preview_returns_summary_and_estimate_without_writing(
+        self, merge_registry: DBRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_installed_vep_bundle(merge_registry, "v2.0.0")
+        _noop_annotation_enqueue(monkeypatch)
+        individual_id = _create_individual(merge_registry, "Preview Subject")
+        s1_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="jane_23andme.txt",
+            file_format="23andme_v5",
+            file_hash="hash_s1",
+            variants=S1_VARIANTS,
+        )
+        s2_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="jane_ancestrydna.txt",
+            file_format="ancestrydna_v2.0",
+            file_hash="hash_s2",
+            variants=S2_VARIANTS,
+        )
+
+        # Snapshot the reference DB's samples count + the on-disk per-
+        # sample DB files BEFORE the dry-run so we can assert nothing new
+        # lands during preview (the contract Plan §10.6 declares).
+        with merge_registry.reference_engine.connect() as conn:
+            pre_count = conn.execute(
+                sa.select(sa.func.count()).select_from(samples)
+            ).scalar()
+        pre_db_files = sorted(
+            (merge_registry.settings.data_dir / "samples").glob("sample_*.db")
+        )
+
+        result = preview_merge(
+            merge_registry,
+            source_sample_ids=[s1_id, s2_id],
+            individual_id=individual_id,
+            strategy=MergeStrategy.FLAG_ONLY,
+        )
+
+        # Same bucket counts the commit path locks in
+        # ``TestHappyPath::test_concordance_summary_counts_match_buckets``.
+        assert result["concordance_summary"] == {
+            "match": 2,
+            "filled_nocall": 2,
+            "discordant": 1,
+            "unique_S1": 1,
+            "unique_S2": 1,
+            "collapsed_rsid": 1,
+        }
+        # 7 rows → baseline 5 + 7//25_000 = 5 + 0 = 5.
+        assert result["est_duration_seconds"] == 5
+
+        # No samples row added; no per-sample DB file created.
+        with merge_registry.reference_engine.connect() as conn:
+            post_count = conn.execute(
+                sa.select(sa.func.count()).select_from(samples)
+            ).scalar()
+        assert post_count == pre_count
+        post_db_files = sorted(
+            (merge_registry.settings.data_dir / "samples").glob("sample_*.db")
+        )
+        assert post_db_files == pre_db_files
+
+    def test_preview_propagates_invalid_request(
+        self, merge_registry: DBRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_installed_vep_bundle(merge_registry, "v2.0.0")
+        _noop_annotation_enqueue(monkeypatch)
+        individual_id = _create_individual(merge_registry, "Owner")
+        with pytest.raises(InvalidMergeRequestError, match="exactly 2"):
+            preview_merge(
+                merge_registry,
+                source_sample_ids=[1],
+                individual_id=individual_id,
+                strategy=MergeStrategy.FLAG_ONLY,
+            )
+
+    def test_preview_propagates_stale_source(
+        self, merge_registry: DBRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_installed_vep_bundle(merge_registry, "v2.0.0")
+        _noop_annotation_enqueue(monkeypatch)
+        individual_id = _create_individual(merge_registry, "Stale Owner")
+        s1_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="a.txt",
+            file_format="23andme_v5",
+            file_hash="h1",
+            variants=S1_VARIANTS,
+        )
+        s2_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="b.txt",
+            file_format="ancestrydna_v2.0",
+            file_hash="h2",
+            variants=S2_VARIANTS,
+            bundle_version="v1.0.0",
+        )
+        with pytest.raises(StaleSourceError) as exc_info:
+            preview_merge(
+                merge_registry,
+                source_sample_ids=[s1_id, s2_id],
+                individual_id=individual_id,
+                strategy=MergeStrategy.FLAG_ONLY,
+            )
+        assert exc_info.value.stale_sample_ids == [s2_id]
+        assert exc_info.value.detail["error"] == "stale_source_sample"
 
 
 class TestEmptySourcesEdgeCase:

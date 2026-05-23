@@ -1,4 +1,4 @@
-"""Sample-merge service core (AncestryDNA Plan §10.2, §10.5; Step 65 / MRG-02).
+"""Sample-merge service core (AncestryDNA Plan §10.2, §10.5, §10.6; Steps 65, 67).
 
 Materialises a merged per-sample DB from two source samples linked to the
 same ``individuals`` row. The merge is a stand-alone artefact: every existing
@@ -11,13 +11,24 @@ every unmerged sample (Step 63). Per-row PK is ``(chrom, pos)`` rather than
 at the same coordinate collapse to one row — the canonical merge-key
 contract.
 
-Public entry point :func:`merge_samples` validates the request, opens both
-source DBs read-only, streams ``raw_variants`` into a coordinate-indexed
-in-memory map, applies the §10.2 / §10.3 semantics under one of three
-strategies, writes the new ``samples`` row + per-sample DB + single
-``merge_provenance`` row, and enqueues the standard annotation job against
-the new sample. The caller polls existing
-``GET /api/annotation/status/{job_id}`` for progress.
+Public entry points:
+
+* :func:`merge_samples` (Step 65 / MRG-02) — validates the request, opens
+  both source DBs read-only, streams ``raw_variants`` into a coordinate-
+  indexed in-memory map, applies the §10.2 / §10.3 semantics under one of
+  three strategies, writes the new ``samples`` row + per-sample DB + single
+  ``merge_provenance`` row, and enqueues the standard annotation job. The
+  caller polls existing ``GET /api/annotation/status/{job_id}``.
+* :func:`preview_merge` (Step 67 / MRG-03) — dry-run that runs the same
+  validation + read + semantics pass and returns
+  ``{concordance_summary, est_duration_seconds}`` without writing anything.
+  Backs the merge wizard's preview step (Plan §10.6 / §10.7).
+
+Both entry points share :func:`_compute_merge_plan`, which is the canonical
+pre-write pipeline; the preview/commit split therefore exercises the exact
+same validation surface (Plan §10.5 step 1) and the exact same §10.2 /
+§10.3 semantics. The only difference is what happens *after* the plan is
+computed.
 
 Validation contract (Plan §10.5 step 1):
 
@@ -27,10 +38,10 @@ Validation contract (Plan §10.5 step 1):
 * Neither source may be stale per :func:`backend.services.staleness.is_sample_stale`.
 
 Membership / status / shape failures raise
-:class:`InvalidMergeRequestError` (the API route in Step 68 maps to HTTP
-422). Stale-source failures raise :class:`StaleSourceError` carrying a
-structured detail dict (the API route maps to HTTP 423 — same shape Plan
-§7.5 declares for ``require_fresh_sample``).
+:class:`InvalidMergeRequestError` (the API routes map to HTTP 422). Stale-
+source failures raise :class:`StaleSourceError` carrying a structured
+detail dict (the API routes map to HTTP 423 — same shape Plan §7.5
+declares for ``require_fresh_sample``).
 """
 
 from __future__ import annotations
@@ -463,28 +474,30 @@ def _compute_file_hash(s1_hash: str, s2_hash: str, strategy: MergeStrategy) -> s
     return hashlib.sha256(payload).hexdigest()
 
 
-def merge_samples(
-    registry: DBRegistry,
-    source_sample_ids: list[int],
-    individual_id: int,
-    strategy: MergeStrategy,
-    display_name: str,
-) -> int:
-    """Merge two source samples into a new merged sample. Returns the new ``sample_id``.
+@dataclass(frozen=True)
+class _MergePlan:
+    """Result of the shared pre-write pipeline (validation + read + semantics).
 
-    Plan §10.5 contract:
+    Shared by :func:`merge_samples` and :func:`preview_merge`: the former
+    writes the per-sample DB + provenance + enqueues annotation; the latter
+    discards everything except ``summary`` and ``rows`` (the latter feeds
+    the duration estimator).
+    """
 
-    1. Validate membership, completion, and freshness.
-    2. Open both source DBs read-only.
-    3. Stream their ``raw_variants`` into a ``(chrom, pos)``-keyed map.
-    4. Apply §10.2 / §10.3 semantics.
-    5. Insert a new ``samples`` row (``file_format='merged_v1'``,
-       deterministic ``file_hash``, ``individual_id`` propagated).
-    6. Create the per-sample DB with ``is_merged_sample=True`` so
-       ``raw_variants`` materialises with the ``(chrom, pos)`` PK.
-    7. Write the single ``merge_provenance`` row.
-    8. Enqueue the standard annotation job (the caller polls
-       ``GET /api/annotation/status/{job_id}``).
+    s1_row: sa.Row
+    s2_row: sa.Row
+    rows: list[_MergedRow]
+    summary: _ConcordanceSummary
+
+
+def _validate_request_shape(
+    source_sample_ids: list[int], strategy: MergeStrategy
+) -> None:
+    """Plan §10.5 step 1 — count / distinctness / strategy enum validation.
+
+    Display-name validation is NOT here because :func:`preview_merge` does
+    not take a display_name (the wizard fills it in only on the confirm
+    step). :func:`merge_samples` performs the display-name check separately.
     """
     if len(source_sample_ids) != 2:
         raise InvalidMergeRequestError(
@@ -496,11 +509,21 @@ def merge_samples(
         )
     if not isinstance(strategy, MergeStrategy):
         raise InvalidMergeRequestError(f"unknown merge strategy: {strategy!r}")
-    if not display_name or not display_name.strip():
-        raise InvalidMergeRequestError("display_name is required")
 
-    s1_id, s2_id = source_sample_ids
+
+def _validate_samples_and_freshness(
+    registry: DBRegistry, source_sample_ids: list[int], individual_id: int
+) -> tuple[sa.Row, sa.Row]:
+    """Plan §10.5 step 1 — sample existence / linkage / status + Plan §7.4 freshness.
+
+    Returns the two ``samples`` rows in the same order as
+    ``source_sample_ids``. Raises :class:`InvalidMergeRequestError` on
+    membership / status failures and :class:`StaleSourceError` on a stale
+    source (the route maps to HTTP 423 with the structured payload Plan
+    §7.5 declares for ``require_fresh_sample``).
+    """
     reference_engine = registry.reference_engine
+    s1_id, s2_id = source_sample_ids
 
     sample_rows: list[sa.Row] = []
     for sid in (s1_id, s2_id):
@@ -531,8 +554,27 @@ def merge_samples(
         }
         raise StaleSourceError(stale_ids, detail)
 
+    return sample_rows[0], sample_rows[1]
+
+
+def _compute_merge_plan(
+    registry: DBRegistry,
+    source_sample_ids: list[int],
+    individual_id: int,
+    strategy: MergeStrategy,
+) -> _MergePlan:
+    """Run Plan §10.5 steps 1–4: validate, open, stream, apply semantics.
+
+    The shared pre-write pipeline. :func:`merge_samples` calls this and
+    then performs steps 5–8 (write + enqueue); :func:`preview_merge` calls
+    this and packages the result as the dry-run response (Plan §10.6).
+    """
+    _validate_request_shape(source_sample_ids, strategy)
+    s1_row, s2_row = _validate_samples_and_freshness(
+        registry, source_sample_ids, individual_id
+    )
+
     settings = registry.settings
-    s1_row, s2_row = sample_rows
     s1_engine = registry.get_sample_engine(settings.data_dir / s1_row.db_path)
     s2_engine = registry.get_sample_engine(settings.data_dir / s2_row.db_path)
 
@@ -551,17 +593,94 @@ def merge_samples(
     if conflict_rsids:
         rsids_in_bundle = _rsids_in_vep_bundle(registry.vep_engine, conflict_rsids)
 
-    s1_vendor = _vendor_token(s1_row.file_format)
-    s2_vendor = _vendor_token(s2_row.file_format)
-
     merged_rows, summary = _apply_semantics(
         s1_coords,
         s2_coords,
         strategy=strategy,
         rsids_in_bundle=rsids_in_bundle,
-        s1_vendor=s1_vendor,
-        s2_vendor=s2_vendor,
+        s1_vendor=_vendor_token(s1_row.file_format),
+        s2_vendor=_vendor_token(s2_row.file_format),
     )
+    return _MergePlan(s1_row=s1_row, s2_row=s2_row, rows=merged_rows, summary=summary)
+
+
+# Plan §10.6 / §10.7: the wizard renders ``est_duration_seconds`` as a
+# rough "this will take ~N seconds" hint on the confirm step. The estimate
+# covers commit-time work (write the per-sample DB rows + the standard
+# annotation pass). Bucketed against the merge perf budget locked by
+# Step 85 / MRG-09a (700k-variant samples land in <30 s on the WSL2
+# reference machine): a 5 s baseline absorbs annotation-queue overhead +
+# ~25k rows/sec accounts for the write + downstream annotation pass.
+_DURATION_BASELINE_SECONDS = 5
+_DURATION_ROWS_PER_SECOND = 25_000
+
+
+def _estimate_duration_seconds(merged_row_count: int) -> int:
+    """Plan §10.6: return an integer-second estimate for the commit phase."""
+    return _DURATION_BASELINE_SECONDS + (merged_row_count // _DURATION_ROWS_PER_SECOND)
+
+
+def preview_merge(
+    registry: DBRegistry,
+    source_sample_ids: list[int],
+    individual_id: int,
+    strategy: MergeStrategy,
+) -> dict:
+    """Dry-run preview backing ``POST /api/individuals/{id}/merge/preview``.
+
+    Runs Plan §10.5 steps 1–4 (validation, read, semantics) and returns
+    the §10.6 wizard payload without creating any sample rows, per-sample
+    DB files, or merge-provenance rows. Same error surface as
+    :func:`merge_samples`:
+
+    * :class:`InvalidMergeRequestError` for shape / membership / status
+      failures (the route maps to HTTP 422).
+    * :class:`StaleSourceError` for stale-source failures (HTTP 423 with
+      the same payload shape declared by Plan §7.5).
+    """
+    plan = _compute_merge_plan(
+        registry, source_sample_ids, individual_id, strategy
+    )
+    return {
+        "concordance_summary": plan.summary.to_dict(),
+        "est_duration_seconds": _estimate_duration_seconds(len(plan.rows)),
+    }
+
+
+def merge_samples(
+    registry: DBRegistry,
+    source_sample_ids: list[int],
+    individual_id: int,
+    strategy: MergeStrategy,
+    display_name: str,
+) -> int:
+    """Merge two source samples into a new merged sample. Returns the new ``sample_id``.
+
+    Plan §10.5 contract:
+
+    1. Validate membership, completion, and freshness.
+    2. Open both source DBs read-only.
+    3. Stream their ``raw_variants`` into a ``(chrom, pos)``-keyed map.
+    4. Apply §10.2 / §10.3 semantics.
+    5. Insert a new ``samples`` row (``file_format='merged_v1'``,
+       deterministic ``file_hash``, ``individual_id`` propagated).
+    6. Create the per-sample DB with ``is_merged_sample=True`` so
+       ``raw_variants`` materialises with the ``(chrom, pos)`` PK.
+    7. Write the single ``merge_provenance`` row.
+    8. Enqueue the standard annotation job (the caller polls
+       ``GET /api/annotation/status/{job_id}``).
+    """
+    if not display_name or not display_name.strip():
+        raise InvalidMergeRequestError("display_name is required")
+
+    plan = _compute_merge_plan(
+        registry, source_sample_ids, individual_id, strategy
+    )
+    s1_id, s2_id = source_sample_ids
+    s1_row, s2_row = plan.s1_row, plan.s2_row
+    merged_rows, summary = plan.rows, plan.summary
+    settings = registry.settings
+    reference_engine = registry.reference_engine
 
     now = datetime.now(UTC)
     merged_file_hash = _compute_file_hash(
