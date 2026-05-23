@@ -97,6 +97,43 @@ export interface MergeCommitResponse {
   job_id: string
 }
 
+/** Decoded `merge_provenance` row returned by
+ * `GET /api/samples/{id}/merge-provenance` (Plan §10.6). The backend
+ * decodes the on-disk JSON columns before serializing. */
+export interface MergeProvenanceResponse {
+  merged_at: string
+  strategy: MergeStrategy | string
+  source_sample_ids: number[]
+  source_file_hashes: string[]
+  concordance_summary: ConcordanceSummary
+}
+
+/** One discordant locus surfaced on the concordance-report page (Plan §10.6,
+ * §10.7). The backend LEFT-JOINs `annotated_variants` for gene context — any
+ * of `gene_symbol` / `consequence` / `clinvar_significance` may be `null`
+ * when annotation hasn't populated the locus yet. */
+export interface DiscordantLocus {
+  rsid: string
+  chrom: string
+  pos: number
+  genotype: string
+  discordant_alt_genotype: string
+  alt_rsid: string
+  gene_symbol: string | null
+  consequence: string | null
+  clinvar_significance: string | null
+}
+
+/** Paginated concordance-report payload returned by
+ * `GET /api/samples/{id}/concordance-report?limit=N&offset=K` (Plan §10.6). */
+export interface ConcordanceReportResponse {
+  concordance_summary: ConcordanceSummary
+  total_discordant: number
+  limit: number
+  offset: number
+  discordant_loci: DiscordantLocus[]
+}
+
 /** 423 detail surfaced by `require_fresh_sample` when a source sample's
  * `annotation_state.vep_bundle_version` is older than the installed bundle
  * (Plan §7.5). Mirrored from the FastAPI dependency's structured payload. */
