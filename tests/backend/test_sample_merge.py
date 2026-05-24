@@ -1054,3 +1054,569 @@ class TestEmptySourcesEdgeCase:
             "unique_S2": 0,
             "collapsed_rsid": 0,
         }
+
+
+# ── Step 76 / MRG-08 — Merge semantics against the dual-upload fixture ───
+#
+# The fixture at ``tests/fixtures/sample_dual_upload_individual/`` (created
+# in Step 75) pairs ``23andme.txt`` (S1) with ``ancestrydna.txt`` (S2) for
+# one simulated individual and ships ``expected_concordance.json`` as
+# bio-validator's hand-curated gold standard. The tests below run the full
+# parse → merge round-trip via :func:`merge_samples` for all three Plan
+# §10.3 strategies and assert:
+#
+#   • ``concordance_summary`` bucket counts match the gold standard within
+#     ±1% (Plan §15.1 MRG-08 assertion; effectively exact for the small
+#     19-locus fixture — `max(1, ceil(0.01 * count))` floors at 1).
+#   • Per-locus outcomes (``rsid`` / ``genotype`` / ``source`` /
+#     ``concordance`` / ``discordant_alt_genotype`` / ``alt_rsid``) match
+#     each locus's expected outcome in ``expected_concordance.json``
+#     including the strategy-specific ``strategy_outcomes`` for every
+#     discordant locus.
+#
+# ``TestAlleleOrderNormalization`` and ``TestIndelDiscordance`` round out
+# the MRG-08 list with direct ``_apply_semantics`` assertions for the
+# allele-order rule (Plan §10.2 step 3 bullet 1's "AG=GA per parse-time
+# sorted-pair canonicalization") and indel-vs-indel discordance (``II``
+# vs ``DI``) without needing to materialise a per-sample DB.
+
+_DUAL_FIXTURE_DIR = (
+    Path(__file__).resolve().parent.parent / "fixtures" / "sample_dual_upload_individual"
+)
+
+
+def _load_dual_fixture_variants() -> tuple[list[dict], list[dict], dict]:
+    """Parse the dual-upload fixture and return (S1 variants, S2 variants, gold).
+
+    Each variant dict is shaped for ``raw_variants.insert()`` — the same
+    contract :func:`_create_source_sample` consumes. Calls the vendor-
+    specific parsers directly (matching Step 75's local sanity check)
+    rather than ``dispatcher.parse``: the AncestryDNA leg's documentation
+    comment cross-references ``23andme.txt`` and trips the dispatcher's
+    ``_23ANDME_SUBSTRING`` substring detector, which would mis-route the
+    file to the 23andMe parser. Bypassing the dispatcher here keeps the
+    test focused on merge semantics; dispatcher detection on the broader
+    fixture corpus is locked by ``tests/backend/test_dispatcher.py``.
+    """
+    from backend.ingestion.parser_23andme import parse_23andme
+    from backend.ingestion.parser_ancestrydna import parse_ancestrydna
+
+    s1_result = parse_23andme(_DUAL_FIXTURE_DIR / "23andme.txt")
+    s2_result = parse_ancestrydna(_DUAL_FIXTURE_DIR / "ancestrydna.txt")
+    s1_variants = [
+        {"rsid": v.rsid, "chrom": v.chrom, "pos": v.pos, "genotype": v.genotype}
+        for v in s1_result.variants
+    ]
+    s2_variants = [
+        {"rsid": v.rsid, "chrom": v.chrom, "pos": v.pos, "genotype": v.genotype}
+        for v in s2_result.variants
+    ]
+    gold = json.loads(
+        (_DUAL_FIXTURE_DIR / "expected_concordance.json").read_text(encoding="utf-8")
+    )
+    return s1_variants, s2_variants, gold
+
+
+def _within_one_percent(actual: int, expected: int) -> bool:
+    """Plan §15.1 MRG-08: bucket counts within ±1% of the gold standard.
+
+    For the 19-locus fixture every bucket is small (≤5), so the ±1% band
+    rounds down to a 1-locus tolerance — preserved here so the same
+    assertion can scale to a larger fixture without rewriting.
+    """
+    if expected == 0:
+        return actual == 0
+    tolerance = max(1, (expected + 99) // 100)
+    return abs(actual - expected) <= tolerance
+
+
+class TestDualUploadFixtureMergeSemantics:
+    """Plan §15.1 MRG-08 — three strategies × four concordance buckets."""
+
+    @pytest.fixture
+    def fixture_setup(
+        self,
+        merge_registry: DBRegistry,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> tuple[DBRegistry, int, int, int, dict]:
+        s1_variants, s2_variants, gold = _load_dual_fixture_variants()
+        _seed_installed_vep_bundle(merge_registry, "v2.0.0")
+        _noop_annotation_enqueue(monkeypatch)
+        individual_id = _create_individual(merge_registry, "Dual Upload Subject")
+        s1_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="dual_23andme.txt",
+            file_format="23andme_v5",
+            file_hash="hash_dual_s1",
+            variants=s1_variants,
+        )
+        s2_id = _create_source_sample(
+            merge_registry,
+            individual_id=individual_id,
+            name="dual_ancestrydna.txt",
+            file_format="ancestrydna_v2.0",
+            file_hash="hash_dual_s2",
+            variants=s2_variants,
+        )
+        return merge_registry, individual_id, s1_id, s2_id, gold
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy.FLAG_ONLY,
+            MergeStrategy.PREFER_23ANDME,
+            MergeStrategy.PREFER_ANCESTRYDNA,
+        ],
+    )
+    def test_concordance_summary_matches_gold_within_one_percent(
+        self,
+        fixture_setup: tuple[DBRegistry, int, int, int, dict],
+        strategy: MergeStrategy,
+    ) -> None:
+        # Strategy only affects which call wins at a discordant locus — the
+        # partition itself is strategy-invariant (Plan §10.3, locked by
+        # ``test_sample_merge_preview`` as well). Assert here against every
+        # strategy so a future regression that leaks strategy into bucketing
+        # surfaces immediately.
+        registry, individual_id, s1_id, s2_id, gold = fixture_setup
+        new_id = merge_samples(
+            registry,
+            source_sample_ids=[s1_id, s2_id],
+            individual_id=individual_id,
+            strategy=strategy,
+            display_name=f"Dual Upload ({strategy.value})",
+        )
+        prov = _read_merge_provenance(registry, new_id)
+        summary = json.loads(prov.concordance_summary)
+        expected = gold["concordance_summary"]
+        for key, expected_count in expected.items():
+            actual_count = summary[key]
+            assert _within_one_percent(actual_count, expected_count), (
+                f"strategy={strategy.value} bucket={key}: "
+                f"actual={actual_count} expected={expected_count} (±1%)"
+            )
+
+        # Row-count invariant (Plan §10.4 (c)): primary partition sums to
+        # total merged loci. collapsed_rsid is additive, not part of the sum.
+        primary_total = (
+            summary["match"]
+            + summary["filled_nocall"]
+            + summary["discordant"]
+            + summary["unique_S1"]
+            + summary["unique_S2"]
+        )
+        rows = _read_merge_rows(registry, new_id)
+        assert primary_total == len(rows) == gold["total_merged_loci"]
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy.FLAG_ONLY,
+            MergeStrategy.PREFER_23ANDME,
+            MergeStrategy.PREFER_ANCESTRYDNA,
+        ],
+    )
+    def test_per_locus_outcomes_match_gold(
+        self,
+        fixture_setup: tuple[DBRegistry, int, int, int, dict],
+        strategy: MergeStrategy,
+    ) -> None:
+        registry, individual_id, s1_id, s2_id, gold = fixture_setup
+        new_id = merge_samples(
+            registry,
+            source_sample_ids=[s1_id, s2_id],
+            individual_id=individual_id,
+            strategy=strategy,
+            display_name=f"Dual Upload ({strategy.value})",
+        )
+        rows_by_coord = {
+            (r.chrom, int(r.pos)): r for r in _read_merge_rows(registry, new_id)
+        }
+        # Every locus the gold JSON declares must materialise as exactly one
+        # merged row at its coordinate (Plan §10.4 (a) — `(chrom, pos)` PK on
+        # merged-sample raw_variants → one row per locus regardless of
+        # strategy).
+        assert len(rows_by_coord) == gold["total_merged_loci"], (
+            f"strategy={strategy.value}: merged row count "
+            f"{len(rows_by_coord)} != gold total_merged_loci "
+            f"{gold['total_merged_loci']}"
+        )
+
+        for locus in gold["loci"]:
+            coord = (str(locus["chrom"]), int(locus["pos"]))
+            row = rows_by_coord.get(coord)
+            assert row is not None, (
+                f"strategy={strategy.value} locus={coord}: missing from "
+                "merged raw_variants"
+            )
+
+            concordance = locus["concordance"]
+            if concordance == "discordant":
+                outcome = locus["strategy_outcomes"][strategy.value]
+                assert row.concordance == "discordant", (
+                    f"strategy={strategy.value} locus={coord}: "
+                    f"concordance={row.concordance!r} expected 'discordant'"
+                )
+                assert row.genotype == outcome["genotype"], (
+                    f"strategy={strategy.value} locus={coord}: "
+                    f"genotype={row.genotype!r} expected {outcome['genotype']!r}"
+                )
+                assert row.discordant_alt_genotype == outcome[
+                    "discordant_alt_genotype"
+                ], (
+                    f"strategy={strategy.value} locus={coord}: "
+                    f"discordant_alt_genotype={row.discordant_alt_genotype!r} "
+                    f"expected {outcome['discordant_alt_genotype']!r}"
+                )
+                assert row.source == outcome["source"]
+            else:
+                # Match / filled_nocall / unique — strategy-invariant per
+                # Plan §10.3 (strategy only fires inside the discordant
+                # branch). Outcome encoded at the locus's top level.
+                assert row.concordance == concordance, (
+                    f"strategy={strategy.value} locus={coord}: "
+                    f"concordance={row.concordance!r} expected {concordance!r}"
+                )
+                assert row.source == locus["source"]
+                # No strategy can move a non-discordant locus into the
+                # discordant_alt_genotype column.
+                assert row.discordant_alt_genotype == ""
+
+            # rsid-collapse contract (Plan §10.2 step 2): at a different-
+            # rsid-same-coordinate collapse the winner's rsid is in `rsid`
+            # and the loser is in `alt_rsid`. Bundle membership decides the
+            # winner when both / neither are present; under the test
+            # harness neither rsid is in the bundle → S1 wins by convention
+            # (`_resolve_winner`'s tiebreaker).
+            if locus["collapsed_rsid"]:
+                assert row.rsid == locus["s1_rsid"], (
+                    f"strategy={strategy.value} locus={coord}: rsid "
+                    f"{row.rsid!r} expected S1's {locus['s1_rsid']!r} (no "
+                    "VEP bundle in harness → S1 tiebreaker)"
+                )
+                assert row.alt_rsid == locus["s2_rsid"]
+            else:
+                # Non-collapsed: rsid is whichever side had it (or both —
+                # same value). Discordant loci have no top-level `source`
+                # (strategy decides — see `strategy_outcomes.source` above);
+                # at every discordant locus in the gold standard both sides
+                # share the same rsid (the rsid-collapse case is always
+                # tagged `collapsed_rsid: true` and handled above), so the
+                # winning row's rsid equals both sides' rsids.
+                top_source = locus.get("source")
+                if top_source is None:
+                    # Discordant non-collapsed: both sides shared the rsid.
+                    assert row.rsid == locus["s1_rsid"] == locus["s2_rsid"]
+                elif top_source == "S1":
+                    assert row.rsid == locus["s1_rsid"]
+                elif top_source == "S2":
+                    assert row.rsid == locus["s2_rsid"]
+                else:
+                    # source == 'both' — both sides shared the rsid.
+                    assert row.rsid == locus["s1_rsid"] == locus["s2_rsid"]
+                assert row.alt_rsid == ""
+
+    def test_flag_only_writes_paired_alt_genotype_at_every_discordant(
+        self,
+        fixture_setup: tuple[DBRegistry, int, int, int, dict],
+    ) -> None:
+        """Plan §10.3: ``flag_only`` writes ``S1=...;S2=...`` at every discordant locus.
+
+        Locks the canonical encoding contract independently from the per-
+        locus check above so a future regression that drops one side of the
+        paired encoding (e.g., emitting only S2's call) surfaces with a
+        focused failure.
+        """
+        registry, individual_id, s1_id, s2_id, gold = fixture_setup
+        new_id = merge_samples(
+            registry,
+            source_sample_ids=[s1_id, s2_id],
+            individual_id=individual_id,
+            strategy=MergeStrategy.FLAG_ONLY,
+            display_name="Dual Upload (flag_only)",
+        )
+        rows_by_coord = {
+            (r.chrom, int(r.pos)): r for r in _read_merge_rows(registry, new_id)
+        }
+        for locus in gold["loci"]:
+            if locus["concordance"] != "discordant":
+                continue
+            coord = (str(locus["chrom"]), int(locus["pos"]))
+            row = rows_by_coord[coord]
+            assert row.genotype == "??"
+            assert row.source == "both"
+            assert row.discordant_alt_genotype.startswith("S1=")
+            assert ";S2=" in row.discordant_alt_genotype
+            # The paired encoding's S1 / S2 values match the source-sample
+            # genotypes (parser canonicalized; same byte string both sides).
+            assert row.discordant_alt_genotype == (
+                f"S1={locus['s1_genotype']};S2={locus['s2_genotype']}"
+            )
+
+    @pytest.mark.parametrize(
+        ("strategy", "loser_side"),
+        [
+            (MergeStrategy.PREFER_23ANDME, "S2"),
+            (MergeStrategy.PREFER_ANCESTRYDNA, "S1"),
+        ],
+    )
+    def test_prefer_strategies_park_losing_call_in_alt(
+        self,
+        fixture_setup: tuple[DBRegistry, int, int, int, dict],
+        strategy: MergeStrategy,
+        loser_side: str,
+    ) -> None:
+        """Plan §10.3: ``prefer_*`` lands the losing call in ``discordant_alt_genotype``.
+
+        Single-key encoding (``"S1=..."`` or ``"S2=..."``) — never paired —
+        identifying the loser by source tag. Mirrors the
+        ``strategy_outcomes`` block in ``expected_concordance.json``.
+        """
+        registry, individual_id, s1_id, s2_id, gold = fixture_setup
+        new_id = merge_samples(
+            registry,
+            source_sample_ids=[s1_id, s2_id],
+            individual_id=individual_id,
+            strategy=strategy,
+            display_name=f"Dual Upload ({strategy.value})",
+        )
+        rows_by_coord = {
+            (r.chrom, int(r.pos)): r for r in _read_merge_rows(registry, new_id)
+        }
+        for locus in gold["loci"]:
+            if locus["concordance"] != "discordant":
+                continue
+            coord = (str(locus["chrom"]), int(locus["pos"]))
+            row = rows_by_coord[coord]
+            outcome = locus["strategy_outcomes"][strategy.value]
+            assert row.discordant_alt_genotype == outcome[
+                "discordant_alt_genotype"
+            ]
+            assert row.discordant_alt_genotype.startswith(f"{loser_side}=")
+            # Paired encoding never appears under prefer_* strategies.
+            assert ";" not in row.discordant_alt_genotype
+
+
+class TestAlleleOrderNormalization:
+    """Plan §10.2 step 3 bullet 1 + MRG-08 — ``AG == GA``, ``DI == DI``, ``II == II`` match.
+
+    Direct ``_apply_semantics`` calls so the assertions don't depend on
+    materializing per-sample DBs; the parser canonicalizes at ingestion so
+    a real merged DB never sees un-sorted pairs, but the merge service must
+    still tolerate pre-Phase-1 sample DBs that may carry un-canonicalized
+    genotypes (Plan §10.2 step 3 bullet 1's "Defensive in-merge re-sort
+    remains" contract).
+    """
+
+    @staticmethod
+    def _two_sided(s1_gt: str, s2_gt: str) -> tuple[dict, dict]:
+        s1 = {("1", 100): {"rsid": "rs_locus", "genotype": s1_gt}}
+        s2 = {("1", 100): {"rsid": "rs_locus", "genotype": s2_gt}}
+        return s1, s2
+
+    def test_canonical_pair_matches_itself(self) -> None:
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("AG", "AG")
+        rows, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.match == 1
+        assert summary.discordant == 0
+        assert rows[0].concordance == "match"
+        assert rows[0].genotype == "AG"
+
+    def test_unsorted_pair_collapses_to_match(self) -> None:
+        """Plan §10.2 step 3 bullet 1: ``AG == GA`` counts as concordant ``match``.
+
+        A pre-Phase-1 sample DB could legitimately carry ``"GA"`` because
+        the legacy 23andMe parser did not canonicalize. The merge service's
+        defensive re-sort treats it as the same allele set.
+        """
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("AG", "GA")
+        rows, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.match == 1, (
+            "Plan §10.2 step 3 bullet 1: AG == GA must be concordant match"
+        )
+        assert summary.discordant == 0
+        assert rows[0].concordance == "match"
+
+    def test_homozygous_indel_matches_itself(self) -> None:
+        """``DI == DI`` and ``II == II`` count as concordant ``match``."""
+        from backend.services.sample_merge import _apply_semantics
+
+        for gt in ("DI", "II", "DD"):
+            s1, s2 = self._two_sided(gt, gt)
+            _, summary = _apply_semantics(
+                s1,
+                s2,
+                strategy=MergeStrategy.FLAG_ONLY,
+                rsids_in_bundle=set(),
+                s1_vendor="23andme",
+                s2_vendor="ancestrydna",
+            )
+            assert summary.match == 1, (
+                f"{gt} vs {gt}: expected match, got summary={summary.to_dict()}"
+            )
+            assert summary.discordant == 0
+
+    def test_different_alleles_are_discordant(self) -> None:
+        """``AG != AT`` counts as discordant — different allele sets."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("AG", "AT")
+        rows, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.discordant == 1
+        assert summary.match == 0
+        assert rows[0].concordance == "discordant"
+
+
+class TestIndelDiscordance:
+    """Plan §15.1 MRG-08 — indel-vs-indel discordance (``II`` vs ``DI``) covered.
+
+    Direct ``_apply_semantics`` calls so the test doesn't depend on the
+    dual-upload fixture (which has no indel rows by construction; indels
+    aren't part of bio-validator's hand-curated concordance gold standard).
+    """
+
+    @staticmethod
+    def _two_sided(s1_gt: str, s2_gt: str) -> tuple[dict, dict]:
+        s1 = {("1", 100): {"rsid": "rs_indel", "genotype": s1_gt}}
+        s2 = {("1", 100): {"rsid": "rs_indel", "genotype": s2_gt}}
+        return s1, s2
+
+    def test_homozygous_insertion_vs_heterozygous_indel_is_discordant(self) -> None:
+        """``II`` vs ``DI`` — different indel call states → discordant."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("II", "DI")
+        rows, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.discordant == 1, (
+            f"II vs DI: expected discordant, got summary={summary.to_dict()}"
+        )
+        assert summary.match == 0
+        assert rows[0].concordance == "discordant"
+        assert rows[0].genotype == "??"
+        assert rows[0].discordant_alt_genotype == "S1=II;S2=DI"
+
+    def test_homozygous_deletion_vs_heterozygous_indel_is_discordant(self) -> None:
+        """``DD`` vs ``DI`` — symmetric to II vs DI."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("DD", "DI")
+        _, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.discordant == 1
+        assert summary.match == 0
+
+    def test_homozygous_indels_are_discordant_with_each_other(self) -> None:
+        """``II`` vs ``DD`` — opposite homozygous indel calls → discordant."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("II", "DD")
+        _, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.discordant == 1
+        assert summary.match == 0
+
+    def test_indel_call_vs_real_no_call_is_filled_nocall(self) -> None:
+        """``II`` (indel call) vs ``--`` (real no-call) → ``filled_nocall`` (S1 wins).
+
+        Indel codes are CALLS at the merge boundary, distinct from the
+        ``--``/``??``/``00`` no-call sentinels. The merge service must
+        differentiate so an indel call doesn't get silently collapsed when
+        the other source actually lacks a call. (Trait modules separately
+        skip indels via ``is_no_call`` because they can't score them; that's
+        a downstream concern, not a merge-time one.)
+        """
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("II", "--")
+        rows, summary = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.FLAG_ONLY,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert summary.filled_nocall == 1, (
+            f"II vs --: expected filled_nocall (S1's II is a real call), "
+            f"got summary={summary.to_dict()}"
+        )
+        assert rows[0].source == "S1"
+        assert rows[0].genotype == "II"
+        assert rows[0].concordance == "filled_nocall"
+
+    def test_prefer_23andme_keeps_s1_indel_at_discordant(self) -> None:
+        """At an indel discordance, ``prefer_23andme`` keeps S1 and parks S2."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("II", "DI")
+        rows, _ = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.PREFER_23ANDME,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert rows[0].genotype == "II"
+        assert rows[0].discordant_alt_genotype == "S2=DI"
+
+    def test_prefer_ancestrydna_keeps_s2_indel_at_discordant(self) -> None:
+        """Symmetric — ``prefer_ancestrydna`` keeps S2 and parks S1."""
+        from backend.services.sample_merge import _apply_semantics
+
+        s1, s2 = self._two_sided("II", "DI")
+        rows, _ = _apply_semantics(
+            s1,
+            s2,
+            strategy=MergeStrategy.PREFER_ANCESTRYDNA,
+            rsids_in_bundle=set(),
+            s1_vendor="23andme",
+            s2_vendor="ancestrydna",
+        )
+        assert rows[0].genotype == "DI"
+        assert rows[0].discordant_alt_genotype == "S1=II"

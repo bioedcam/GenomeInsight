@@ -56,7 +56,6 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
-from backend.analysis.zygosity import is_no_call
 from backend.db.sample_schema import SAMPLE_SCHEMA_VERSION, create_sample_tables
 from backend.db.tables import (
     jobs,
@@ -86,6 +85,48 @@ _NO_CALL_SENTINEL = "??"
 # across every reader (`_vendor_token` extracts the prefix; the dashboard +
 # variant table render it).
 _MERGED_FILE_FORMAT = "merged_v1"
+# Narrower no-call set than ``backend.analysis.zygosity.is_no_call`` —
+# excludes indel codes (``II``/``DD``/``DI``/``ID``) because at the merge
+# boundary indels are real calls (just unscoreable for trait modules
+# downstream). Plan §15.1 MRG-08 mandates ``II`` vs ``DI`` resolves to
+# ``discordant`` (not collapsed-as-no-call ``match``); the trait modules
+# separately call ``is_no_call`` to skip indel rows they can't score.
+_MERGE_NO_CALL_TOKENS = frozenset({"", "--", "??", "-", "0", "00"})
+
+
+def _is_merge_no_call(genotype: str | None) -> bool:
+    """No-call predicate scoped to the merge boundary (Plan §15.1 MRG-08).
+
+    Distinct from :func:`backend.analysis.zygosity.is_no_call`, which
+    additionally treats indel codes as unscoreable for trait scoring.
+    Indels are full calls at the merge layer — homozygous insertion vs.
+    heterozygous indel is a real concordance signal that must not be
+    swallowed.
+    """
+    if genotype is None:
+        return True
+    return genotype.strip() in _MERGE_NO_CALL_TOKENS
+
+
+def _canonical_genotype(genotype: str) -> str:
+    """Defensive sorted-pair canonicalization (Plan §10.2 step 3 bullet 1).
+
+    The parser canonicalizes at ingestion (sorted uppercase pair) so a
+    Phase-1+ sample DB never sees ``"GA"``. Pre-Phase-1 sample DBs imported
+    from backup, however, may still carry un-sorted pairs from the legacy
+    23andMe parser, and Plan §10.2 explicitly notes "Defensive in-merge
+    re-sort remains in case a pre-Phase-1 sample DB carries an
+    un-canonicalized genotype." This helper is that defensive layer: a
+    no-op on every already-canonical input, and idempotent.
+
+    Two-character allele pairs are sorted into canonical form. Sentinels
+    (``--`` / ``??`` / ``00`` / …) and lengths other than two are left
+    unchanged so this helper composes safely with :func:`_is_merge_no_call`.
+    """
+    if len(genotype) != 2:
+        return genotype
+    a, b = genotype[0], genotype[1]
+    return genotype if a <= b else b + a
 
 
 class MergeStrategy(StrEnum):
@@ -360,8 +401,8 @@ def _apply_semantics(
 
         s1_gt = s1["genotype"]
         s2_gt = s2["genotype"]
-        s1_nc = is_no_call(s1_gt)
-        s2_nc = is_no_call(s2_gt)
+        s1_nc = _is_merge_no_call(s1_gt)
+        s2_nc = _is_merge_no_call(s2_gt)
 
         # Both no-call: emit one row as 'match' (no disagreement to surface).
         # The merged genotype keeps S1's no-call sentinel so the round-trip
@@ -414,14 +455,18 @@ def _apply_semantics(
             summary.filled_nocall += 1
             continue
 
-        # Both called.
-        if s1_gt == s2_gt:
+        # Both called. Defensive in-merge re-sort (Plan §10.2 step 3
+        # bullet 1) absorbs any un-canonicalized genotype that survived from
+        # a pre-Phase-1 sample DB so ``"AG" == "GA"`` resolves to ``match``.
+        s1_canon = _canonical_genotype(s1_gt)
+        s2_canon = _canonical_genotype(s2_gt)
+        if s1_canon == s2_canon:
             rows.append(
                 _MergedRow(
                     rsid=chosen_rsid,
                     chrom=chrom,
                     pos=pos,
-                    genotype=s1_gt,
+                    genotype=s1_canon,
                     source="both",
                     concordance="match",
                     discordant_alt_genotype="",
