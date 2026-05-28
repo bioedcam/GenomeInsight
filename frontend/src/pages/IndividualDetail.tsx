@@ -20,13 +20,14 @@
  * variant-level findings don't double-count in the aggregate.
  */
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Link, useParams, useNavigate } from "react-router-dom"
 import { useQueries, useQuery } from "@tanstack/react-query"
 import {
   ArrowLeft,
   ClipboardList,
   FlaskConical,
+  GitMerge,
   Star,
   User,
   Users,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react"
 
 import { useIndividual } from "@/api/individuals"
+import { MergeWizard } from "@/components/individuals/MergeWizard"
 import type { LinkedSample } from "@/types/individuals"
 import type {
   Finding,
@@ -245,6 +247,15 @@ export default function IndividualDetail() {
 
   const linkedSamples = individual?.linked_samples ?? []
 
+  // Plan §10.7 — "Merge samples" action is visible only when ≥2 linked
+  // samples. The two-source wizard surface (Plan §10.5 step 1) covers
+  // exactly-2 linked samples; 3+ sample pickers are deferred.
+  const [showMergeWizard, setShowMergeWizard] = useState(false)
+  const canMerge = linkedSamples.length === 2
+  const mergeSourcePair = canMerge
+    ? ([linkedSamples[0].id, linkedSamples[1].id] as [number, number])
+    : null
+
   const findingsQueries = useQueries({
     queries: linkedSamples.map((sample) => ({
       queryKey: ["findings-summary", sample.id] as const,
@@ -383,9 +394,22 @@ export default function IndividualDetail() {
 
       {/* ── 2. Linked samples table ────────────────────────── */}
       <section aria-label="Linked samples">
-        <h2 className="text-sm font-semibold text-foreground mb-3">
-          Linked Samples
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">
+            Linked Samples
+          </h2>
+          {canMerge && (
+            <button
+              type="button"
+              onClick={() => setShowMergeWizard(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+              data-testid="merge-samples-button"
+            >
+              <GitMerge className="h-3.5 w-3.5" />
+              Merge samples
+            </button>
+          )}
+        </div>
         {linkedSamples.length === 0 ? (
           <PageEmpty
             icon={Users}
@@ -414,6 +438,16 @@ export default function IndividualDetail() {
           </div>
         )}
       </section>
+
+      {showMergeWizard && mergeSourcePair && (
+        <MergeWizard
+          individualId={individual.id}
+          individualDisplayName={individual.display_name}
+          linkedSamples={linkedSamples}
+          sourceSampleIds={mergeSourcePair}
+          onClose={() => setShowMergeWizard(false)}
+        />
+      )}
 
       {/* ── 3. Aggregated high-confidence findings ─────────── */}
       <section aria-label="Aggregated high-confidence findings">

@@ -102,12 +102,21 @@ export function MergeWizard({
   }, [onClose])
 
   // Redirect to the new sample's dashboard once annotation reports complete.
+  // Append `post_merge=1` + the SSE `job_id` so the Dashboard can open the
+  // PostMergeRewatchModal on landing (Plan §10.7 redirect→modal hand-off).
   useEffect(() => {
     if (
       commitMutation.data?.merged_sample_id != null &&
       progress?.status === "complete"
     ) {
-      navigate(`/?sample_id=${commitMutation.data.merged_sample_id}`)
+      const params = new URLSearchParams({
+        sample_id: String(commitMutation.data.merged_sample_id),
+        post_merge: "1",
+      })
+      if (commitMutation.data.job_id) {
+        params.set("job_id", commitMutation.data.job_id)
+      }
+      navigate(`/?${params.toString()}`)
     }
   }, [commitMutation.data, progress?.status, navigate])
 

@@ -4,7 +4,7 @@
  * When no sample is active, shows upload prompt.
  */
 
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueries } from '@tanstack/react-query'
 import FileUpload from '@/components/upload/FileUpload'
 import StatusBar from '@/components/dashboard/StatusBar'
@@ -13,6 +13,7 @@ import ModuleCardsGrid from '@/components/dashboard/ModuleCardsGrid'
 import FindingsPreview from '@/components/dashboard/FindingsPreview'
 import QualityControl from '@/components/dashboard/QualityControl'
 import StaleSampleGate from '@/components/layout/StaleSampleGate'
+import { PostMergeRewatchModal } from '@/components/individuals/PostMergeRewatchModal'
 import { useSamples } from '@/api/samples'
 import { useIndividuals, individualsKeys } from '@/api/individuals'
 import { useTotalVariantCount, useQCStats } from '@/api/variants'
@@ -23,7 +24,21 @@ import type { IndividualDetail } from '@/types/individuals'
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const activeSampleId = parseSampleId(searchParams.get('sample_id'))
+
+  // Plan §10.7 redirect→modal hand-off. MergeWizard appends
+  // `post_merge=1` (+ optional `job_id` for the SSE gate) when it
+  // redirects to the new sample's dashboard; we render the modal here
+  // and clear the params on dismiss so refresh doesn't re-open it.
+  const postMergeFlag = searchParams.get('post_merge') === '1'
+  const postMergeJobId = searchParams.get('job_id') || null
+  const closePostMergeModal = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('post_merge')
+    next.delete('job_id')
+    navigate({ search: next.toString() }, { replace: true })
+  }
 
   const { data: samples, isLoading } = useSamples()
   const activeSample = samples?.find((s) => s.id === activeSampleId)
@@ -132,6 +147,14 @@ export default function Dashboard() {
         {/* Collapsible QC */}
         <QualityControl variantCount={variantCount ?? null} qcStats={qcStats ?? null} />
       </div>
+
+      {postMergeFlag && activeSampleId != null && (
+        <PostMergeRewatchModal
+          mergedSampleId={activeSampleId}
+          jobId={postMergeJobId}
+          onClose={closePostMergeModal}
+        />
+      )}
     </StaleSampleGate>
   )
 }
