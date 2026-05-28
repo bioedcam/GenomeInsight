@@ -8,7 +8,7 @@ name: Nightly slow-tier tests
 # Cross-step ownership:
 # - Step 25a  — `tests/backend/test_lai.py::TestRealBundleLAIAccuracy`
 # - Step 42   — `tests/backend/test_annotation_engine_ancestrydna_real_bundle.py`
-# - Step 85   — `tests/backend/test_sample_merge_performance.py` (lands later)
+# - Step 85   — `tests/backend/test_sample_merge_performance.py`
 #
 # Plan §13.1 / §16.5: cache release assets on the manifest's `sha256` so the
 # nightly run reuses them until a new bundle ships; on test failure, file
@@ -176,6 +176,7 @@ jobs:
               `Slow-tier suite covers:`,
               `- \`tests/backend/test_lai.py::TestRealBundleLAIAccuracy\` (step 25a)`,
               `- \`tests/backend/test_annotation_engine_ancestrydna_real_bundle.py\` (step 42)`,
+              `- \`tests/backend/test_sample_merge_performance.py\` (step 85)`,
               ``,
               `Owner: bio-validator. Triage by re-running the workflow with the`,
               `\`workflow_dispatch\` button after inspecting the failing assertion;`,
