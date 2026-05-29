@@ -633,9 +633,7 @@ class TestManifestV2Fixture:
     AncestryDNA fixture chain a single source of truth.
     """
 
-    FIXTURE_PATH = (
-        Path(__file__).resolve().parents[1] / "fixtures" / "manifest_v2.json"
-    )
+    FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "manifest_v2.json"
 
     def test_fixture_exists(self):
         assert self.FIXTURE_PATH.is_file()
@@ -666,8 +664,6 @@ class TestManifestV2Fixture:
             fetch_manifest()
 
         events = [
-            e
-            for e in cap_logs
-            if e.get("event") == "manifest_min_app_version_below_threshold"
+            e for e in cap_logs if e.get("event") == "manifest_min_app_version_below_threshold"
         ]
         assert events == []

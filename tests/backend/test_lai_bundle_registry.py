@@ -116,9 +116,7 @@ class TestLAIBundleManifestV2:
         assert entry.version == "v2.0.0"
         assert entry.min_app_version == "0.2.0"
         assert entry.size_bytes == 750_000_000
-        assert entry.url.endswith(
-            "/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz"
-        )
+        assert entry.url.endswith("/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz")
 
     def test_v2_manifest_sha256_placeholder_round_trips(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
