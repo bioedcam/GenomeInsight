@@ -20,7 +20,7 @@ in production.
 
 Downloaded from UCSC:
 
-```
+```text
 https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz
 ```
 
