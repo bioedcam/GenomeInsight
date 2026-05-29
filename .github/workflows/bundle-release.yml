@@ -94,17 +94,52 @@ jobs:
           fi
           echo "Tag matches manifest version: $tag"
 
-      - name: Download release asset
+      - name: Download release asset (verified by tag)
         id: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p artifacts
-          url="${{ steps.manifest.outputs.url }}"
+          tag="${{ inputs.release_tag }}"
+          manifest_url="${{ steps.manifest.outputs.url }}"
+          # Derive the asset name from the manifest URL basename so the
+          # tag-verification works for any bundle (e.g. vep_bundle.db or
+          # genomeinsight_lai_bundle_v1.1.tar.gz) without hardcoding versions.
+          asset_name="${manifest_url##*/}"
           case "${{ inputs.bundle_key }}" in
             vep_bundle)  out="artifacts/vep_bundle.db" ;;
             lai_bundle)  out="artifacts/lai_bundle.tar.gz" ;;
+            *) echo "::error::unknown bundle_key '${{ inputs.bundle_key }}'" ; exit 1 ;;
           esac
-          echo "Fetching $url -> $out"
-          curl -fL --retry 3 --retry-delay 10 -o "$out" "$url"
+          if [ -z "$asset_name" ]; then
+            echo "::error::could not derive asset name from manifest URL ($manifest_url)"
+            exit 1
+          fi
+          # Resolve the asset's authoritative download URL from the release
+          # specified by the input tag, instead of trusting the manifest URL
+          # blindly. A mismatch means the manifest points outside this tag.
+          release_url=$(gh release view "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json assets \
+            --jq ".assets[] | select(.name == \"${asset_name}\") | .browser_download_url")
+          if [ -z "$release_url" ]; then
+            echo "::error::asset '${asset_name}' not found in release '$tag'"
+            exit 1
+          fi
+          if [ "$release_url" != "$manifest_url" ]; then
+            echo "::error::manifest URL ($manifest_url) does not match release '$tag' asset URL ($release_url)"
+            exit 1
+          fi
+          gh release download "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "${asset_name}" \
+            --dir artifacts \
+            --clobber
+          # Normalize the on-disk path so downstream steps can reference it
+          # uniformly regardless of bundle type.
+          if [ "artifacts/${asset_name}" != "$out" ]; then
+            mv "artifacts/${asset_name}" "$out"
+          fi
           echo "path=$out" >> "$GITHUB_OUTPUT"
           ls -la artifacts/
 

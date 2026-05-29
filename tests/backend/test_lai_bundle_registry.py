@@ -38,9 +38,11 @@ class TestLAIBundleRegistry:
         assert db.name == "lai_bundle"
         assert db.display_name == "LAI Bundle (Chromosome Painting)"
         assert db.filename == "lai_bundle.tar.gz"
-        # Bumped to ~750 MB at v2.0.0 (union 23andMe v5 ∪ AncestryDNA v2.0 catalog,
-        # ~840k autosomal sites — Plan §6.4). v1.1 baseline was 523 MB.
-        assert db.expected_size_bytes == 750_000_000
+        # Current published asset is v1.1 (523 MB), renamed to the lai-bundle-v1.1.0
+        # release in §0h. Phase D/Step 32 bumps this to the ~750 MB v2.0.0 union
+        # bundle (23andMe v5 ∪ AncestryDNA v2.0, ~840k sites — Plan §6.4) once
+        # lai-bundle-v2.0.0 is actually published.
+        assert db.expected_size_bytes == 523_801_111
         assert db.build_mode == "download"
         assert db.target_db == "standalone"
         assert db.phase == 3
@@ -52,10 +54,11 @@ class TestLAIBundleRegistry:
 
     def test_lai_bundle_url_set(self):
         db = DATABASES["lai_bundle"]
-        # v2.0.0 GitHub Release asset URL — Plan §12.2 / runbook §10.
+        # Current published asset: lai-bundle-v1.1.0 (renamed from v1.1 in §0h).
+        # Phase D/Step 32 repoints this to the lai-bundle-v2.0.0 release once published.
         assert db.url == (
             "https://github.com/bioedcam/GenomeInsight/releases/download/"
-            "lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz"
+            "lai-bundle-v1.1.0/genomeinsight_lai_bundle_v1.1.tar.gz"
         )
 
     def test_get_database_returns_lai_bundle(self):

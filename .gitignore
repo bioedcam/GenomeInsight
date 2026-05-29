@@ -82,7 +82,6 @@ gero.md
 /docs/AncestryDNA_Integration_Plan.md
 /docs/bundle-v2.0.0-build-plan.md
 /docs/bundle-v2.0.0-implementation-steps.md
-/docs/setup-update-plan.md
 
 # Real user genotype exports — never commit (privacy + size)
 AncestryDNA.txt

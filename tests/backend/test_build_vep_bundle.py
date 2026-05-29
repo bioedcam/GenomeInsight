@@ -44,7 +44,7 @@ VEP_SEED_CSV = SEED_DIR / "vep_seed.csv"
 SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "build_vep_bundle.py"
 
 
-# ── Consequence Severity ────────────────────────────────────────────────
+# ── Consequence Severity ─────────────────────────────────────
 
 
 class TestConsequenceSeverity:
@@ -85,7 +85,7 @@ class TestConsequenceSeverity:
         assert consequence_severity(compound) == consequence_severity("missense_variant")
 
 
-# ── VEPRecord ───────────────────────────────────────────────────────────
+# ── VEPRecord ─────────────────────────────────────────────
 
 
 class TestVEPRecord:
@@ -116,7 +116,7 @@ class TestVEPRecord:
         assert d["mane_select"] == 0
 
 
-# ── Seed CSV Loading ────────────────────────────────────────────────────
+# ── Seed CSV Loading ───────────────────────────────────────
 
 
 class TestLoadSeedCSV:
@@ -177,7 +177,7 @@ class TestLoadSeedCSV:
         assert len(mthfr_mane) >= 1, "MTHFR MANE Select not flagged"
 
 
-# ── VEP VCF Parsing ────────────────────────────────────────────────────
+# ── VEP VCF Parsing ──────────────────────────────────────
 
 
 class TestParseVepVCF:
@@ -383,14 +383,17 @@ class TestParseVepVCF:
             "|4/4||ENST00000252486:c.388T>C"
             "|ENST00000252486:p.Cys130Arg|1|mane_select|NM_000041.4"
         )
-        # Same (rsid, alt) appears twice (simulating union overlap); a unique
-        # rsid appears once. Expected: 2 rows total, not 3.
+        # Same (rsid, alt) appears twice (simulating union overlap) with
+        # differing non-key fields (CSQ transcript); a unique rsid appears
+        # once. Expected: 2 rows total, not 3 — dedup is keyed by (rsid, alt),
+        # not by full-row equality.
+        csq_variant = csq.replace("ENST00000376592", "ENST00000376593")
         lines = [
             "##fileformat=VCFv4.2",
             meta,
             "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO",
             f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq}",
-            f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq}",
+            f"1\t11856378\trs1801133\tG\tA\t.\t.\tCSQ={csq_variant}",
             f"19\t44908684\trs429358\tT\tC\t.\t.\tCSQ={apoe_csq}",
         ]
         vcf_path = tmp_path / "union.vcf"
@@ -415,15 +418,13 @@ class TestParseVepVCF:
         )
         with sqlite3.connect(str(db_path)) as conn:
             db_count = conn.execute("SELECT count(*) FROM vep_annotations").fetchone()[0]
-            meta_rows = dict(
-                conn.execute("SELECT key, value FROM bundle_metadata").fetchall()
-            )
+            meta_rows = dict(conn.execute("SELECT key, value FROM bundle_metadata").fetchall())
         assert db_count == 2
         assert int(meta_rows["variant_count"]) == 2
         assert meta_rows["bundle_version"] == "v2.0.0"
 
 
-# ── Database Building ───────────────────────────────────────────────────
+# ── Database Building ──────────────────────────────────────
 
 
 class TestBuildBundleDB:
@@ -515,9 +516,7 @@ class TestBuildBundleDB:
         assert "build_date" in meta
         assert int(meta["variant_count"]) == len(seed_rows)
 
-    def test_bundle_version_omitted_when_none(
-        self, tmp_path: Path, seed_rows: list[dict]
-    ) -> None:
+    def test_bundle_version_omitted_when_none(self, tmp_path: Path, seed_rows: list[dict]) -> None:
         """bundle_version key is absent when the arg is not supplied —
         bundles built before v2.0.0 (Plan §5.5 contract clause 3)."""
         db_path = tmp_path / "test_vep.db"
@@ -599,7 +598,7 @@ class TestBuildBundleDB:
         assert row[1] == "APOE"
 
 
-# ── Coverage Report ─────────────────────────────────────────────────────
+# ── Coverage Report ────────────────────────────────────────
 
 
 class TestCoverageReport:
@@ -628,7 +627,7 @@ class TestCoverageReport:
         assert report["coverage_percent"] == 40.0
 
 
-# ── CLI / Script Integration ────────────────────────────────────────────
+# ── CLI / Script Integration ───────────────────────────────────
 
 
 class TestCLI:
@@ -760,7 +759,7 @@ class TestCLI:
         assert result.returncode != 0
 
 
-# ── BuildStats ──────────────────────────────────────────────────────────
+# ── BuildStats ────────────────────────────────────────────
 
 
 class TestBuildStats:

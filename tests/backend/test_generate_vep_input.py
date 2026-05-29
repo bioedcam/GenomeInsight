@@ -30,7 +30,9 @@ def _load_script_module():
 def _has_dispatcher() -> bool:
     try:
         import backend.ingestion.dispatcher  # noqa: F401
-    except ImportError:
+    except ModuleNotFoundError as exc:
+        if exc.name != "backend.ingestion.dispatcher":
+            raise
         return False
     return True
 
@@ -44,16 +46,23 @@ def _has_ancestrydna_parser() -> bool:
     """
     try:
         import backend.ingestion.parser_ancestrydna  # noqa: F401
-    except ImportError:
+    except ModuleNotFoundError as exc:
+        if exc.name != "backend.ingestion.parser_ancestrydna":
+            raise
         return False
     return True
 
 
 def _ancestrydna_fixture() -> Path | None:
     # Step 33 retired the legacy `sample_ancestrydna.txt` in favor of the
-    # §8.6 edge-case-covering `sample_ancestrydna_v2.txt`.
-    path = FIXTURES / "sample_ancestrydna_v2.txt"
-    return path if path.exists() else None
+    # §8.6 edge-case-covering `sample_ancestrydna_v2.txt`. Prefer the v2
+    # fixture; fall back to the legacy name only if it still lingers on an
+    # un-migrated checkout.
+    for name in ("sample_ancestrydna_v2.txt", "sample_ancestrydna.txt"):
+        path = FIXTURES / name
+        if path.exists():
+            return path
+    return None
 
 
 _ANCESTRYDNA_FIXTURE = _ancestrydna_fixture()
@@ -90,7 +99,7 @@ def _read_vcf_lines(path: Path) -> tuple[list[str], list[str]]:
                 or not _ANCESTRYDNA_PARSER_AVAILABLE,
                 reason=(
                     "dispatcher (step 27), AncestryDNA parser (step 30), or "
-                    "AncestryDNA v2 fixture (step 33) not yet landed"
+                    "AncestryDNA v2 fixture (step 33/34) not yet landed"
                 ),
             ),
             id="vendor-ancestrydna",
@@ -123,7 +132,7 @@ def test_generate_vep_vcf_per_vendor(tmp_path: Path, vendor: str, fixture: Path)
         assert len(cols) == 8
         chrom, pos, _rsid, ref, alt, qual, filt, info = cols
         assert chrom in {str(n) for n in range(1, 23)} | {"X", "Y", "MT"}
-        assert int(pos) >= 0
+        assert int(pos) > 0
         assert ref in {"A", "C", "G", "T"}
         assert alt == "." or alt in {"A", "C", "G", "T"}
         assert qual == "."
@@ -142,8 +151,18 @@ def test_generate_vep_vcf_falls_back_to_23andme_without_dispatcher(
     monkeypatch.setattr(module, "_dispatcher_parse", None)
     monkeypatch.setattr(module, "_HAS_DISPATCHER", False)
 
+    real_parse_23andme = module.parse_23andme
+    call_count = {"n": 0}
+
+    def _spy(*args, **kwargs):
+        call_count["n"] += 1
+        return real_parse_23andme(*args, **kwargs)
+
+    monkeypatch.setattr(module, "parse_23andme", _spy)
+
     output_path = tmp_path / "fallback.vcf"
     stats = module.generate_vep_vcf(FIXTURES / "sample_23andme_v5.txt", output_path)
+    assert call_count["n"] == 1, "legacy parse_23andme must be invoked when dispatcher is absent"
     assert stats["total_parsed"] > 0
     assert output_path.exists()
 
@@ -191,6 +210,8 @@ def test_rsid_catalog_mode_emits_sorted_sites_only_vcf(tmp_path: Path) -> None:
         ("\t1\t100\n", "empty rsid"),
         ("rs1\t\t100\n", "empty chrom"),
         ("rs1\t1\tabc\n", "non-numeric position"),
+        ("rs1\t1\t0\n", "non-positive position"),
+        ("rs1\t1\t-5\n", "non-positive position"),
     ],
 )
 def test_rsid_catalog_rejects_malformed(tmp_path: Path, row: str, error_fragment: str) -> None:
@@ -200,6 +221,24 @@ def test_rsid_catalog_rejects_malformed(tmp_path: Path, row: str, error_fragment
 
     with pytest.raises(ValueError, match=error_fragment):
         list(module._iter_catalog_rows(catalog_path))
+
+
+@pytest.mark.parametrize(
+    "genotype,expected",
+    [
+        ("", None),
+        ("--", None),
+        ("AAA", None),
+        ("ACGT", None),
+        ("XY", None),
+        ("A", ("A", ".")),
+        ("AA", ("A", ".")),
+        ("AC", ("A", "C")),
+    ],
+)
+def test_genotype_to_ref_alt_rejects_invalid_lengths(genotype, expected) -> None:
+    module = _load_script_module()
+    assert module._genotype_to_ref_alt(genotype) == expected
 
 
 def test_cli_rsid_catalog_round_trip(tmp_path: Path) -> None:
