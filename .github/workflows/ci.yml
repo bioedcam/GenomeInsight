@@ -270,3 +270,10 @@ jobs:
         with:
           # fail_level: error == the deprecated `fail_on_error: true` (level defaults to error)
           fail_level: error
+          # The repo's default workflow token is read-only (no pull-requests scope),
+          # so the default github-pr-check reporter 403s ("Resource not accessible by
+          # integration") fetching the PR diff. The local reporter makes no GitHub API
+          # calls; nofilter lints every workflow (not just PR-diff lines). Combined with
+          # fail_level: error the job still fails on any actionlint error-level finding.
+          reporter: local
+          filter_mode: nofilter
