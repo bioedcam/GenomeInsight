@@ -41,14 +41,29 @@ def _coerce_major(raw: str | None) -> int | None:
 
 
 def _read_installed_major() -> int | None:
-    """Read ``database_versions['vep_bundle'].version``'s semver major."""
+    """Read ``database_versions['vep_bundle'].version``'s semver major.
+
+    Returns ``None`` when the ``database_versions`` table is absent or the
+    reference DB is unreachable — e.g. a fresh install before any bundle has
+    been recorded. Mirrors the defensive handling in
+    ``_read_sample_bundle_version``; ``is_sample_stale`` treats ``None`` as
+    "decline to gate".
+    """
     registry = get_registry()
-    with registry.reference_engine.connect() as conn:
-        row = conn.execute(
-            sa.select(database_versions.c.version).where(
-                database_versions.c.db_name == "vep_bundle"
-            )
-        ).fetchone()
+    try:
+        with registry.reference_engine.connect() as conn:
+            row = conn.execute(
+                sa.select(database_versions.c.version).where(
+                    database_versions.c.db_name == "vep_bundle"
+                )
+            ).fetchone()
+    except sa.exc.OperationalError as exc:
+        logger.warning(
+            "database_versions_unreadable",
+            reason="table_or_db_unreachable",
+            error=str(exc),
+        )
+        return None
     return _coerce_major(row.version if row else None)
 
 
