@@ -287,6 +287,8 @@ def _read_merge_provenance(registry: object, sample_id: int) -> sa.Row | None:
 
     Returns ``None`` when the sample exists but has no provenance row (i.e.
     not a merged sample) — the route maps that to HTTP 404 per Plan §10.6.
+    Raises :class:`HTTPException` (404) when the registered per-sample DB
+    file is missing on disk, consistent with the other merge-aware routes.
     """
     settings = registry.settings  # type: ignore[attr-defined]
     with registry.reference_engine.connect() as conn:  # type: ignore[attr-defined]
@@ -297,7 +299,10 @@ def _read_merge_provenance(registry: object, sample_id: int) -> sa.Row | None:
         return None
     sample_db_path = settings.data_dir / sample_row.db_path
     if not sample_db_path.exists():
-        return None
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample database file not found for sample {sample_id}.",
+        )
     engine = registry.get_sample_engine(sample_db_path)  # type: ignore[attr-defined]
     with engine.connect() as conn:
         try:
@@ -413,6 +418,11 @@ async def get_concordance_report(
         ) from exc
 
     sample_db_path = registry.settings.data_dir / sample_row.db_path
+    if not sample_db_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample database file not found for sample {sample_id}.",
+        )
     engine = registry.get_sample_engine(sample_db_path)
 
     discordant_filter = raw_variants.c.concordance == "discordant"
@@ -562,6 +572,11 @@ async def list_migrate_from_sources(merged_id: int) -> MigrateFromSourcesRespons
         ) from exc
 
     merged_db_path = registry.settings.data_dir / merged_row.db_path
+    if not merged_db_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample database file not found for sample {merged_id}.",
+        )
     merged_engine = registry.get_sample_engine(merged_db_path)
 
     # Pull the merged sample's full rsid set + coordinate→rsid map once so

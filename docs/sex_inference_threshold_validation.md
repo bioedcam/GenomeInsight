@@ -78,7 +78,7 @@ Algorithm walk per Plan §9.4 (order is load-bearing):
 
 ### 2.5 Reproduction command
 
-```
+```bash
 python scripts/validate_sex_thresholds.py <path-to-export> --json
 ```
 

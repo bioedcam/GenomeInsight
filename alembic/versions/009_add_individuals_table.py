@@ -50,6 +50,10 @@ def upgrade() -> None:
         ),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime),
+        sa.CheckConstraint(
+            "biological_sex IN ('XX', 'XY') OR biological_sex IS NULL",
+            name="ck_individuals_biological_sex",
+        ),
     )
 
     # SQLite cannot ADD CONSTRAINT separately, so the FK has to be declared

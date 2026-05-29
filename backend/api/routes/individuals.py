@@ -370,12 +370,21 @@ def get_individual(individual_id: int) -> IndividualDetail:
 @router.patch("/{individual_id}")
 def update_individual(individual_id: int, body: IndividualUpdate) -> IndividualDetail:
     """Edit display_name / notes / biological_sex."""
+    # Use ``model_fields_set`` so a field explicitly sent as ``null`` clears
+    # the nullable column, while an omitted field is left untouched. (A plain
+    # ``is not None`` check can't distinguish "omitted" from "cleared".)
+    fields_set = body.model_fields_set
     update_values: dict = {}
-    if body.display_name is not None:
+    if "display_name" in fields_set:
+        if body.display_name is None:
+            raise HTTPException(
+                status_code=422,
+                detail="display_name cannot be null.",
+            )
         update_values["display_name"] = body.display_name
-    if body.notes is not None:
-        update_values["notes"] = body.notes
-    if body.biological_sex is not None:
+    if "notes" in fields_set:
+        update_values["notes"] = body.notes or ""
+    if "biological_sex" in fields_set:
         update_values["biological_sex"] = body.biological_sex
 
     if not update_values:

@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import AppLayout from '@/components/layout/AppLayout'
 import AuthGuard from '@/components/AuthGuard'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
@@ -76,6 +77,7 @@ export default function App() {
         </Route>
       </Route>
       </Routes>
+      <Toaster position="bottom-right" theme="system" closeButton />
     </ErrorBoundary>
   )
 }

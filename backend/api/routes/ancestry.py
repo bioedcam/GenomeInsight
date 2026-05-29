@@ -638,8 +638,11 @@ def _parse_coverage_telemetry(metadata: dict) -> LAICoverageTelemetry | None:
     for key, counts in raw.items():
         if not isinstance(counts, dict):
             continue
-        hits = int(counts.get("hits", 0) or 0)
-        drops = int(counts.get("drops", 0) or 0)
+        try:
+            hits = int(counts.get("hits", 0) or 0)
+            drops = int(counts.get("drops", 0) or 0)
+        except (TypeError, ValueError):
+            continue
         per_source[str(key)] = LAICoverageSourceTelemetry(hits=hits, drops=drops)
         total_hits += hits
         total_drops += drops

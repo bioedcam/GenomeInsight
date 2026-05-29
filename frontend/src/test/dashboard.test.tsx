@@ -175,7 +175,9 @@ describe('Dashboard', () => {
     setupFetchMocks()
     baseRender(<Dashboard />, { wrapper: createWrapper() })
     expect(await screen.findByText('Get Started')).toBeInTheDocument()
-    expect(screen.getByText(/Upload a 23andMe raw data file/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Upload a 23andMe or AncestryDNA raw data file/),
+    ).toBeInTheDocument()
   })
 
   it('renders dashboard layout when sample is active', async () => {

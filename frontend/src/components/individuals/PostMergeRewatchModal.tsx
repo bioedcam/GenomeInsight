@@ -63,7 +63,10 @@ async function postWatch(payload: RewatchPayload): Promise<void> {
     }),
   })
   if (!res.ok) {
-    // 409 (already watched) is benign — surface it but don't crash.
+    // 409 (already watched) is benign and idempotent — the watch already
+    // exists on the merged sample, so treat it as success rather than
+    // marking the row failed/retryable forever.
+    if (res.status === 409) return
     const text = await res.text().catch(() => "")
     throw new Error(text || `Re-watch failed: ${res.status}`)
   }

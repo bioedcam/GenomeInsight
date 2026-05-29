@@ -72,7 +72,8 @@ def _read_head_lines(
 ) -> list[str]:
     if isinstance(file_or_path, (str, Path)):
         path = Path(file_or_path)
-        raw = path.read_bytes()[:512]
+        with open(path, "rb") as bfh:
+            raw = bfh.read(512)
         if _check_binary(raw):
             raise UnsupportedFormatError(_ERR_BINARY)
         with open(path, encoding="utf-8", errors="replace") as fh:

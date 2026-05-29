@@ -157,6 +157,17 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
     })
   }, [isMergedSample])
 
+  // Clear merge-provenance filter chips when the active sample is not merged
+  // (AncestryDNA Plan §10.7 / Step 71). The chips are hidden for unmerged
+  // samples, so a stale source/concordance value would silently over-filter
+  // the server query with no way to clear it from the UI.
+  useEffect(() => {
+    if (!isMergedSample) {
+      setSourceFilter(null)
+      setConcordanceFilter(null)
+    }
+  }, [isMergedSample, sampleId])
+
   const handlePresetChange = useCallback(
     (presetName: string | null, columns: string[] | null) => {
       setActivePreset(presetName)
@@ -301,11 +312,14 @@ export default function VariantTable({ sampleId }: VariantTableProps) {
   // When showUnannotated is off (default), annotated count = 0 but total > 0.
   const isPreAnnotation = useMemo(() => {
     if (showUnannotated || searchQuery || activeFilter || showConflictsOnly) return false
+    // Merge-provenance filter chips also narrow the server query — a
+    // filtered-empty result must not surface the pre-annotation message.
+    if (sourceFilter || concordanceFilter) return false
     if (totalVariants == null || totalVariants === 0) return false
     // countData is filtered by annotation_coverage:notnull — if 0, no annotated variants
     if (countData && countData.total === 0) return true
     return false
-  }, [showUnannotated, searchQuery, activeFilter, showConflictsOnly, totalVariants, countData])
+  }, [showUnannotated, searchQuery, activeFilter, showConflictsOnly, sourceFilter, concordanceFilter, totalVariants, countData])
 
   // Empty states (P1-15e)
   if (sampleId == null) {

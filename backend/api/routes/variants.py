@@ -556,9 +556,22 @@ def chromosome_counts(
     sample_engine = _get_sample_engine(sample_id)
     table = _select_table(sample_engine)
 
+    # AncestryDNA Plan §10.7 (Step 71): mirror ``list_variants`` /
+    # ``variant_count`` and LEFT JOIN ``raw_variants`` whenever the filter
+    # references a merge-provenance column, since ``_parse_filters`` emits
+    # predicates against ``raw_variants.c.source`` / ``.c.concordance`` even
+    # when the primary table is ``annotated_variants``. Without the join the
+    # FROM would be invalid and per-chromosome counts wrong.
+    if table is annotated_variants and _filter_requires_raw_join(filter):
+        from_clause = annotated_variants.outerjoin(
+            raw_variants, annotated_variants.c.rsid == raw_variants.c.rsid
+        )
+    else:
+        from_clause = table
+
     query = (
         sa.select(table.c.chrom, sa.func.count().label("count"))
-        .select_from(table)
+        .select_from(from_clause)
         .group_by(table.c.chrom)
     )
 

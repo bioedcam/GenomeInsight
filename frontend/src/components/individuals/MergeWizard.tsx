@@ -145,9 +145,15 @@ export function MergeWizard({
     })
   }
 
+  // A successful commit only keeps the Done button spinning while a real
+  // annotation job is still running. An empty/missing `job_id` means
+  // annotation was never enqueued (Plan §10.6) — there is no SSE channel to
+  // reach a terminal state, so the button must not spin forever.
+  const hasAnnotationJob = !!commitMutation.data?.job_id
   const commitInFlight =
     commitMutation.isPending ||
     (commitMutation.isSuccess &&
+      hasAnnotationJob &&
       progress?.status !== "complete" &&
       progress?.status !== "failed" &&
       progress?.status !== "cancelled")

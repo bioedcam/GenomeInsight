@@ -90,7 +90,8 @@ export default function Dashboard() {
             Get Started
           </h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-md">
-            Upload a 23andMe raw data file to begin exploring your genome.
+            Upload a 23andMe or AncestryDNA raw data file to begin exploring
+            your genome.
           </p>
           <div className="mt-6 w-full max-w-md">
             <FileUpload />

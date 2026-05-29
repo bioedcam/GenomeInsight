@@ -41,7 +41,7 @@ export default function StaleSampleGate({ children }: StaleSampleGateProps) {
   const activeSampleId = parseSampleId(searchParams.get('sample_id'))
   const queryClient = useQueryClient()
 
-  const { data: stale } = useQuery<StalenessPayload | null>({
+  const { data: stale, isPending } = useQuery<StalenessPayload | null>({
     queryKey: ['sample-staleness', activeSampleId],
     queryFn: () => probeStaleness(activeSampleId as number),
     enabled: activeSampleId != null,
@@ -71,6 +71,13 @@ export default function StaleSampleGate({ children }: StaleSampleGateProps) {
     // a prior success/error toast from a different sample doesn't leak in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSampleId])
+
+  // While an active sample's staleness probe is still pending, hold back
+  // children so potentially-stale content never flashes before the gate can
+  // activate. Once the probe resolves to a non-stale value, render children.
+  if (activeSampleId != null && isPending) {
+    return null
+  }
 
   if (!stale) {
     return <>{children}</>

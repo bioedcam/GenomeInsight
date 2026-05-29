@@ -399,6 +399,16 @@ export default function ConcordanceReport() {
 
   const [offset, setOffset] = useState(0)
 
+  // Reset pagination when the route sample changes; a persisted offset would
+  // otherwise land the next sample on a stale page index. Adjusted during
+  // render (React's recommended alternative to a setState-in-effect) so the
+  // reset applies before the new sample's page is read.
+  const [trackedSampleId, setTrackedSampleId] = useState(sampleId)
+  if (sampleId !== trackedSampleId) {
+    setTrackedSampleId(sampleId)
+    setOffset(0)
+  }
+
   const provenanceQuery = useMergeProvenance(validId ? sampleId : null)
   const reportQuery = useConcordanceReport(
     validId ? sampleId : null,

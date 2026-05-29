@@ -31,21 +31,8 @@ router = APIRouter(prefix="/ingest", tags=["ingestion"])
 # Batch size for bulk inserts
 _INSERT_BATCH = 10_000
 
-# Bytes scanned for a quick vendor sniff before delegating to the parser.
-_SNIFF_BYTES = 4096
-
 # Minimum vep_bundle semver required to accept AncestryDNA uploads (Plan §5.4).
 _VEP_BUNDLE_MIN_FOR_ANCESTRYDNA = Version("2.0.0")
-
-
-def _sniff_is_ancestrydna(file_bytes: bytes) -> bool:
-    """Return True when the upload's head bytes look like AncestryDNA.
-
-    Pre-parse sniff used solely to fire the §5.4 bundle-version gate; the
-    parser dispatcher (steps 26–31) replaces this with a full vendor map.
-    """
-    head = file_bytes[:_SNIFF_BYTES].decode("utf-8", errors="replace").lower()
-    return "#ancestrydna" in head
 
 
 def _coerce_semver(raw: str | None) -> Version | None:
@@ -127,6 +114,22 @@ def _ingest_file(file_bytes: bytes, filename: str) -> dict:
     if "\ufffd" in text:
         logger.warning("File %s contains invalid UTF-8 sequences that were replaced", filename)
     result = parse(io.StringIO(text))
+
+    # §5.4 bundle-version gate, keyed off the *parsed* vendor (not a pre-parse
+    # byte sniff) so it cannot be bypassed by an unusual header. AncestryDNA
+    # uploads against a pre-v2.0.0 vep_bundle are rejected with the structured
+    # 409 payload before any sample/job rows are written.
+    if result.vendor.value == "ancestrydna":
+        should_block, installed_raw = _vep_bundle_blocks_ancestrydna(registry.reference_engine)
+        if should_block:
+            payload = _build_bundle_gate_payload(installed_raw)
+            logger.info(
+                "ancestrydna_bundle_gate installed=%s required=%s",
+                payload["installed_version"],
+                payload["required_version"],
+            )
+            raise HTTPException(status_code=409, detail=payload)
+
     file_format = f"{result.vendor.value}_{result.version}"
 
     # Register sample in reference.db
@@ -226,18 +229,6 @@ async def ingest_file(file: UploadFile) -> dict:
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Empty file.")
-
-    if _sniff_is_ancestrydna(file_bytes):
-        registry = get_registry()
-        should_block, installed_raw = _vep_bundle_blocks_ancestrydna(registry.reference_engine)
-        if should_block:
-            payload = _build_bundle_gate_payload(installed_raw)
-            logger.info(
-                "ancestrydna_bundle_gate installed=%s required=%s",
-                payload["installed_version"],
-                payload["required_version"],
-            )
-            raise HTTPException(status_code=409, detail=payload)
 
     try:
         result = _ingest_file(file_bytes, file.filename)

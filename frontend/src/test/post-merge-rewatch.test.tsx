@@ -284,7 +284,7 @@ describe("PostMergeRewatchModal — candidates table", () => {
   it("surfaces a per-row error message when /api/watches fails", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(CANDIDATES_PAYLOAD))
     mockFetch.mockResolvedValueOnce(
-      jsonResponse({ detail: "Already watched" }, 409),
+      jsonResponse({ detail: "Internal error" }, 500),
     )
 
     renderModal()
@@ -303,6 +303,32 @@ describe("PostMergeRewatchModal — candidates table", () => {
     await waitFor(() =>
       expect(
         screen.getByTestId("rewatch-row-11:rs300_old-error"),
+      ).toBeInTheDocument(),
+    )
+  })
+
+  it("treats HTTP 409 (already watched) as an idempotent success", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(CANDIDATES_PAYLOAD))
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ detail: "Already watched" }, 409),
+    )
+
+    renderModal()
+    await emitAnnotationComplete()
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("rewatch-modal-candidate-table"),
+      ).toBeInTheDocument(),
+    )
+
+    fireEvent.click(
+      screen.getByTestId("rewatch-row-11:rs300_old-button"),
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("rewatch-row-11:rs300_old-success"),
       ).toBeInTheDocument(),
     )
   })

@@ -67,6 +67,8 @@ from backend.db.tables import (
 from backend.services.staleness import is_sample_stale
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from backend.db.connection import DBRegistry
 
 logger = logging.getLogger(__name__)
@@ -245,6 +247,20 @@ def _stream_raw_variants(engine: sa.Engine) -> dict[tuple[str, int], dict[str, s
                 raw_variants.c.chrom,
                 raw_variants.c.pos,
                 raw_variants.c.genotype,
+            )
+            # Deterministic ORDER BY: a single-vendor source DB keeps the
+            # rsid PK (the v7→v8 in-place upgrade path — see
+            # backend/db/sample_schema.py §10.4a), so two distinct rows can
+            # legitimately share one (chrom, pos). The coordinate-keyed map
+            # below collapses them with last-write-wins, so without a stable
+            # ordering the survivor would depend on physical row order,
+            # making merge results / file_hash non-deterministic. Ordering by
+            # (chrom, pos, rsid) fixes the highest rsid as the deterministic
+            # winner for any duplicate coordinate.
+            .order_by(
+                raw_variants.c.chrom,
+                raw_variants.c.pos,
+                raw_variants.c.rsid,
             )
         ):
             coords[(row.chrom, int(row.pos))] = {
@@ -692,6 +708,54 @@ def preview_merge(
     }
 
 
+def _rollback_orphaned_merge(
+    registry: DBRegistry, sample_id: int, sample_db_path: Path
+) -> None:
+    """Undo a partially-materialised merge after a post-insert failure.
+
+    The ``samples`` row + ``db_path`` are committed before the per-sample DB
+    is materialised (the path is derived from the new id). A failure in the
+    materialisation block would otherwise leave an orphaned reference row
+    pointing at a missing / half-written DB. This best-effort cleanup disposes
+    the cached engine, removes the DB file (+ WAL/SHM sidecars), and deletes
+    the row so the caller's retry starts from a clean slate. Cleanup
+    sub-failures are logged, never raised — the caller re-raises the original
+    error.
+    """
+    try:
+        registry.dispose_sample_engine(sample_db_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "merge_rollback_dispose_failed",
+            extra={"merged_sample_id": sample_id, "error": str(exc)},
+        )
+    for suffix in ("", "-wal", "-shm"):
+        candidate = (
+            sample_db_path
+            if not suffix
+            else sample_db_path.with_name(sample_db_path.name + suffix)
+        )
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning(
+                "merge_rollback_unlink_failed",
+                extra={
+                    "merged_sample_id": sample_id,
+                    "path": str(candidate),
+                    "error": str(exc),
+                },
+            )
+    try:
+        with registry.reference_engine.begin() as conn:
+            conn.execute(samples.delete().where(samples.c.id == sample_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "merge_rollback_row_delete_failed",
+            extra={"merged_sample_id": sample_id, "error": str(exc)},
+        )
+
+
 def merge_samples(
     registry: DBRegistry,
     source_sample_ids: list[int],
@@ -756,63 +820,75 @@ def merge_samples(
         )
 
     sample_db_path = settings.data_dir / new_db_path
-    sample_db_path.parent.mkdir(parents=True, exist_ok=True)
-    # Pre-create the merged-sample schema on a throwaway engine BEFORE the
-    # registry's cache touches the file. ``registry.get_sample_engine`` calls
-    # ``ensure_sample_schema_current`` on first access, which would otherwise
-    # materialise ``raw_variants`` with the default rsid PK and then collide
-    # with our ``create_sample_tables(is_merged_sample=True)`` call.
-    bootstrap_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+    # The ``samples`` row + ``db_path`` are already committed above so the path
+    # could be derived from the new id. Any failure in the schema-bootstrap or
+    # materialisation work below would otherwise leave an orphaned reference
+    # row pointing at a missing / half-written per-sample DB. Guard the whole
+    # materialisation block: on failure, dispose the cached engine, remove the
+    # partial DB file (+ WAL/SHM sidecars), and delete the orphaned row, then
+    # re-raise so the caller still sees the original error.
     try:
-        # Plan §10.4 (a): merged sample's raw_variants PK is (chrom, pos).
-        create_sample_tables(bootstrap_engine, is_merged_sample=True)
-    finally:
-        bootstrap_engine.dispose()
-    # Now the registry's first ``get_sample_engine`` call sees a v8-stamped
-    # DB with the merged layout in place and skips the schema upgrade.
-    merged_engine = registry.get_sample_engine(sample_db_path)
+        sample_db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Pre-create the merged-sample schema on a throwaway engine BEFORE the
+        # registry's cache touches the file. ``registry.get_sample_engine``
+        # calls ``ensure_sample_schema_current`` on first access, which would
+        # otherwise materialise ``raw_variants`` with the default rsid PK and
+        # then collide with our ``create_sample_tables(is_merged_sample=True)``
+        # call.
+        bootstrap_engine = sa.create_engine(f"sqlite:///{sample_db_path}")
+        try:
+            # Plan §10.4 (a): merged sample's raw_variants PK is (chrom, pos).
+            create_sample_tables(bootstrap_engine, is_merged_sample=True)
+        finally:
+            bootstrap_engine.dispose()
+        # Now the registry's first ``get_sample_engine`` call sees a v8-stamped
+        # DB with the merged layout in place and skips the schema upgrade.
+        merged_engine = registry.get_sample_engine(sample_db_path)
 
-    with merged_engine.begin() as conn:
-        conn.execute(
-            sample_metadata_table.insert().values(
-                id=1,
-                name=display_name,
-                file_format=_MERGED_FILE_FORMAT,
-                file_hash=merged_file_hash,
-                created_at=now,
-                updated_at=now,
+        with merged_engine.begin() as conn:
+            conn.execute(
+                sample_metadata_table.insert().values(
+                    id=1,
+                    name=display_name,
+                    file_format=_MERGED_FILE_FORMAT,
+                    file_hash=merged_file_hash,
+                    created_at=now,
+                    updated_at=now,
+                )
             )
-        )
-        conn.execute(
-            merge_provenance.insert().values(
-                id=1,
-                merged_at=now,
-                strategy=strategy.value,
-                source_sample_ids=json.dumps([s1_id, s2_id]),
-                source_file_hashes=json.dumps(
-                    [s1_row.file_hash or "", s2_row.file_hash or ""]
-                ),
-                concordance_summary=json.dumps(summary.to_dict()),
+            conn.execute(
+                merge_provenance.insert().values(
+                    id=1,
+                    merged_at=now,
+                    strategy=strategy.value,
+                    source_sample_ids=json.dumps([s1_id, s2_id]),
+                    source_file_hashes=json.dumps(
+                        [s1_row.file_hash or "", s2_row.file_hash or ""]
+                    ),
+                    concordance_summary=json.dumps(summary.to_dict()),
+                )
             )
-        )
 
-        if merged_rows:
-            payload = [
-                {
-                    "rsid": r.rsid,
-                    "chrom": r.chrom,
-                    "pos": r.pos,
-                    "genotype": r.genotype,
-                    "source": r.source,
-                    "concordance": r.concordance,
-                    "discordant_alt_genotype": r.discordant_alt_genotype,
-                    "alt_rsid": r.alt_rsid,
-                }
-                for r in merged_rows
-            ]
-            for i in range(0, len(payload), _INSERT_BATCH):
-                batch = payload[i : i + _INSERT_BATCH]
-                conn.execute(raw_variants.insert(), batch)
+            if merged_rows:
+                payload = [
+                    {
+                        "rsid": r.rsid,
+                        "chrom": r.chrom,
+                        "pos": r.pos,
+                        "genotype": r.genotype,
+                        "source": r.source,
+                        "concordance": r.concordance,
+                        "discordant_alt_genotype": r.discordant_alt_genotype,
+                        "alt_rsid": r.alt_rsid,
+                    }
+                    for r in merged_rows
+                ]
+                for i in range(0, len(payload), _INSERT_BATCH):
+                    batch = payload[i : i + _INSERT_BATCH]
+                    conn.execute(raw_variants.insert(), batch)
+    except Exception:
+        _rollback_orphaned_merge(registry, new_sample_id, sample_db_path)
+        raise
 
     # Plan §10.5 step 8: enqueue the standard annotation job. Imported lazily
     # to keep the service free of Huey at import time (tests can monkey-patch

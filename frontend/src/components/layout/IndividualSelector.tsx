@@ -115,11 +115,17 @@ export default function IndividualSelector() {
   })
   const details = detailQueries.map((q) => q.data as IndividualDetail | undefined)
 
+  // detailQueries identities change on each render, so we can't list them
+  // directly. Key on each query's `dataUpdatedAt`, which advances whenever
+  // React Query receives fresh detail data — this captures linked-sample
+  // changes under an unchanged individual id (id-only keying would miss them).
+  const detailsFingerprint = detailQueries
+    .map((q) => q.dataUpdatedAt)
+    .join("|")
   const state = useMemo(
     () => buildSelectorState(samples, individuals, details, activeSampleId),
-    // detailQueries identities change on each render; key by the data array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [samples, individuals, JSON.stringify(details.map((d) => d?.id ?? null)), activeSampleId],
+    [samples, individuals, detailsFingerprint, activeSampleId],
   )
 
   const [open, setOpen] = useState(false)

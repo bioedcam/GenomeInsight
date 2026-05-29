@@ -60,7 +60,8 @@ AUTO_UPDATE_DEFAULTS: dict[str, bool] = {
     "dbnsfp": True,
     "dbsnp": True,
     "mondo_hpo": True,
-    "vep_bundle": False,  # Bundled with repo; check GitHub for updates
+    "vep_bundle": False,  # Manual updates only; release-asset bundle, not auto-pulled.
+    "lai_bundle": True,
     "cpic": True,
     "encode_ccres": True,
     "ancestry_pca": True,
@@ -609,7 +610,12 @@ def _run_bundle_download(
 
     dm = DownloadManager(engine, settings.downloads_dir)
     try:
-        result = dm.start(url=url, filename=filename, expected_sha256=expected_sha256)
+        result = dm.start(
+            url=url,
+            filename=filename,
+            expected_sha256=expected_sha256,
+            total_timeout=total_timeout,
+        )
     except ChecksumMismatchError as exc:
         logger.error("bundle_download_checksum_mismatch", filename=filename, error=str(exc))
         return None
@@ -1560,7 +1566,9 @@ def _dispatch_auto_update(registry: DBRegistry, db_name: str) -> None:
             "ancestry_pca": "run_ancestry_pca_bundle_update",
         }[db_name]
         runner = globals()[runner_name]
-        runner(settings)
+        result = runner(settings)
+        if result is None:
+            raise RuntimeError(f"{db_name} auto-update failed")
         return
 
     from backend.db.database_registry import get_build_fn

@@ -100,6 +100,30 @@ def normalize_chromosome(chrom: str) -> str:
 # Line validation
 # ---------------------------------------------------------------------------
 
+# No-call sentinel — 23andMe encodes missing calls as a single combined token.
+_NO_CALL = "--"
+
+
+def _canonical_genotype(genotype_raw: str) -> str:
+    """Canonicalize a raw 23andMe genotype to the shared ``ParsedVariant`` form.
+
+    ``base.ParsedVariant.genotype`` is the canonical uppercased, sorted allele
+    pair (``"AG"``, ``"GT"``, ``"DD"``) so that calls compare identically across
+    vendors — this mirrors :func:`parser_ancestrydna._canonical_genotype`, which
+    uppercases then sorts the two allele columns. Because 23andMe stores the
+    pair as a single combined token rather than two columns, canonicalize here:
+    uppercase always, and sort the two alleles of a 2-character pair. The
+    no-call sentinel ``"--"`` is preserved verbatim, and hemizygous single-char
+    calls (``"A"`` on X/Y for XY individuals) are uppercased but not reordered.
+    """
+    upper = genotype_raw.upper()
+    if upper == _NO_CALL:
+        return upper
+    if len(upper) == 2:
+        a, b = sorted(upper)
+        return f"{a}{b}"
+    return upper
+
 
 def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
     """Validate a single tab-split data line and return a ``ParsedVariant``."""
@@ -123,7 +147,9 @@ def _validate_line(parts: list[str], line_num: int) -> ParsedVariant:
     if not genotype_raw:
         raise MalformedDataError(f"Line {line_num}: empty genotype")
 
-    return ParsedVariant(rsid=rsid_raw, chrom=chrom, pos=pos, genotype=genotype_raw)
+    genotype = _canonical_genotype(genotype_raw)
+
+    return ParsedVariant(rsid=rsid_raw, chrom=chrom, pos=pos, genotype=genotype)
 
 
 # ---------------------------------------------------------------------------

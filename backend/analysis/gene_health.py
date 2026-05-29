@@ -440,7 +440,7 @@ def _compute_panel_coverage(
             raw_gt = genotypes.get(snp.rsid)
             if raw_gt is None:
                 status = "not_on_array"
-            elif raw_gt.strip() in ("", "--", "II", "DD", "DI", "ID"):
+            elif is_no_call(raw_gt):
                 status = "no_call"
             else:
                 status = "called"

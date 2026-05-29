@@ -10,11 +10,19 @@ import StorageStep from '@/components/setup/StorageStep'
 import UploadStep from '@/components/setup/UploadStep'
 import WizardStepper from '@/components/setup/WizardStepper'
 
+const { toastInfoMock } = vi.hoisted(() => ({ toastInfoMock: vi.fn() }))
+
+vi.mock('sonner', () => ({
+  toast: { info: toastInfoMock },
+  Toaster: () => null,
+}))
+
 const mockFetch = vi.fn()
 globalThis.fetch = mockFetch
 
 beforeEach(() => {
   mockFetch.mockReset()
+  toastInfoMock.mockReset()
 })
 
 // ─── Helper to mock API responses ───────────────────────────────────
@@ -967,7 +975,7 @@ describe('DatabasesStep', () => {
     expect(screen.getByText(/0 of 3 downloaded/)).toBeInTheDocument()
   })
 
-  it('shows Download All button when databases need downloading', async () => {
+  it('shows Download Selected button when databases need downloading', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(mockDatabaseList()),
@@ -976,7 +984,7 @@ describe('DatabasesStep', () => {
     render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Download All')).toBeInTheDocument()
+      expect(screen.getByText('Download Selected')).toBeInTheDocument()
     })
   })
 
@@ -1099,7 +1107,7 @@ describe('DatabasesStep', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it('hides Download All when no databases need downloading', async () => {
+  it('hides Download Selected when no databases need downloading', async () => {
     const allDone = mockDatabaseList({
       databases: [
         {
@@ -1129,7 +1137,7 @@ describe('DatabasesStep', () => {
       expect(screen.getByText('ClinVar')).toBeInTheDocument()
     })
 
-    expect(screen.queryByText('Download All')).not.toBeInTheDocument()
+    expect(screen.queryByText('Download Selected')).not.toBeInTheDocument()
   })
 
   it('shows database descriptions', async () => {
@@ -1162,7 +1170,7 @@ describe('DatabasesStep', () => {
     expect(screen.getByText('414.4 KB')).toBeInTheDocument()
   })
 
-  it('triggers download on Download All click', async () => {
+  it('triggers download on Download Selected click', async () => {
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -1197,10 +1205,10 @@ describe('DatabasesStep', () => {
     render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Download All')).toBeInTheDocument()
+      expect(screen.getByText('Download Selected')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Download All'))
+    fireEvent.click(screen.getByText('Download Selected'))
 
     await waitFor(() => {
       expect(screen.getByText('Downloading...')).toBeInTheDocument()
@@ -1247,14 +1255,453 @@ describe('DatabasesStep', () => {
     render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Download All')).toBeInTheDocument()
+      expect(screen.getByText('Download Selected')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Download All'))
+    fireEvent.click(screen.getByText('Download Selected'))
 
     await waitFor(() => {
       expect(screen.getByText('Download service unavailable')).toBeInTheDocument()
     })
+  })
+
+  // ─── Step 14: Per-DB checkbox + running total ──────────────────
+
+  function mockDatabaseListWithModes() {
+    return {
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variants',
+          filename: 'clinvar.db',
+          expected_size_bytes: 100_000_000,
+          required: true,
+          phase: 1,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'pipeline',
+        },
+        {
+          name: 'vep_bundle',
+          display_name: 'VEP Bundle',
+          description: 'VEP predictions',
+          filename: 'vep_bundle.db',
+          expected_size_bytes: 500_000_000,
+          required: true,
+          phase: 2,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'bundled',
+        },
+        {
+          name: 'lai_bundle',
+          display_name: 'LAI Bundle',
+          description: 'Local ancestry inference',
+          filename: 'lai_bundle.tar.gz',
+          expected_size_bytes: 500_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+        {
+          name: 'encode_ccres',
+          display_name: 'ENCODE cCREs',
+          description: 'Regulatory regions',
+          filename: 'encode_ccres.db',
+          expected_size_bytes: 10_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+        {
+          name: 'other_optional',
+          display_name: 'Other Optional',
+          description: 'Some other optional DB',
+          filename: 'other.db',
+          expected_size_bytes: 1_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+      ],
+      total_size_bytes: 1_111_000_000,
+      downloaded_count: 0,
+      total_count: 5,
+    }
+  }
+
+  it('seeds required + lai + encode checkboxes checked; other optional unchecked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListWithModes()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    const clinvarBox = screen.getByTestId('db-checkbox-clinvar') as HTMLInputElement
+    const laiBox = screen.getByTestId('db-checkbox-lai_bundle') as HTMLInputElement
+    const encodeBox = screen.getByTestId('db-checkbox-encode_ccres') as HTMLInputElement
+    const otherBox = screen.getByTestId('db-checkbox-other_optional') as HTMLInputElement
+
+    expect(clinvarBox.checked).toBe(true)
+    expect(clinvarBox.disabled).toBe(true) // required → locked
+    expect(laiBox.checked).toBe(true)
+    expect(laiBox.disabled).toBe(false)
+    expect(encodeBox.checked).toBe(true)
+    expect(encodeBox.disabled).toBe(false)
+    expect(otherBox.checked).toBe(false)
+    expect(otherBox.disabled).toBe(false)
+  })
+
+  it('does not render a checkbox for bundled databases', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListWithModes()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('VEP Bundle')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('db-checkbox-vep_bundle')).not.toBeInTheDocument()
+  })
+
+  it('updates the running total when a checkbox is toggled', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListWithModes()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    // Initial selection: clinvar (100 MB) + lai_bundle (500 MB) + encode_ccres (10 MB) = 610 MB
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('610.0 MB selected')
+
+    // Uncheck LAI → 110 MB
+    fireEvent.click(screen.getByTestId('db-checkbox-lai_bundle'))
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('110.0 MB selected')
+
+    // Check the other optional → 111 MB
+    fireEvent.click(screen.getByTestId('db-checkbox-other_optional'))
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('111.0 MB selected')
+  })
+
+  it('re-toggling a default-on optional returns it to the selected set', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListWithModes()),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    const laiBox = screen.getByTestId('db-checkbox-lai_bundle') as HTMLInputElement
+    expect(laiBox.checked).toBe(true)
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('610.0 MB selected')
+
+    // Toggle off → total drops, box unchecks
+    fireEvent.click(laiBox)
+    expect(laiBox.checked).toBe(false)
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('110.0 MB selected')
+
+    // Toggle on again → box re-checks, total returns
+    fireEvent.click(laiBox)
+    expect(laiBox.checked).toBe(true)
+    expect(screen.getByTestId('selected-total')).toHaveTextContent('610.0 MB selected')
+  })
+
+  it('hides the running total when no databases need downloading', async () => {
+    const allDone = mockDatabaseList({
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variants',
+          filename: 'clinvar.db',
+          expected_size_bytes: 250_000_000,
+          required: true,
+          phase: 1,
+          downloaded: true,
+          file_size_bytes: 248_000_000,
+        },
+      ],
+      downloaded_count: 1,
+      total_count: 1,
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(allDone),
+    })
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('ClinVar')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('selected-total')).not.toBeInTheDocument()
+  })
+
+  it('disables selectable checkboxes while a download is in flight', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockDatabaseListWithModes()),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            session_id: 'dbdl-disable',
+            downloads: [
+              { db_name: 'clinvar', job_id: 'j-clinvar' },
+              { db_name: 'lai_bundle', job_id: 'j-lai' },
+              { db_name: 'encode_ccres', job_id: 'j-encode' },
+            ],
+          }),
+      })
+
+    class MockEventSource {
+      addEventListener() {}
+      close() {}
+    }
+    vi.stubGlobal('EventSource', MockEventSource)
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download Selected')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Download Selected'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Downloading...')).toBeInTheDocument()
+    })
+
+    const laiBox = screen.getByTestId('db-checkbox-lai_bundle') as HTMLInputElement
+    const encodeBox = screen.getByTestId('db-checkbox-encode_ccres') as HTMLInputElement
+    const otherBox = screen.getByTestId('db-checkbox-other_optional') as HTMLInputElement
+
+    expect(laiBox.disabled).toBe(true)
+    expect(encodeBox.disabled).toBe(true)
+    expect(otherBox.disabled).toBe(true)
+
+    vi.unstubAllGlobals()
+  })
+
+  it('Download Selected sends only the selected subset', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockDatabaseListWithModes()),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            session_id: 'dbdl-step14',
+            downloads: [
+              { db_name: 'clinvar', job_id: 'j-clinvar' },
+              { db_name: 'encode_ccres', job_id: 'j-encode' },
+            ],
+          }),
+      })
+
+    class MockEventSource {
+      addEventListener() {}
+      close() {}
+    }
+    vi.stubGlobal('EventSource', MockEventSource)
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download Selected')).toBeInTheDocument()
+    })
+
+    // Uncheck LAI (default-on) — leave clinvar (required) + encode_ccres selected
+    fireEvent.click(screen.getByTestId('db-checkbox-lai_bundle'))
+
+    fireEvent.click(screen.getByText('Download Selected'))
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    const downloadCall = mockFetch.mock.calls[1]
+    expect(downloadCall[0]).toBe('/api/databases/download')
+    const body = JSON.parse(downloadCall[1].body)
+    expect(new Set(body.databases)).toEqual(new Set(['clinvar', 'encode_ccres']))
+
+    vi.unstubAllGlobals()
+  })
+
+  // ─── Step 15: Soft skip reminder toast ──────────────────────────
+
+  function mockDatabaseListReadyToContinue() {
+    return {
+      databases: [
+        {
+          name: 'clinvar',
+          display_name: 'ClinVar',
+          description: 'Clinical variants',
+          filename: 'clinvar.db',
+          expected_size_bytes: 100_000_000,
+          required: true,
+          phase: 1,
+          downloaded: true,
+          file_size_bytes: 99_000_000,
+          build_mode: 'pipeline',
+        },
+        {
+          name: 'vep_bundle',
+          display_name: 'VEP Bundle',
+          description: 'VEP predictions',
+          filename: 'vep_bundle.db',
+          expected_size_bytes: 500_000_000,
+          required: true,
+          phase: 2,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'bundled',
+        },
+        {
+          name: 'lai_bundle',
+          display_name: 'LAI Bundle',
+          description: 'Local ancestry inference',
+          filename: 'lai_bundle.tar.gz',
+          expected_size_bytes: 500_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+        {
+          name: 'encode_ccres',
+          display_name: 'ENCODE cCREs',
+          description: 'Regulatory regions',
+          filename: 'encode_ccres.db',
+          expected_size_bytes: 10_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+        {
+          name: 'other_optional',
+          display_name: 'Other Optional',
+          description: 'Some other optional DB',
+          filename: 'other.db',
+          expected_size_bytes: 1_000_000,
+          required: false,
+          phase: 3,
+          downloaded: false,
+          file_size_bytes: null,
+          build_mode: 'download',
+        },
+      ],
+      total_size_bytes: 1_111_000_000,
+      downloaded_count: 1,
+      total_count: 5,
+    }
+  }
+
+  it('shows a Sonner toast naming the skipped optional DBs when Continue is clicked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListReadyToContinue()),
+    })
+
+    const onNext = vi.fn()
+    render(<DatabasesStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    // Uncheck both default-on optional bundles, leave `other_optional` already off.
+    fireEvent.click(screen.getByTestId('db-checkbox-lai_bundle'))
+    fireEvent.click(screen.getByTestId('db-checkbox-encode_ccres'))
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(toastInfoMock).toHaveBeenCalledTimes(1)
+    const [message, options] = toastInfoMock.mock.calls[0]
+    expect(message).toContain('LAI Bundle')
+    expect(message).toContain('ENCODE cCREs')
+    expect(message).toContain('Other Optional')
+    expect(options?.description).toMatch(/Settings > Update Manager/i)
+    expect(onNext).toHaveBeenCalledOnce()
+  })
+
+  it('shows a toast that lists only the unchecked optional DBs', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListReadyToContinue()),
+    })
+
+    const onNext = vi.fn()
+    render(<DatabasesStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    // Leave LAI + ENCODE checked (defaults). Only `other_optional` stays unchecked.
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(toastInfoMock).toHaveBeenCalledTimes(1)
+    const [message] = toastInfoMock.mock.calls[0]
+    expect(message).toContain('Other Optional')
+    expect(message).not.toContain('LAI Bundle')
+    expect(message).not.toContain('ENCODE cCREs')
+    expect(onNext).toHaveBeenCalledOnce()
+  })
+
+  it('does not show a toast when every optional DB is selected', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDatabaseListReadyToContinue()),
+    })
+
+    const onNext = vi.fn()
+    render(<DatabasesStep onNext={onNext} onBack={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('LAI Bundle')).toBeInTheDocument()
+    })
+
+    // Tick the remaining default-off optional so nothing is skipped.
+    fireEvent.click(screen.getByTestId('db-checkbox-other_optional'))
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(toastInfoMock).not.toHaveBeenCalled()
+    expect(onNext).toHaveBeenCalledOnce()
   })
 })
 

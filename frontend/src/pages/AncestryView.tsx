@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, CheckCircle, Download, Globe, Info, Loader2, Play } from "lucide-react"
-import { Toaster } from "sonner"
 import PageLoading from "@/components/ui/PageLoading"
 import PageError from "@/components/ui/PageError"
 import PageEmpty from "@/components/ui/PageEmpty"
@@ -143,11 +142,6 @@ export default function AncestryView() {
 
   return (
     <div className="p-6">
-      {/* Toast surface — sonner Toaster mount for per-sample LAI advisories
-          (Plan §6.6 high-dropout warning). Page-scoped so other modules are
-          not affected by the additional Toaster instance. */}
-      <Toaster position="bottom-right" theme="system" closeButton />
-
       {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
         <div

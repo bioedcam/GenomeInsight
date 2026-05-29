@@ -340,3 +340,15 @@ def test_vep_bundle_registry_entry_reflects_v2_0_0_sizing() -> None:
     entry = DATABASES["vep_bundle"]
     assert entry.expected_size_bytes >= 500_000_000
     assert "AncestryDNA" in entry.description
+
+
+def test_vep_bundle_registry_url_points_at_v2_0_0_release() -> None:
+    """Phase 0i (PR-0z) rewrites the fallback URL from the non-existent
+    ``raw.githubusercontent.com/.../bundles/vep_bundle.db`` path to the v2.0.0
+    GitHub Release asset, so the manifest-CDN-outage fallback actually resolves.
+    """
+    from backend.db.database_registry import DATABASES
+
+    entry = DATABASES["vep_bundle"]
+    assert entry.url.endswith("/releases/download/bundle-v2.0.0/vep_bundle.db")
+    assert "raw.githubusercontent.com" not in entry.url

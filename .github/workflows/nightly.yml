@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -96,11 +98,17 @@ jobs:
           fi
 
       - name: Verify VEP bundle sha256
-        if: hashFiles('~/.genomeinsight/vep_bundle.db') != ''
+        # `hashFiles()` only matches paths under GITHUB_WORKSPACE, so it can never
+        # see a bundle staged in $HOME — gate on an explicit existence check instead.
         continue-on-error: true
         run: |
+          dest="$HOME/.genomeinsight/vep_bundle.db"
+          if [ ! -f "$dest" ]; then
+            echo "::warning::VEP bundle not present; skipping sha256 verification."
+            exit 0
+          fi
           expected='${{ steps.manifest.outputs.vep_bundle_sha256 }}'
-          actual=$(sha256sum "$HOME/.genomeinsight/vep_bundle.db" | awk '{print $1}')
+          actual=$(sha256sum "$dest" | awk '{print $1}')
           if [ "$expected" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
             echo "::warning::VEP manifest sha256 is the placeholder; skipping verification."
           elif [ "$actual" != "$expected" ]; then

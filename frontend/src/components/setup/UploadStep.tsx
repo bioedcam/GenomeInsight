@@ -63,6 +63,12 @@ export default function UploadStep({ onBack }: UploadStepProps) {
       setFileError(null)
       setBundleGate(null)
     } else {
+      // Clear any previously valid selection so an invalid pick can't be
+      // uploaded by mistake, and reset the file input so re-selecting the
+      // same file later still fires onChange.
+      setSelectedFile(null)
+      setBundleGate(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       setFileError(
         'Please select a 23andMe or AncestryDNA raw data file (.txt, .csv, or .tsv)',
       )

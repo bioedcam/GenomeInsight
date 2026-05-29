@@ -59,6 +59,11 @@ def _read_recorded_sample_version(sample_id: int) -> str:
         return _FALLBACK_SAMPLE_VERSION
 
     sample_db = registry.settings.data_dir / row.db_path
+    # Guard before get_sample_engine, which materializes an empty DB
+    # (and schema) on a missing path. Mirror the not-found fallback.
+    if not sample_db.exists():
+        return _FALLBACK_SAMPLE_VERSION
+
     try:
         engine = registry.get_sample_engine(sample_db)
         with engine.connect() as conn:

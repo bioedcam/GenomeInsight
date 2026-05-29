@@ -122,6 +122,18 @@ def list_merged_children(
                 },
             )
             continue
+        if not isinstance(source_ids, list):
+            # Valid JSON, wrong shape (object/number/string). ``in`` would
+            # raise or silently check keys — log-and-skip per the module
+            # contract instead.
+            logger.warning(
+                "merged_provenance_malformed",
+                extra={
+                    "merged_sample_id": int(row.id),
+                    "source_sample_ids_raw": prov_row.source_sample_ids,
+                },
+            )
+            continue
         if sample_id in source_ids:
             children.append(MergedChild(id=int(row.id), name=str(row.name)))
     return children

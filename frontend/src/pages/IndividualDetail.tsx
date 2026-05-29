@@ -183,7 +183,11 @@ function FindingRow({ row }: { row: AggregatedFinding }) {
 }
 
 function LinkedSampleRow({ sample }: { sample: LinkedSample }) {
-  const { data: variantCount } = useQuery({
+  const {
+    data: variantCount,
+    isLoading: countLoading,
+    isError: countError,
+  } = useQuery({
     queryKey: ["variants-total-count", sample.id],
     queryFn: async () => {
       const res = await fetch(`/api/variants/count?sample_id=${sample.id}`)
@@ -194,12 +198,13 @@ function LinkedSampleRow({ sample }: { sample: LinkedSample }) {
     staleTime: Infinity,
   })
 
-  const statusLabel =
-    variantCount == null
-      ? "Loading…"
-      : variantCount > 0
-        ? "Ready"
-        : "No variants"
+  const statusLabel = countLoading
+    ? "Loading…"
+    : countError
+      ? "Unavailable"
+      : variantCount == null || variantCount === 0
+        ? "No variants"
+        : "Ready"
 
   return (
     <tr
@@ -221,7 +226,9 @@ function LinkedSampleRow({ sample }: { sample: LinkedSample }) {
         {formatFileFormat(sample.file_format)}
       </td>
       <td className="px-4 py-2 text-sm text-right tabular-nums text-foreground">
-        {variantCount == null ? "—" : formatNumber(variantCount)}
+        {countLoading || countError || variantCount == null
+          ? "—"
+          : formatNumber(variantCount)}
       </td>
       <td className="px-4 py-2 text-xs text-muted-foreground">{statusLabel}</td>
       <td className="px-4 py-2 text-xs text-muted-foreground">
@@ -272,14 +279,28 @@ export default function IndividualDetail() {
     })),
   })
 
-  // findingsQueries identity churns each render; key the memo on the
-  // resolved (sample id × finding id) tuples so we only recompute when
-  // the underlying data actually changes.
+  // findingsQueries identity churns each render; key the memo on a
+  // fingerprint of the resolved findings so we recompute whenever the
+  // underlying data actually changes. The fingerprint includes every
+  // mutable field that affects aggregation or rendering (evidence_level,
+  // module, rsid, gene_symbol, finding_text) — not just finding ids —
+  // so an updated payload reusing the same ids still recomputes.
   const sampleIdsKey = linkedSamples.map((s) => s.id).join(",")
-  const findingIdsKey = findingsQueries
+  const findingsFingerprint = findingsQueries
     .map(
       (q) =>
-        q.data?.high_confidence_findings?.map((f) => f.id).join(",") ?? "",
+        q.data?.high_confidence_findings
+          ?.map((f) =>
+            [
+              f.id,
+              f.evidence_level ?? "",
+              f.module,
+              f.rsid ?? "",
+              f.gene_symbol ?? "",
+              f.finding_text,
+            ].join("~"),
+          )
+          .join(",") ?? "",
     )
     .join("|")
   const aggregated = useMemo(
@@ -291,7 +312,7 @@ export default function IndividualDetail() {
         })),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sampleIdsKey, findingIdsKey],
+    [sampleIdsKey, findingsFingerprint],
   )
 
   if (!validId) {
