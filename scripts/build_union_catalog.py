@@ -57,8 +57,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.ingestion.base import SourceVendor  # noqa: E402
+from backend.ingestion.chrom_order import chrom_sort_key as _chrom_sort_key  # noqa: E402
 from backend.ingestion.chromosomes import normalize_for  # noqa: E402
-from backend.ingestion.vcf_export import _chrom_sort_key  # noqa: E402
 
 # Autosomes whose per-chrom count is a hard-fail floor (chr21 ~6k is smallest).
 _AUTOSOMES: tuple[str, ...] = tuple(str(i) for i in range(1, 23))
