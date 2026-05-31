@@ -74,8 +74,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.ingestion.base import ParserError, ParseResult  # noqa: E402
+from backend.ingestion.chrom_order import chrom_sort_key as _chrom_sort_key  # noqa: E402
 from backend.ingestion.dispatcher import parse  # noqa: E402
-from backend.ingestion.vcf_export import _chrom_sort_key  # noqa: E402
 
 # AncestryDNA v2.0 chip is ~700k sites; tolerate ~-1.5% across the pooled exports.
 DEFAULT_MIN_UNION = 690_000

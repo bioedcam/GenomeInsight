@@ -21,6 +21,7 @@ from typing import TextIO
 import sqlalchemy as sa
 
 from backend.db.tables import raw_variants
+from backend.ingestion.chrom_order import CHROM_ORDER as _CHROM_ORDER
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -29,14 +30,6 @@ from backend.db.tables import raw_variants
 _VCF_VERSION = "VCFv4.2"
 _SOURCE = "GenomeInsight"
 _REFERENCE = "GRCh37"
-
-# Canonical chromosome sort order for VCF output.
-_CHROM_ORDER: dict[str, int] = {
-    **{str(i): i for i in range(1, 23)},
-    "X": 23,
-    "Y": 24,
-    "MT": 25,
-}
 
 # VCF header column names.
 _VCF_COLUMNS = (

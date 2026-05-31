@@ -66,7 +66,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from backend.ingestion.vcf_export import _chrom_sort_key  # noqa: E402
+from backend.ingestion.chrom_order import chrom_sort_key as _chrom_sort_key  # noqa: E402
 
 # Canonical table holding the VEP annotations (see build_vep_bundle.py::TABLE_NAME).
 TABLE_NAME = "vep_annotations"
