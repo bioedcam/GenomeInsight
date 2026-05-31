@@ -71,7 +71,15 @@ _KNOWN_RSID_RE = re.compile(r"^(rs|kgp|i|VG)\w+$")
 # keyword args on ``check_assertions`` so tests can exercise the per-chrom logic
 # with small fixtures.
 DEFAULT_MIN_UNION = 800_000
-DEFAULT_MIN_INTERSECTION = 400_000
+# Recalibrated 2026-05-29 (was 400_000). The original ≥400k floor assumed the two
+# consumer arrays heavily overlap. Empirically they do NOT: 23andMe v5 (Illumina GSA
+# backbone) and AncestryDNA V2.0 (OmniExpress lineage) are *complementary* — genuine
+# position-overlap is ~165k (single AncestryDNA export ∩ v5) to ~182k (multi-donor
+# AncestryDNA ∩ v5), with coordinates verified correct (APOE/MTHFR/HFE at canonical
+# GRCh37). This floor's real job is to catch a coordinate/build regression (which
+# craters the overlap toward 0), so 100k passes the legitimate complementary overlap
+# while still flagging catastrophic dropout.
+DEFAULT_MIN_INTERSECTION = 100_000
 DEFAULT_MIN_RS = 800_000
 DEFAULT_MIN_AUTOSOME = 5_000
 DEFAULT_MIN_CHRX = 5_000
