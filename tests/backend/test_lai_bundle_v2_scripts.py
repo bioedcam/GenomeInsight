@@ -17,6 +17,7 @@ the cluster (Plan §6.3 step 1, runbook §4).
 
 from __future__ import annotations
 
+import importlib.util
 import py_compile
 import re
 import stat
@@ -24,6 +25,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+
+def _load_module(filename: str, mod_name: str):
+    """Import a digit-prefixed helper (e.g. 06e_lai_accuracy.py) by path."""
+    spec = importlib.util.spec_from_file_location(mod_name, SCRIPTS_DIR / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "scripts" / "lai_bundle_v2"
@@ -190,6 +199,95 @@ class TestPythonHelpersCompile:
     )
     def test_py_compile(self, name: str) -> None:
         py_compile.compile(str(SCRIPTS_DIR / name), doraise=True)
+
+
+class TestLaiAccuracyParser:
+    """06e parses gnomix's `Estimated val accuracy: NN.NN%` (the proven v1.1
+    LAI-accuracy source), so lock in the real log-line format.
+    """
+
+    def _mod(self):
+        return _load_module("06e_lai_accuracy.py", "lai_accuracy_06e")
+
+    @pytest.mark.parametrize(
+        "line,expected",
+        [
+            ("Estimated val accuracy: 86.88%", 0.8688),
+            ("Estimated val accuracy: 85.7%", 0.857),  # gnomix drops trailing zero
+            ("Estimated val accuracy: 89.79%", 0.8979),
+        ],
+    )
+    def test_parses_real_gnomix_format(self, line: str, expected: float) -> None:
+        acc = self._mod().parse_val_accuracy(f"...\n{line}\nTime: 5m\n")
+        assert acc == pytest.approx(expected, abs=1e-6)
+
+    def test_last_match_wins(self) -> None:
+        text = "Estimated val accuracy: 70.0%\nretry\nEstimated val accuracy: 88.5%\n"
+        assert self._mod().parse_val_accuracy(text) == pytest.approx(0.885)
+
+    def test_no_match_returns_none(self) -> None:
+        assert self._mod().parse_val_accuracy("no accuracy here\n") is None
+
+
+class TestPhase06WiresLogParser:
+    """06_validate.sh must drive 06e off the gnomix logs (--log-dir/--chroms),
+    not the removed inference-glob contract (--gnomix-dir/--single-ancestry).
+    """
+
+    def test_06e_called_with_log_dir(self) -> None:
+        text = (SCRIPTS_DIR / "06_validate.sh").read_text()
+        assert "06e_lai_accuracy.py" in text
+        assert "--log-dir" in text and "--chroms" in text
+        # the dead inference-glob flags must be gone
+        assert "--gnomix-dir" not in text
+
+
+class TestTrioIdentification:
+    """06a builds trios from the 1000G pedigree ∩ the panel (v1.1 method), since
+    the gnomAD meta has no paternal/maternal-id columns.
+    """
+
+    def _run(self, tmp_path, ped_rows, panel, meta_rows):
+        ped = tmp_path / "g1k.ped"
+        ped.write_text(
+            "Family ID\tIndividual ID\tPaternal ID\tMaternal ID\tGender\tPopulation\n"
+            + "".join(ped_rows)
+        )
+        (tmp_path / "panel.txt").write_text("\n".join(panel) + "\n")
+        meta = tmp_path / "meta.tsv"
+        meta.write_text(
+            "s\thgdp_tgp_meta.Genetic.region\thgdp_tgp_meta.Population\n" + "".join(meta_rows)
+        )
+        out_ped = tmp_path / "trio_pedigree.tsv"
+        out_children = tmp_path / "trio_children.txt"
+        subprocess.run(
+            [
+                "python", str(SCRIPTS_DIR / "06a_identify_trios.py"),
+                "--ped", str(ped), "--panel-samples", str(tmp_path / "panel.txt"),
+                "--meta", str(meta), "--out-trios", str(out_children),
+                "--out-pedigree", str(out_ped),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+        return out_ped.read_text(), out_children.read_text()
+
+    def test_complete_trio_kept_incomplete_dropped(self, tmp_path) -> None:
+        ped_rows = [
+            # complete trio: child HG1 + both parents all in panel
+            "F1\tHG1\tHG2\tHG3\t1\tACB\n",
+            "F1\tHG2\t0\t0\t1\tACB\n",
+            "F1\tHG3\t0\t0\t2\tACB\n",
+            # child whose father is NOT in the panel -> dropped
+            "F2\tHG4\tHG9\tHG5\t1\tCEU\n",
+            "F2\tHG5\t0\t0\t2\tCEU\n",
+        ]
+        panel = ["HG1", "HG2", "HG3", "HG4", "HG5"]  # HG9 (father of HG4) absent
+        meta_rows = ["HG1\tAFR\tACB\n", "HG4\tEUR\tCEU\n"]
+        ped_text, children = self._run(tmp_path, ped_rows, panel, meta_rows)
+        assert "child\tfather\tmother\tpopulation\tregion" in ped_text
+        assert "HG1\tHG2\tHG3\tACB\tAFR" in ped_text
+        assert "HG4" not in ped_text  # incomplete trio dropped
+        assert children.strip() == "HG1"
 
 
 class TestRunbook:

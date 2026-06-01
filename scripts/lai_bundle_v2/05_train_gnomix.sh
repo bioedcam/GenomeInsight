@@ -52,14 +52,14 @@ for chr in $CHROMS; do
   #   query_file  output_basename  chr_nr  phase  genetic_map  reference_file  sample_map
   # In training the phased reference panel is BOTH query_file and reference_file.
   # The old 6-arg call gave len(sys.argv)==7 -> "Incorrect number of arguments"
-  # + sys.exit(0): a SILENT no-op that set -e cannot catch (exit 0). phase=True
-  # matches the proven v1.1 build (the shipped model carries its phasing module
-  # for unphased query data).
-  # CONFIRM phase + chr_nr against the v1.1 build's gnomix_train_chr*.log on the
-  # cluster before the multi-day relaunch (that training log is the authoritative form).
+  # + sys.exit(0): a SILENT no-op that set -e cannot catch (exit 0).
+  # This exact form (args, order, phase=True, chr_nr="chr${chr}", reference=panel)
+  # is the proven v1.1 production invocation, confirmed against the cluster
+  # bash_history training loop (phase=True ships the model's phasing module for
+  # unphased query data).
   python "$GNOMIX_DIR_INSTALL/gnomix.py" \
     "$panel_vcf" \
-    "$out_dir/" \
+    "$out_dir" \
     "chr${chr}" \
     True \
     "$genetic_map" \

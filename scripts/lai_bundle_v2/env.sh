@@ -30,6 +30,11 @@
 # (scripts/generate_vep_input.py --rsid-catalog) — Plan §6.4 phase 2.
 : "${UNION_CATALOG_TSV:=}"
 
+# 1000-Genomes pedigree (20130606_g1k.ped) — supplies the parent-child
+# relationships Phase 6a needs to pick validation trios (the gnomAD meta has no
+# paternal/maternal-id columns). Place it in the validation dir or override.
+: "${G1K_PED:=$VALIDATION_DIR/20130606_g1k.ped}"
+
 # ─── External tool paths ─────────────────────────────────────────────────
 : "${BEAGLE_JAR:=$HOME/tools/beagle.jar}"
 : "${GNOMIX_DIR_INSTALL:=$HOME/tools/gnomix}"
