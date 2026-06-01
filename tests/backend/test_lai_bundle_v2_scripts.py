@@ -34,6 +34,7 @@ def _load_module(filename: str, mod_name: str):
     spec.loader.exec_module(module)
     return module
 
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "scripts" / "lai_bundle_v2"
 RUNBOOK = REPO_ROOT / "docs" / "lai-bundle-release-runbook.md"
@@ -262,12 +263,22 @@ class TestTrioIdentification:
         out_children = tmp_path / "trio_children.txt"
         subprocess.run(
             [
-                "python", str(SCRIPTS_DIR / "06a_identify_trios.py"),
-                "--ped", str(ped), "--panel-samples", str(tmp_path / "panel.txt"),
-                "--meta", str(meta), "--out-trios", str(out_children),
-                "--out-pedigree", str(out_ped),
+                "python",
+                str(SCRIPTS_DIR / "06a_identify_trios.py"),
+                "--ped",
+                str(ped),
+                "--panel-samples",
+                str(tmp_path / "panel.txt"),
+                "--meta",
+                str(meta),
+                "--out-trios",
+                str(out_children),
+                "--out-pedigree",
+                str(out_ped),
             ],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         return out_ped.read_text(), out_children.read_text()
 
