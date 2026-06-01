@@ -58,6 +58,13 @@ python "$SCRIPT_DIR/06d_phasing_accuracy.py" \
   --validation-dir "$VALIDATION_DIR" \
   --out-report "$VALIDATION_DIR/phasing_accuracy_report.json"
 
+# AUDIT GAP (Step 25, 2026-06-01): 06e globs lai_<sample>_chr{N}.tsv gnomix
+# INFERENCE output, but no phase above produces it — 06c only runs Beagle
+# phasing. As wired, 06e finds 0 files -> accuracy 0.0 -> fails the >=0.88 gate.
+# A gnomix-inference step on held-out samples (cf. backend/analysis/gnomix_inference.py)
+# must be added here, matched to v1.1's LAI-accuracy method. Resolving this needs
+# the v1.1 reference scripts on the cluster, which were unreachable when this
+# repair landed — left for the follow-up once cluster SSH is restored.
 phase_log "scoring LAI accuracy against held-out single-ancestry samples"
 python "$SCRIPT_DIR/06e_lai_accuracy.py" \
   --gnomix-dir "$GNOMIX_DIR" \

@@ -7,6 +7,14 @@ Outputs:
 
 Both parents must be present in the reference panel; the child must pass the
 single-ancestry filter from Phase 4. Plan §6.4 phase 6a (unchanged from v1.1).
+
+AUDIT NOTE (Step 25, 2026-06-01): this derives trios from the gnomAD metadata's
+paternal/maternal-id columns, whereas the proven v1.1 build seeded trios from the
+1000-Genomes pedigree (20130606_g1k.ped -> selected_trios.tsv in the v1.1 validation
+dir on the cluster). `_resolve_columns` fails loud if the parental-id columns are
+absent, so this will not silently mis-trio, but confirm the meta columns are actually
+populated (and the two approaches agree) against the v1.1 reference once the cluster
+is reachable.
 """
 from __future__ import annotations
 
