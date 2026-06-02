@@ -242,6 +242,38 @@ class TestPhase07ReexportsGnomixModels:
             assert key in text
 
 
+class TestMendelianTruthPhasing06b:
+    """06b truth-phases trio children by Mendelian inheritance. pysam's
+    VariantRecordSamples cannot delete samples from a record, so 06b must NOT try
+    to strip parents (06d selects the child by name). Lock in the resolve_phase
+    logic and the absence of the unsupported deletion.
+    """
+
+    def _mod(self):
+        pytest.importorskip("pysam")
+        pytest.importorskip("pandas")
+        return _load_module("06b_mendelian_phasing.py", "mendelian_06b")
+
+    @pytest.mark.parametrize(
+        "child,father,mother,expected",
+        [
+            ((0, 1), (0, 0), (0, 1), (0, 1)),  # father hom-ref, mother carries alt
+            ((0, 1), (0, 1), (0, 0), (1, 0)),  # mother hom-ref, father carries alt
+            ((0, 1), (0, 1), (0, 1), None),  # both het -> ambiguous
+            ((0, 0), (0, 1), (0, 1), None),  # child not het -> skip
+            ((0, 1), (1, 1), (0, 0), (1, 0)),  # father hom-alt, mother hom-ref
+            ((0, 1), (0, 0), (1, 1), (0, 1)),  # father hom-ref, mother hom-alt
+        ],
+    )
+    def test_resolve_phase(self, child, father, mother, expected) -> None:
+        assert self._mod().resolve_phase(child, father, mother) == expected
+
+    def test_no_unsupported_sample_deletion(self) -> None:
+        text = (SCRIPTS_DIR / "06b_mendelian_phasing.py").read_text()
+        # pysam VariantRecordSamples does not support item deletion
+        assert "del new_rec.samples" not in text
+
+
 class TestGnomixPandasAppendShim:
     """gnomix's src/laidataset.py calls the pandas<2 ``DataFrame.append`` (removed
     in pandas 2.0) in the small-population ``include_all`` path (fires for tiny

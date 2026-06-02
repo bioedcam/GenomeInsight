@@ -53,10 +53,10 @@ def phase_child(panel_vcf: Path, child: str, father: str, mother: str, out_vcf: 
                 if phased is None:
                     continue
                 new_rec = rec.copy()
-                # Strip everyone but child, write phased genotype.
-                for s in list(new_rec.samples):
-                    if s != child:
-                        del new_rec.samples[s]
+                # Set the child's phased genotype. pysam's VariantRecordSamples does
+                # NOT support deleting samples from a record, so keep all trio columns;
+                # 06d (compute switch errors) selects the child by name, so the parent
+                # columns are simply ignored downstream.
                 new_rec.samples[child]["GT"] = phased
                 new_rec.samples[child].phased = True
                 vout.write(new_rec)
