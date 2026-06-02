@@ -25,6 +25,7 @@ source "$SCRIPT_DIR/env.sh"
 require conda  # gnomix runs in its own env (GNOMIX_ENV) via `conda run`
 require_file "$ADMIX_DIR/sample_map.txt"
 require_file "$GNOMIX_DIR_INSTALL/gnomix.py"
+require_file "$SCRIPT_DIR/gnomix_launcher.py"  # pandas>=2 compat shim wrapper
 require_file "$GNOMIX_CONFIG"
 
 cp "$ADMIX_DIR/sample_map.txt" "$GNOMIX_DIR/sample_map.txt"
@@ -37,10 +38,15 @@ for chr in $CHROMS; do
   # NOT the 4-col space-delimited genetic_maps_grch38/.../plink.*.GRCh38.map (Beagle's format).
   genetic_map="$RAW_DIR/genetic_maps_gnomix/chr${chr}.map"
   out_dir="output_chr${chr}"
+  # gnomix saves the trained model NESTED at
+  # output_chrN/models/model_chm_chrN/model_chm_chrN.pkl (NOT output_chrN/*.pkl) —
+  # check that exact path or the skip-guard / success-check below never fires and
+  # the task exit-1's "MISSING" after a successful train.
+  model_pkl="$out_dir/models/model_chm_chr${chr}/model_chm_chr${chr}.pkl"
   require_file "$panel_vcf"
   require_file "$genetic_map"
 
-  if [ -d "$out_dir" ] && ls "$out_dir"/*.pkl >/dev/null 2>&1; then
+  if [ -s "$model_pkl" ]; then
     phase_log "chr${chr}: gnomix model present, skipping"
     continue
   fi
@@ -65,8 +71,15 @@ for chr in $CHROMS; do
   # gnomix runs in its own env ($GNOMIX_ENV) — it needs sklearn_crfsuite/xgboost
   # the lai_bundle env lacks — via `conda run` so the rest of the pipeline (this
   # script, run_rebuild.sh) can stay in lai_bundle. --no-capture-output streams to tee.
+  # gnomix is a pandas<2 tool: src/laidataset.py calls the removed DataFrame.append
+  # (the small-population include_all path; fires for tiny pops like EUR=3). The
+  # shared GNOMIX_ENV ships pandas 2.x, so run gnomix THROUGH gnomix_launcher.py,
+  # which restores DataFrame.append (-> pd.concat) in-process only — no mutation of
+  # the shared env or the gnomix checkout. The launcher forwards every arg after the
+  # gnomix.py path verbatim, so gnomix still sees the 8 positional args + config.
   conda run -n "$GNOMIX_ENV" --no-capture-output \
-    python "$GNOMIX_DIR_INSTALL/gnomix.py" \
+    python "$SCRIPT_DIR/gnomix_launcher.py" \
+    "$GNOMIX_DIR_INSTALL/gnomix.py" \
     "$panel_vcf" \
     "$out_dir" \
     "chr${chr}" \
@@ -87,7 +100,8 @@ done
 phase_log "phase 5 complete"
 missing=0
 for chr in $CHROMS; do
-  if [ -d "output_chr${chr}" ] && ls "output_chr${chr}"/*.pkl >/dev/null 2>&1; then
+  chr_model="output_chr${chr}/models/model_chm_chr${chr}/model_chm_chr${chr}.pkl"
+  if [ -s "$chr_model" ]; then
     phase_log "chr${chr}: OK ($(du -sh "output_chr${chr}" | awk '{print $1}'))"
   else
     phase_log "chr${chr}: MISSING"

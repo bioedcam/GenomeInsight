@@ -57,9 +57,12 @@ EXPECTED_HELPERS = [
     "06a_identify_trios.py",
     "06b_mendelian_phasing.py",
     "06c_beagle_loo_phasing.sh",
+    "06c_beagle_one.sh",
     "06d_phasing_accuracy.py",
     "06e_lai_accuracy.py",
     "07_write_metadata.py",
+    "gnomix_launcher.py",
+    "07b_reexport_gnomix_models.py",
 ]
 
 
@@ -105,7 +108,9 @@ class TestOrchestratorPhaseOrder:
 
 
 class TestEveryPhaseSourcesEnv:
-    @pytest.mark.parametrize("name", EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh"])
+    @pytest.mark.parametrize(
+        "name", EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh", "06c_beagle_one.sh"]
+    )
     def test_phase_script_sources_env(self, name: str) -> None:
         text = (SCRIPTS_DIR / name).read_text()
         assert 'source "$SCRIPT_DIR/env.sh"' in text, f"{name} must source env.sh"
@@ -173,7 +178,9 @@ class TestShellSyntax:
 
     @pytest.mark.parametrize(
         "name",
-        ["env.sh", "run_rebuild.sh"] + EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh"],
+        ["env.sh", "run_rebuild.sh"]
+        + EXPECTED_PHASE_SCRIPTS
+        + ["06c_beagle_loo_phasing.sh", "06c_beagle_one.sh"],
     )
     def test_bash_n_passes(self, name: str) -> None:
         path = SCRIPTS_DIR / name
@@ -196,10 +203,227 @@ class TestPythonHelpersCompile:
             "06d_phasing_accuracy.py",
             "06e_lai_accuracy.py",
             "07_write_metadata.py",
+            "gnomix_launcher.py",
+            "07b_reexport_gnomix_models.py",
         ],
     )
     def test_py_compile(self, name: str) -> None:
         py_compile.compile(str(SCRIPTS_DIR / name), doraise=True)
+
+
+class TestPhase05ModelPathCheck:
+    """gnomix saves the model NESTED at
+    output_chrN/models/model_chm_chrN/model_chm_chrN.pkl, not output_chrN/*.pkl.
+    The skip-guard and the success-check must look at the nested path or the task
+    exit-1's "MISSING" after a successful train (and on resume it re-trains).
+    """
+
+    def test_skip_and_success_check_use_nested_model_path(self) -> None:
+        text = (SCRIPTS_DIR / "05_train_gnomix.sh").read_text()
+        assert "models/model_chm_chr${chr}/model_chm_chr${chr}.pkl" in text
+        # the broken top-level glob must be gone from the guards
+        assert '"$out_dir"/*.pkl' not in text
+        assert '"output_chr${chr}"/*.pkl' not in text
+
+
+class TestPhase07ReexportsGnomixModels:
+    """The shipped bundle ships base_coefs.npz + smoother.json + metadata.npz per
+    chromosome (what backend/analysis/gnomix_inference.load_gnomix_model loads), not
+    gnomix's native .pkl. Phase 07 must re-export, not raw-copy the gnomix output.
+    """
+
+    def test_assemble_runs_reexport_not_raw_copy(self) -> None:
+        text = (SCRIPTS_DIR / "07_assemble_bundle.sh").read_text()
+        assert "07b_reexport_gnomix_models.py" in text
+        # the old raw copy of the gnomix output dir must be gone
+        assert 'cp -r "$GNOMIX_DIR/output_chr${chr}/." "gnomix_models/chr${chr}/"' not in text
+
+    def test_reexporter_emits_runtime_trio(self) -> None:
+        text = (SCRIPTS_DIR / "07b_reexport_gnomix_models.py").read_text()
+        for artifact in ("base_coefs.npz", "smoother.json", "metadata.npz"):
+            assert artifact in text
+        # metadata keys the runtime reads must be written
+        for key in ("snp_pos", "snp_ref", "snp_alt", "population_order"):
+            assert key in text
+
+
+class TestMendelianTruthPhasing06b:
+    """06b truth-phases trio children by Mendelian inheritance. pysam's
+    VariantRecordSamples cannot delete samples from a record, so 06b must NOT try
+    to strip parents (06d selects the child by name). Lock in the resolve_phase
+    logic and the absence of the unsupported deletion.
+    """
+
+    def _mod(self):
+        pytest.importorskip("pysam")
+        pytest.importorskip("pandas")
+        return _load_module("06b_mendelian_phasing.py", "mendelian_06b")
+
+    @pytest.mark.parametrize(
+        "child,father,mother,expected",
+        [
+            ((0, 1), (0, 0), (0, 1), (0, 1)),  # father hom-ref, mother carries alt
+            ((0, 1), (0, 1), (0, 0), (1, 0)),  # mother hom-ref, father carries alt
+            ((0, 1), (0, 1), (0, 1), None),  # both het -> ambiguous
+            ((0, 0), (0, 1), (0, 1), None),  # child not het -> skip
+            ((0, 1), (1, 1), (0, 0), (1, 0)),  # father hom-alt, mother hom-ref
+            ((0, 1), (0, 0), (1, 1), (0, 1)),  # father hom-ref, mother hom-alt
+        ],
+    )
+    def test_resolve_phase(self, child, father, mother, expected) -> None:
+        assert self._mod().resolve_phase(child, father, mother) == expected
+
+    def test_no_unsupported_sample_deletion(self) -> None:
+        text = (SCRIPTS_DIR / "06b_mendelian_phasing.py").read_text()
+        # pysam VariantRecordSamples does not support item deletion
+        assert "del new_rec.samples" not in text
+
+
+class TestPhase06cParallel:
+    """06c fans out leave-one-out Beagle phasing over (child,chrom) via xargs -P,
+    delegating each pair to the 06c_beagle_one.sh worker. Lock in the fan-out
+    wiring, the per-run thread cap, the SLURM cpu bump, and the completeness-checked
+    skip guards (a bare -s test would reuse a truncated file from a killed run).
+    """
+
+    def test_fanout_uses_xargs_over_worker(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_loo_phasing.sh").read_text()
+        assert "xargs -P" in text
+        assert "06c_beagle_one.sh" in text
+        assert "BEAGLE_PARALLEL" in text
+
+    def test_worker_caps_beagle_threads(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_one.sh").read_text()
+        assert "nthreads=" in text
+        assert "BEAGLE_NTHREADS" in text
+
+    def test_skip_guards_check_completeness_not_just_size(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_one.sh").read_text()
+        # Beagle output reuse must verify BGZF integrity (not a bare -s), so a
+        # truncated file left by a killed/scancel'd worker is regenerated rather
+        # than skipped and shipped to 06d as corrupt phasing.
+        assert "bgzip -t" in text
+        # The ref panel reuse must additionally require its index (.tbi, written
+        # last by bcftools index -t) as a completion marker.
+        assert ".tbi" in text
+
+    def test_env_defines_parallel_and_threads(self) -> None:
+        text = (SCRIPTS_DIR / "env.sh").read_text()
+        assert "BEAGLE_NTHREADS" in text
+        assert "BEAGLE_PARALLEL" in text
+        assert "SLURM_CPUS_PER_TASK" in text  # auto-scales concurrency to the alloc
+
+    def test_finish_sbatch_sized_for_parallel_beagle(self) -> None:
+        text = (SCRIPTS_DIR / "slurm" / "finish.sbatch").read_text()
+        assert "--cpus-per-task=64" in text
+
+
+class TestPhase07Metadata:
+    """07_write_metadata pulls the validation metrics into the bundle metadata.json.
+    Two prior bugs left it incomplete: it read the wrong accuracy field (so
+    accuracy_per_window_mean was null), and counted gnomix .pkl files (which the
+    npz/json re-export no longer ships, so window_count was 0). Lock in the fixes.
+    """
+
+    def test_reads_correct_accuracy_field(self) -> None:
+        text = (SCRIPTS_DIR / "07_write_metadata.py").read_text()
+        assert "mean_val_accuracy" in text  # the field 06e actually writes
+        assert "overall_accuracy" not in text  # the wrong field that returned null
+
+    def test_window_count_from_npz_not_pkl(self) -> None:
+        text = (SCRIPTS_DIR / "07_write_metadata.py").read_text()
+        # window_count must sum W from the re-exported metadata.npz, not glob *.pkl
+        assert "metadata.npz" in text
+        assert 'glob("gnomix_models/*/*.pkl")' not in text
+
+    def test_assemble_cp_is_force(self) -> None:
+        # Phase 07 re-run must overwrite the read-only files copied from read-only
+        # sources on a prior run; plain cp fails "Permission denied" on re-run.
+        text = (SCRIPTS_DIR / "07_assemble_bundle.sh").read_text()
+        assert "cp -f " in text
+        assert re.search(r'\bcp "\$', text) is None  # every cp is forced
+
+
+class TestGnomixPandasAppendShim:
+    """gnomix's src/laidataset.py calls the pandas<2 ``DataFrame.append`` (removed
+    in pandas 2.0) in the small-population ``include_all`` path (fires for tiny
+    pops like EUR=3). The shared ``gnomix`` env runs pandas>=2, so gnomix_launcher
+    restores ``append`` in-process before running gnomix. Lock in that behaviour and
+    the phase-05 wiring so the env-version regression cannot silently return.
+    """
+
+    def _mod(self):
+        return _load_module("gnomix_launcher.py", "gnomix_launcher")
+
+    def test_df_append_helper_concats_rows(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        df = pd.DataFrame({"a": [1, 2]})
+        out = mod._df_append(df, pd.DataFrame({"a": [3]}))
+        assert list(out["a"]) == [1, 2, 3]
+        # gnomix never uses it, but the pandas<2 list form must also work.
+        out2 = mod._df_append(df, [pd.DataFrame({"a": [3]}), pd.DataFrame({"a": [4]})])
+        assert list(out2["a"]) == [1, 2, 3, 4]
+
+    def test_series_append_helper_concats(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        s = pd.Series([1, 2])
+        assert list(mod._series_append(s, pd.Series([3]))) == [1, 2, 3]
+
+    def test_install_shim_yields_working_append(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        had_df = hasattr(pd.DataFrame, "append")
+        had_s = hasattr(pd.Series, "append")
+        orig_df = pd.DataFrame.append if had_df else None
+        orig_s = pd.Series.append if had_s else None
+        try:
+            mod.install_pandas_append_shim()
+            assert hasattr(pd.DataFrame, "append")
+            df = pd.DataFrame({"a": [1]})
+            assert list(df.append(pd.DataFrame({"a": [2]}))["a"]) == [1, 2]
+        finally:
+            # never leak a patched/removed attr into the rest of the suite
+            if had_df:
+                pd.DataFrame.append = orig_df
+            elif hasattr(pd.DataFrame, "append"):
+                del pd.DataFrame.append
+            if had_s:
+                pd.Series.append = orig_s
+            elif hasattr(pd.Series, "append"):
+                del pd.Series.append
+
+    def test_install_shim_does_not_overwrite_existing_append(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+
+        def sentinel(*_a, **_k):
+            return "ORIGINAL"
+
+        orig = pd.DataFrame.append if hasattr(pd.DataFrame, "append") else None
+        try:
+            pd.DataFrame.append = sentinel
+            mod.install_pandas_append_shim()
+            assert pd.DataFrame.append is sentinel  # no-op when append already present
+        finally:
+            if orig is not None:
+                pd.DataFrame.append = orig
+            else:
+                del pd.DataFrame.append
+
+    def test_phase05_routes_gnomix_through_launcher(self) -> None:
+        text = (SCRIPTS_DIR / "05_train_gnomix.sh").read_text()
+        # phase 05 must invoke gnomix THROUGH the launcher, passing the real
+        # gnomix.py entrypoint as the launcher's first argument.
+        assert "gnomix_launcher.py" in text
+        assert re.search(r"gnomix_launcher\.py\b.*\n.*gnomix\.py", text) or (
+            "gnomix_launcher.py" in text and "$GNOMIX_DIR_INSTALL/gnomix.py" in text
+        )
 
 
 class TestLaiAccuracyParser:

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Phase 6c — Leave-one-out Beagle phasing for each trio child.
-# Source the env, then for each child:
-#   1. Strip phasing from child genotypes
-#   2. Build a reference panel without the child's family
-#   3. Run Beagle
+# Phase 6c — leave-one-out Beagle phasing for each trio child, PARALLELIZED.
 #
-# Plan §6.4 phase 6c — logic unchanged from v1.1.
+# Every (child, chromosome) Beagle run is independent (child- and chrom-specific
+# output files), so they fan out concurrently via `xargs -P BEAGLE_PARALLEL`, each
+# Beagle capped to BEAGLE_NTHREADS threads (BEAGLE_PARALLEL * BEAGLE_NTHREADS must
+# fit the job's cpu allocation; both auto-scale from SLURM_CPUS_PER_TASK in env.sh).
+# The per-(child,chrom) work lives in 06c_beagle_one.sh, which is idempotent (skips
+# pairs already phased), so a resubmit reuses prior progress.
+#
+# Plan §6.4 phase 6c — logic unchanged from v1.1; only the scheduling is parallel.
 
 set -euo pipefail
 
@@ -18,54 +21,32 @@ require bcftools
 require java
 require_file "$BEAGLE_JAR"
 require_file "$VALIDATION_DIR/trio_pedigree.tsv"
+require_file "$SCRIPT_DIR/06c_beagle_one.sh"
 
 cd "$VALIDATION_DIR"
 
-# Family exclusion files
-awk -F'\t' 'NR>1 {print $1 > "trio_family_"$1".txt"; print $2 >> "trio_family_"$1".txt"; print $3 >> "trio_family_"$1".txt"}' \
+# Per-child family exclusion files (child + both parents). Build them ONCE here,
+# before the parallel fan-out, so concurrent workers never race to create them.
+awk -F'\t' 'NR>1 {f="trio_family_"$1".txt"; print $1 > f; print $2 >> f; print $3 >> f}' \
   trio_pedigree.tsv
 
+# Build the (child, chrom) job list.
+joblist="$(mktemp)"
+trap 'rm -f "$joblist"' EXIT
 while IFS=$'\t' read -r child father mother pop; do
   [ "$child" = "child" ] && continue
-  exclude_file="trio_family_${child}.txt"
+  [ -z "$child" ] && continue
   for chr in $CHROMS; do
-    beagle_out="child_beagle_phased_${child}_chr${chr}.vcf.gz"
-    [ -s "$beagle_out" ] && continue
-
-    panel_in="$PANEL_DIR/ref_panel_chr${chr}.vcf.gz"
-    require_file "$panel_in"
-
-    # Extract child as unphased single-sample.
-    bcftools view -s "$child" "$panel_in" \
-      | sed 's/|/\//g' \
-      | bcftools view -Oz -o "child_unphased_${child}_chr${chr}.vcf.gz"
-    bcftools index -t "child_unphased_${child}_chr${chr}.vcf.gz"
-
-    # Reference panel without child's family.
-    ref_loo="ref_without_family_${child}_chr${chr}.vcf.gz"
-    if [ ! -s "$ref_loo" ]; then
-      bcftools view -S "^${exclude_file}" "$panel_in" -Oz -o "$ref_loo"
-      bcftools index -t "$ref_loo"
-    fi
-
-    # Beagle wants the 4-col plink map whose chrom field matches the panel's
-    # chr-prefixed contigs (gnomAD HGDP+1KG shapeit5 = 'chr22'), i.e. the
-    # chr_in_chrom_field variant 'plink.chrchrN.GRCh38.map' (filename carries a
-    # literal double 'chr'). This is the SAME file the runtime loads from the
-    # shipped bundle (backend/analysis/lai_runner.py: genetic_maps/plink.chrchrN.GRCh38.map).
-    # The old flat path genetic_maps_grch38/plink.chrN.GRCh38.map never existed.
-    genetic_map="$RAW_DIR/genetic_maps_grch38/chr_in_chrom_field/plink.chrchr${chr}.GRCh38.map"
-    require_file "$genetic_map"
-
-    phase_log "Beagle: ${child} chr${chr}"
-    java -Xmx"$BEAGLE_XMX" -jar "$BEAGLE_JAR" \
-      gt="child_unphased_${child}_chr${chr}.vcf.gz" \
-      ref="$ref_loo" \
-      map="$genetic_map" \
-      out="child_beagle_phased_${child}_chr${chr}" \
-      impute=false \
-      2>&1 | tee -a "$LOG_DIR/beagle_${child}_chr${chr}.log"
+    printf '%s\t%s\n' "$child" "$chr" >> "$joblist"
   done
-done < <(tail -n +2 trio_pedigree.tsv)
+done < "$VALIDATION_DIR/trio_pedigree.tsv"
+
+n_jobs=$(wc -l < "$joblist")
+phase_log "phase 6c: $n_jobs (child,chrom) beagle jobs — ${BEAGLE_PARALLEL} parallel x ${BEAGLE_NTHREADS} threads"
+
+# Fan out. xargs runs one worker per line (-L1), BEAGLE_PARALLEL at a time (-P),
+# and exits non-zero if ANY worker fails — so set -e fails the phase loudly rather
+# than silently shipping a bundle with missing beagle phasings.
+xargs -P "$BEAGLE_PARALLEL" -L1 -a "$joblist" bash "$SCRIPT_DIR/06c_beagle_one.sh"
 
 phase_log "phase 6c complete"

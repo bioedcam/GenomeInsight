@@ -5,8 +5,11 @@
 #
 #SBATCH --job-name=lai_finish
 #SBATCH --partition=gpu
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+# 64 cpus so phase 6c fans out 16 concurrent Beagle runs x 4 threads each
+# (env.sh derives BEAGLE_PARALLEL = SLURM_CPUS_PER_TASK / BEAGLE_NTHREADS); the
+# other finish phases (06b/06d/06e single-thread, 07) just under-use the request.
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=lai_finish_%j.out
 
