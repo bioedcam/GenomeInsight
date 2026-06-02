@@ -60,6 +60,7 @@ EXPECTED_HELPERS = [
     "06d_phasing_accuracy.py",
     "06e_lai_accuracy.py",
     "07_write_metadata.py",
+    "gnomix_launcher.py",
 ]
 
 
@@ -196,10 +197,93 @@ class TestPythonHelpersCompile:
             "06d_phasing_accuracy.py",
             "06e_lai_accuracy.py",
             "07_write_metadata.py",
+            "gnomix_launcher.py",
         ],
     )
     def test_py_compile(self, name: str) -> None:
         py_compile.compile(str(SCRIPTS_DIR / name), doraise=True)
+
+
+class TestGnomixPandasAppendShim:
+    """gnomix's src/laidataset.py calls the pandas<2 ``DataFrame.append`` (removed
+    in pandas 2.0) in the small-population ``include_all`` path (fires for tiny
+    pops like EUR=3). The shared ``gnomix`` env runs pandas>=2, so gnomix_launcher
+    restores ``append`` in-process before running gnomix. Lock in that behaviour and
+    the phase-05 wiring so the env-version regression cannot silently return.
+    """
+
+    def _mod(self):
+        return _load_module("gnomix_launcher.py", "gnomix_launcher")
+
+    def test_df_append_helper_concats_rows(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        df = pd.DataFrame({"a": [1, 2]})
+        out = mod._df_append(df, pd.DataFrame({"a": [3]}))
+        assert list(out["a"]) == [1, 2, 3]
+        # gnomix never uses it, but the pandas<2 list form must also work.
+        out2 = mod._df_append(df, [pd.DataFrame({"a": [3]}), pd.DataFrame({"a": [4]})])
+        assert list(out2["a"]) == [1, 2, 3, 4]
+
+    def test_series_append_helper_concats(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        s = pd.Series([1, 2])
+        assert list(mod._series_append(s, pd.Series([3]))) == [1, 2, 3]
+
+    def test_install_shim_yields_working_append(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+        had_df = hasattr(pd.DataFrame, "append")
+        had_s = hasattr(pd.Series, "append")
+        orig_df = pd.DataFrame.append if had_df else None
+        orig_s = pd.Series.append if had_s else None
+        try:
+            mod.install_pandas_append_shim()
+            assert hasattr(pd.DataFrame, "append")
+            df = pd.DataFrame({"a": [1]})
+            assert list(df.append(pd.DataFrame({"a": [2]}))["a"]) == [1, 2]
+        finally:
+            # never leak a patched/removed attr into the rest of the suite
+            if had_df:
+                pd.DataFrame.append = orig_df
+            elif hasattr(pd.DataFrame, "append"):
+                del pd.DataFrame.append
+            if had_s:
+                pd.Series.append = orig_s
+            elif hasattr(pd.Series, "append"):
+                del pd.Series.append
+
+    def test_install_shim_does_not_overwrite_existing_append(self) -> None:
+        import pandas as pd
+
+        mod = self._mod()
+
+        def sentinel(*_a, **_k):
+            return "ORIGINAL"
+
+        orig = pd.DataFrame.append if hasattr(pd.DataFrame, "append") else None
+        try:
+            pd.DataFrame.append = sentinel
+            mod.install_pandas_append_shim()
+            assert pd.DataFrame.append is sentinel  # no-op when append already present
+        finally:
+            if orig is not None:
+                pd.DataFrame.append = orig
+            else:
+                del pd.DataFrame.append
+
+    def test_phase05_routes_gnomix_through_launcher(self) -> None:
+        text = (SCRIPTS_DIR / "05_train_gnomix.sh").read_text()
+        # phase 05 must invoke gnomix THROUGH the launcher, passing the real
+        # gnomix.py entrypoint as the launcher's first argument.
+        assert "gnomix_launcher.py" in text
+        assert re.search(r"gnomix_launcher\.py\b.*\n.*gnomix\.py", text) or (
+            "gnomix_launcher.py" in text and "$GNOMIX_DIR_INSTALL/gnomix.py" in text
+        )
 
 
 class TestLaiAccuracyParser:
