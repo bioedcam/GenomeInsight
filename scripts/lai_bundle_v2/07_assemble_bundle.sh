@@ -21,6 +21,7 @@ source "$SCRIPT_DIR/env.sh"
 require python
 require md5sum
 require tar
+require conda  # gnomix-model re-export runs in $GNOMIX_ENV (numpy/xgboost/sklearn)
 
 cd "$BUNDLE_DIR"
 
@@ -36,7 +37,16 @@ for chr in $CHROMS; do
   # genetic_maps/ dir (the old flat path genetic_maps_grch38/plink.chrN... did exactly that).
   cp "$RAW_DIR/genetic_maps_grch38/chr_in_chrom_field/plink.chrchr${chr}.GRCh38.map" genetic_maps/
   mkdir -p "gnomix_models/chr${chr}"
-  cp -r "$GNOMIX_DIR/output_chr${chr}/." "gnomix_models/chr${chr}/"
+  # gnomix's native .pkl is NOT the shipped format — the runtime
+  # (backend/analysis/gnomix_inference.py) loads base_coefs.npz + smoother.json +
+  # metadata.npz. Re-export the pickle into that dependency-free trio (faithful port
+  # of v1.1 reexport_gnomix_models.py; v2 had been raw-copying the gnomix output).
+  # Runs in $GNOMIX_ENV to unpickle the sklearn/xgboost model objects.
+  conda run -n "$GNOMIX_ENV" --no-capture-output \
+    python "$SCRIPT_DIR/07b_reexport_gnomix_models.py" \
+    --model-pkl "$GNOMIX_DIR/output_chr${chr}/models/model_chm_chr${chr}/model_chm_chr${chr}.pkl" \
+    --out-dir "gnomix_models/chr${chr}" \
+    --gnomix-dir "$GNOMIX_DIR_INSTALL"
 done
 
 cp "$LIFTOVER_DIR/hg19ToHg38.over.chain.gz" liftover/

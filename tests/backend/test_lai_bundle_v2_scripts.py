@@ -61,6 +61,7 @@ EXPECTED_HELPERS = [
     "06e_lai_accuracy.py",
     "07_write_metadata.py",
     "gnomix_launcher.py",
+    "07b_reexport_gnomix_models.py",
 ]
 
 
@@ -198,10 +199,47 @@ class TestPythonHelpersCompile:
             "06e_lai_accuracy.py",
             "07_write_metadata.py",
             "gnomix_launcher.py",
+            "07b_reexport_gnomix_models.py",
         ],
     )
     def test_py_compile(self, name: str) -> None:
         py_compile.compile(str(SCRIPTS_DIR / name), doraise=True)
+
+
+class TestPhase05ModelPathCheck:
+    """gnomix saves the model NESTED at
+    output_chrN/models/model_chm_chrN/model_chm_chrN.pkl, not output_chrN/*.pkl.
+    The skip-guard and the success-check must look at the nested path or the task
+    exit-1's "MISSING" after a successful train (and on resume it re-trains).
+    """
+
+    def test_skip_and_success_check_use_nested_model_path(self) -> None:
+        text = (SCRIPTS_DIR / "05_train_gnomix.sh").read_text()
+        assert "models/model_chm_chr${chr}/model_chm_chr${chr}.pkl" in text
+        # the broken top-level glob must be gone from the guards
+        assert '"$out_dir"/*.pkl' not in text
+        assert '"output_chr${chr}"/*.pkl' not in text
+
+
+class TestPhase07ReexportsGnomixModels:
+    """The shipped bundle ships base_coefs.npz + smoother.json + metadata.npz per
+    chromosome (what backend/analysis/gnomix_inference.load_gnomix_model loads), not
+    gnomix's native .pkl. Phase 07 must re-export, not raw-copy the gnomix output.
+    """
+
+    def test_assemble_runs_reexport_not_raw_copy(self) -> None:
+        text = (SCRIPTS_DIR / "07_assemble_bundle.sh").read_text()
+        assert "07b_reexport_gnomix_models.py" in text
+        # the old raw copy of the gnomix output dir must be gone
+        assert 'cp -r "$GNOMIX_DIR/output_chr${chr}/." "gnomix_models/chr${chr}/"' not in text
+
+    def test_reexporter_emits_runtime_trio(self) -> None:
+        text = (SCRIPTS_DIR / "07b_reexport_gnomix_models.py").read_text()
+        for artifact in ("base_coefs.npz", "smoother.json", "metadata.npz"):
+            assert artifact in text
+        # metadata keys the runtime reads must be written
+        for key in ("snp_pos", "snp_ref", "snp_alt", "population_order"):
+            assert key in text
 
 
 class TestGnomixPandasAppendShim:

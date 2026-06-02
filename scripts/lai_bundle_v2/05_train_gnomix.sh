@@ -38,10 +38,15 @@ for chr in $CHROMS; do
   # NOT the 4-col space-delimited genetic_maps_grch38/.../plink.*.GRCh38.map (Beagle's format).
   genetic_map="$RAW_DIR/genetic_maps_gnomix/chr${chr}.map"
   out_dir="output_chr${chr}"
+  # gnomix saves the trained model NESTED at
+  # output_chrN/models/model_chm_chrN/model_chm_chrN.pkl (NOT output_chrN/*.pkl) —
+  # check that exact path or the skip-guard / success-check below never fires and
+  # the task exit-1's "MISSING" after a successful train.
+  model_pkl="$out_dir/models/model_chm_chr${chr}/model_chm_chr${chr}.pkl"
   require_file "$panel_vcf"
   require_file "$genetic_map"
 
-  if [ -d "$out_dir" ] && ls "$out_dir"/*.pkl >/dev/null 2>&1; then
+  if [ -s "$model_pkl" ]; then
     phase_log "chr${chr}: gnomix model present, skipping"
     continue
   fi
@@ -95,7 +100,8 @@ done
 phase_log "phase 5 complete"
 missing=0
 for chr in $CHROMS; do
-  if [ -d "output_chr${chr}" ] && ls "output_chr${chr}"/*.pkl >/dev/null 2>&1; then
+  chr_model="output_chr${chr}/models/model_chm_chr${chr}/model_chm_chr${chr}.pkl"
+  if [ -s "$chr_model" ]; then
     phase_log "chr${chr}: OK ($(du -sh "output_chr${chr}" | awk '{print $1}'))"
   else
     phase_log "chr${chr}: MISSING"
