@@ -38,6 +38,15 @@
 # ─── External tool paths ─────────────────────────────────────────────────
 : "${BEAGLE_JAR:=$HOME/tools/beagle.jar}"
 : "${GNOMIX_DIR_INSTALL:=$HOME/tools/gnomix}"
+# gnomix reads ./config.yaml relative to CWD; pass this absolute path as its 8th
+# arg instead (CWD-independent). The SLURM array writes a per-task copy with
+# n_cores set so concurrent chromosomes don't oversubscribe the node.
+: "${GNOMIX_CONFIG:=$GNOMIX_DIR_INSTALL/config.yaml}"
+
+# gnomix has its own conda env (it needs sklearn_crfsuite / xgboost, which the
+# lai_bundle env lacks). Phase 05 runs gnomix via `conda run -n $GNOMIX_ENV`, so
+# the rest of the pipeline can stay in lai_bundle.
+: "${GNOMIX_ENV:=gnomix}"
 : "${CHAIN_URL:=https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz}"
 : "${GENETIC_MAPS_URL:=https://bochet.gcc.biostat.washington.edu/beagle/genetic_maps/plink.GRCh38.map.zip}"
 : "${GNOMAD_BUCKET:=gs://gcp-public-data--gnomad/resources/hgdp_1kg/phased_haplotypes_v2}"

@@ -22,9 +22,10 @@ PHASE_NAME=05_train_gnomix
 # shellcheck source=env.sh
 source "$SCRIPT_DIR/env.sh"
 
-require python
+require conda  # gnomix runs in its own env (GNOMIX_ENV) via `conda run`
 require_file "$ADMIX_DIR/sample_map.txt"
 require_file "$GNOMIX_DIR_INSTALL/gnomix.py"
+require_file "$GNOMIX_CONFIG"
 
 cp "$ADMIX_DIR/sample_map.txt" "$GNOMIX_DIR/sample_map.txt"
 
@@ -53,18 +54,27 @@ for chr in $CHROMS; do
   # In training the phased reference panel is BOTH query_file and reference_file.
   # The old 6-arg call gave len(sys.argv)==7 -> "Incorrect number of arguments"
   # + sys.exit(0): a SILENT no-op that set -e cannot catch (exit 0).
-  # This exact form (args, order, phase=True, chr_nr="chr${chr}", reference=panel)
-  # is the proven v1.1 production invocation, confirmed against the cluster
-  # bash_history training loop (phase=True ships the model's phasing module for
-  # unphased query data).
-  python "$GNOMIX_DIR_INSTALL/gnomix.py" \
+  # The 7-positional form (args 1-7) is the proven v1.1 production invocation
+  # (phase=True, chr_nr="chr${chr}", reference=panel — confirmed against the
+  # cluster bash_history training loop; phase=True ships the model's phasing
+  # module for unphased query data).
+  # 8th arg = config file (len(sys.argv)==9): gnomix otherwise reads ./config.yaml
+  # relative to CWD, which is $GNOMIX_DIR (no config there) -> FileNotFoundError.
+  # Passing $GNOMIX_CONFIG (absolute) makes it CWD-independent AND lets the SLURM
+  # array cap n_cores per task.
+  # gnomix runs in its own env ($GNOMIX_ENV) — it needs sklearn_crfsuite/xgboost
+  # the lai_bundle env lacks — via `conda run` so the rest of the pipeline (this
+  # script, run_rebuild.sh) can stay in lai_bundle. --no-capture-output streams to tee.
+  conda run -n "$GNOMIX_ENV" --no-capture-output \
+    python "$GNOMIX_DIR_INSTALL/gnomix.py" \
     "$panel_vcf" \
     "$out_dir" \
     "chr${chr}" \
     True \
     "$genetic_map" \
     "$panel_vcf" \
-    sample_map.txt \
+    "$GNOMIX_DIR/sample_map.txt" \
+    "$GNOMIX_CONFIG" \
     2>&1 | tee "$LOG_DIR/gnomix_train_chr${chr}.log"
   # gnomix exits 0 even on the bad-argc usage path; fail loudly if that happens
   # so the orchestrator stops instead of "completing" with no model.

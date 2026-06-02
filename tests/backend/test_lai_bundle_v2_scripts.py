@@ -301,6 +301,46 @@ class TestTrioIdentification:
         assert children.strip() == "HG1"
 
 
+class TestSlurmRebuild:
+    """SLURM DAG: prep(02-04) -> gnomix array(05, per-chrom) -> finish(06-07),
+    and phase 05 runs gnomix in its own conda env.
+    """
+
+    SLURM_DIR = SCRIPTS_DIR / "slurm"
+
+    @pytest.mark.parametrize("name", ["prep.sbatch", "05_train_gnomix.sbatch", "finish.sbatch"])
+    def test_sbatch_present_and_bash_n(self, name: str) -> None:
+        path = self.SLURM_DIR / name
+        assert path.is_file(), f"{path} missing"
+        r = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True, check=False)
+        assert r.returncode == 0, r.stderr
+
+    def test_orchestrator_chains_the_dag(self) -> None:
+        path = SCRIPTS_DIR / "run_rebuild_slurm.sh"
+        r = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True, check=False)
+        assert r.returncode == 0, r.stderr
+        text = path.read_text()
+        for f in ("prep.sbatch", "05_train_gnomix.sbatch", "finish.sbatch"):
+            assert f in text
+        assert "--dependency=" in text and "afterok" in text  # chained
+        assert "--array=" in text  # phase 05 is an array
+
+    def test_phase05_array_is_per_chromosome_and_caps_cores(self) -> None:
+        text = (self.SLURM_DIR / "05_train_gnomix.sbatch").read_text()
+        assert "--array=1-22" in text
+        assert "SLURM_ARRAY_TASK_ID" in text  # one chromosome per task
+        assert "n_cores" in text  # caps gnomix cores per task
+
+    def test_phase05_runs_in_gnomix_env(self) -> None:
+        text = (SCRIPTS_DIR / "05_train_gnomix.sh").read_text()
+        assert "conda run -n" in text and "GNOMIX_ENV" in text
+
+    def test_env_defines_gnomix_env_and_config(self) -> None:
+        text = (SCRIPTS_DIR / "env.sh").read_text()
+        assert "GNOMIX_ENV:=gnomix" in text
+        assert "GNOMIX_CONFIG:=" in text
+
+
 class TestRunbook:
     def test_runbook_exists(self) -> None:
         assert RUNBOOK.is_file(), f"runbook missing at {RUNBOOK}"
