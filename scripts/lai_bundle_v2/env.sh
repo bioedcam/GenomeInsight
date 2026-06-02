@@ -59,6 +59,12 @@
 : "${ADMIXTURE_SEED:=42}"  # locked — re-running with this seed reproduces labels (Plan §6.3 step 4)
 : "${SINGLE_ANCESTRY_THRESHOLD:=0.95}"
 : "${BEAGLE_XMX:=4g}"
+# Phase 6c parallel fan-out: BEAGLE_PARALLEL concurrent Beagle runs, each capped to
+# BEAGLE_NTHREADS threads. BEAGLE_PARALLEL auto-scales from the SLURM cpu allocation
+# (cpus / threads) so PARALLEL*NTHREADS never oversubscribes the job; floored at 1.
+: "${BEAGLE_NTHREADS:=4}"
+: "${BEAGLE_PARALLEL:=$(( ${SLURM_CPUS_PER_TASK:-16} / BEAGLE_NTHREADS ))}"
+[ "${BEAGLE_PARALLEL}" -ge 1 ] 2>/dev/null || BEAGLE_PARALLEL=1
 
 # ─── Provenance ──────────────────────────────────────────────────────────
 : "${GIT_COMMIT:=$(git -C "${BASH_SOURCE%/*}/../.." rev-parse HEAD 2>/dev/null || echo unknown)}"

@@ -57,6 +57,7 @@ EXPECTED_HELPERS = [
     "06a_identify_trios.py",
     "06b_mendelian_phasing.py",
     "06c_beagle_loo_phasing.sh",
+    "06c_beagle_one.sh",
     "06d_phasing_accuracy.py",
     "06e_lai_accuracy.py",
     "07_write_metadata.py",
@@ -107,7 +108,9 @@ class TestOrchestratorPhaseOrder:
 
 
 class TestEveryPhaseSourcesEnv:
-    @pytest.mark.parametrize("name", EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh"])
+    @pytest.mark.parametrize(
+        "name", EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh", "06c_beagle_one.sh"]
+    )
     def test_phase_script_sources_env(self, name: str) -> None:
         text = (SCRIPTS_DIR / name).read_text()
         assert 'source "$SCRIPT_DIR/env.sh"' in text, f"{name} must source env.sh"
@@ -175,7 +178,9 @@ class TestShellSyntax:
 
     @pytest.mark.parametrize(
         "name",
-        ["env.sh", "run_rebuild.sh"] + EXPECTED_PHASE_SCRIPTS + ["06c_beagle_loo_phasing.sh"],
+        ["env.sh", "run_rebuild.sh"]
+        + EXPECTED_PHASE_SCRIPTS
+        + ["06c_beagle_loo_phasing.sh", "06c_beagle_one.sh"],
     )
     def test_bash_n_passes(self, name: str) -> None:
         path = SCRIPTS_DIR / name
@@ -272,6 +277,45 @@ class TestMendelianTruthPhasing06b:
         text = (SCRIPTS_DIR / "06b_mendelian_phasing.py").read_text()
         # pysam VariantRecordSamples does not support item deletion
         assert "del new_rec.samples" not in text
+
+
+class TestPhase06cParallel:
+    """06c fans out leave-one-out Beagle phasing over (child,chrom) via xargs -P,
+    delegating each pair to the 06c_beagle_one.sh worker. Lock in the fan-out
+    wiring, the per-run thread cap, the SLURM cpu bump, and the completeness-checked
+    skip guards (a bare -s test would reuse a truncated file from a killed run).
+    """
+
+    def test_fanout_uses_xargs_over_worker(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_loo_phasing.sh").read_text()
+        assert "xargs -P" in text
+        assert "06c_beagle_one.sh" in text
+        assert "BEAGLE_PARALLEL" in text
+
+    def test_worker_caps_beagle_threads(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_one.sh").read_text()
+        assert "nthreads=" in text
+        assert "BEAGLE_NTHREADS" in text
+
+    def test_skip_guards_check_completeness_not_just_size(self) -> None:
+        text = (SCRIPTS_DIR / "06c_beagle_one.sh").read_text()
+        # Beagle output reuse must verify BGZF integrity (not a bare -s), so a
+        # truncated file left by a killed/scancel'd worker is regenerated rather
+        # than skipped and shipped to 06d as corrupt phasing.
+        assert "bgzip -t" in text
+        # The ref panel reuse must additionally require its index (.tbi, written
+        # last by bcftools index -t) as a completion marker.
+        assert ".tbi" in text
+
+    def test_env_defines_parallel_and_threads(self) -> None:
+        text = (SCRIPTS_DIR / "env.sh").read_text()
+        assert "BEAGLE_NTHREADS" in text
+        assert "BEAGLE_PARALLEL" in text
+        assert "SLURM_CPUS_PER_TASK" in text  # auto-scales concurrency to the alloc
+
+    def test_finish_sbatch_sized_for_parallel_beagle(self) -> None:
+        text = (SCRIPTS_DIR / "slurm" / "finish.sbatch").read_text()
+        assert "--cpus-per-task=64" in text
 
 
 class TestGnomixPandasAppendShim:
