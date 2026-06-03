@@ -57,7 +57,15 @@
 : "${BCFTOOLS_THREADS:=4}"
 : "${ADMIXTURE_K_LIST:=7 12 20}"
 : "${ADMIXTURE_SEED:=42}"  # locked — re-running with this seed reproduces labels (Plan §6.3 step 4)
-: "${SINGLE_ANCESTRY_THRESHOLD:=0.95}"
+# Reference-panel selection (phase 04c). The old SINGLE_ANCESTRY_THRESHOLD=0.95
+# ADMIXTURE cutoff is DEPRECATED — it dropped 767/770 EUR samples (intermediate
+# continental groups never reach 0.95 on one component) → gnomix trained on 3
+# Europeans → all Europeans misclassified. Selection is now by curated
+# genetic_region with a light outlier floor + a per-region composition gate.
+: "${SINGLE_ANCESTRY_THRESHOLD:=0.95}"   # DEPRECATED/unused (see 04c --threshold)
+: "${SINGLE_ANCESTRY_MIN_Q:=0.5}"        # light admixture-outlier floor (0 = off)
+: "${PER_REGION_CAP:=0}"                 # 0 = no cap; else balance each region to <= N
+: "${MIN_PER_REGION:=20}"                # BUILD GATE — fail if any superpop under-represented
 : "${BEAGLE_XMX:=4g}"
 # Phase 6c parallel fan-out: BEAGLE_PARALLEL concurrent Beagle runs, each capped to
 # BEAGLE_NTHREADS threads. BEAGLE_PARALLEL auto-scales from the SLURM cpu allocation

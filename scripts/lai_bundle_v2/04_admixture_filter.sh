@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 4 — ADMIXTURE filtering to single-ancestry training labels.
+# Phase 4 — build the gnomix training reference panel.
 #
 # Input:
 #   $PANEL_DIR/ref_panel_all_autosomes.vcf.gz  (Phase 3)
@@ -9,11 +9,17 @@
 #   $ADMIX_DIR/ref_panel_pruned.{bed,bim,fam}  — LD-pruned PLINK files
 #   $ADMIX_DIR/admix_K{7,12,20}.K{7,12,20}.s${ADMIXTURE_SEED}.Q — ancestry proportions (fastmixture naming)
 #   $ADMIX_DIR/sample_map.txt                  — sample_id<TAB>population (Gnomix input)
-#   $ADMIX_DIR/single_ancestry_samples.tsv     — filtered table
+#   $ADMIX_DIR/single_ancestry_samples.tsv     — selected table
 #   $ADMIX_DIR/excluded_admixed_samples.tsv    — audit log
 #
-# Plan §6.4: phase unchanged from v1.1. ADMIXTURE seed is locked
-# (env.sh::ADMIXTURE_SEED) so re-running reproduces labels bit-for-bit.
+# fastmixture (ADMIXTURE) is still run — its Q now drives only a LIGHT
+# admixture-outlier floor + audit, NOT label assignment. Reference labels come
+# from the curated gnomAD genetic_region (see 04c_filter_single_ancestry.py).
+# The old `max_q >= 0.95` single-ancestry cutoff dropped 767/770 EUR samples
+# (intermediate groups never reach 0.95 on one component) → gnomix trained on 3
+# Europeans → all Europeans misclassified as CSA. A per-region composition gate
+# (MIN_PER_REGION) now fails the build before that can ship again.
+# ADMIXTURE seed is locked (env.sh::ADMIXTURE_SEED) for reproducibility.
 
 set -euo pipefail
 
@@ -68,14 +74,17 @@ for K in $ADMIXTURE_K_LIST; do
     --seed "$ADMIXTURE_SEED"
 done
 
-phase_log "filtering to single-ancestry individuals (>= ${SINGLE_ANCESTRY_THRESHOLD})"
+phase_log "selecting reference panel by curated genetic_region (min_q>=${SINGLE_ANCESTRY_MIN_Q}, per-region-cap=${PER_REGION_CAP}, gate>=${MIN_PER_REGION})"
 python "$SCRIPT_DIR/04c_filter_single_ancestry.py" \
-  --q-matrix "$ADMIX_DIR/admix_K7.K7.s${ADMIXTURE_SEED}.Q" \
   --fam "$ADMIX_DIR/ref_panel_pruned.fam" \
   --meta "$RAW_DIR/gnomad_meta_updated.tsv" \
-  --threshold "$SINGLE_ANCESTRY_THRESHOLD" \
+  --q-matrix "$ADMIX_DIR/admix_K7.K7.s${ADMIXTURE_SEED}.Q" \
+  --min-q "$SINGLE_ANCESTRY_MIN_Q" \
+  --per-region-cap "$PER_REGION_CAP" \
+  --min-per-region "$MIN_PER_REGION" \
+  --seed "$ADMIXTURE_SEED" \
   --out-sample-map "$ADMIX_DIR/sample_map.txt" \
   --out-single-ancestry "$ADMIX_DIR/single_ancestry_samples.tsv" \
   --out-excluded "$ADMIX_DIR/excluded_admixed_samples.tsv"
 
-phase_log "phase 4 complete: $(wc -l < sample_map.txt) single-ancestry training samples"
+phase_log "phase 4 complete: $(wc -l < sample_map.txt) reference training samples"

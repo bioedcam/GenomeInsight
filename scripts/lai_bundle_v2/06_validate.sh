@@ -75,6 +75,8 @@ phase_log "scoring LAI accuracy from gnomix per-chromosome training logs"
 python "$SCRIPT_DIR/06e_lai_accuracy.py" \
   --log-dir "$LOG_DIR" \
   --chroms "$CHROMS" \
+  --sample-map "$ADMIX_DIR/sample_map.txt" \
+  --min-per-region "$MIN_PER_REGION" \
   --out-report "$VALIDATION_DIR/lai_accuracy_report.json"
 
 phase_log "phase 6 complete — bio-validator: confirm both accuracy reports clear targets before phase 7"
