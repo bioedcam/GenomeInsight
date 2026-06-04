@@ -82,9 +82,7 @@ def test_select_with_individual_id_works_after_backfill(tmp_path: Path) -> None:
     ensure_reference_schema_current(engine)
 
     with engine.connect() as conn:
-        rows = conn.execute(
-            sa.text("SELECT id, name, individual_id FROM samples")
-        ).fetchall()
+        rows = conn.execute(sa.text("SELECT id, name, individual_id FROM samples")).fetchall()
     assert rows == []
 
 
