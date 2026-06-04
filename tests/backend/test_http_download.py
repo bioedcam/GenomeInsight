@@ -122,9 +122,7 @@ class TestStreamDownloadWithResume:
         assert transport.requests[1].headers["Range"] == f"bytes={len(PAYLOAD) // 2}-"
 
     def test_multiple_drops_then_success(self, tmp_path: Path):
-        transport = _ScriptedTransport(
-            [_dropped(at=1000), _dropped(at=4000), _resume]
-        )
+        transport = _ScriptedTransport([_dropped(at=1000), _dropped(at=4000), _resume])
         dest = _download(tmp_path, transport)
 
         assert dest.read_bytes() == PAYLOAD
