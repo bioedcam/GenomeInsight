@@ -28,7 +28,15 @@ require_file "$GNOMIX_DIR_INSTALL/gnomix.py"
 require_file "$SCRIPT_DIR/gnomix_launcher.py"  # pandas>=2 compat shim wrapper
 require_file "$GNOMIX_CONFIG"
 
-cp "$ADMIX_DIR/sample_map.txt" "$GNOMIX_DIR/sample_map.txt"
+# Do NOT stage the sample_map into a single shared $GNOMIX_DIR path. Under the
+# phase-05 SLURM array all 22 tasks share $GNOMIX_DIR, so `cp` to one shared
+# destination RACES on the cluster NFS (`cp: cannot create regular file
+# '.../sample_map.txt': File exists`); with `set -e` that kills the task and
+# SLURM requeues + re-trains it — a wasteful loop that also strands chroms that
+# keep losing the race (observed: chr6 never produced a model). gnomix reads the
+# sample_map read-only (laidataset.py: pd.read_csv), so pass
+# $ADMIX_DIR/sample_map.txt directly — concurrent reads of the unchanging file
+# are race-free, and no per-task copy is needed.
 
 cd "$GNOMIX_DIR"
 
@@ -86,7 +94,7 @@ for chr in $CHROMS; do
     True \
     "$genetic_map" \
     "$panel_vcf" \
-    "$GNOMIX_DIR/sample_map.txt" \
+    "$ADMIX_DIR/sample_map.txt" \
     "$GNOMIX_CONFIG" \
     2>&1 | tee "$LOG_DIR/gnomix_train_chr${chr}.log"
   # gnomix exits 0 even on the bad-argc usage path; fail loudly if that happens
