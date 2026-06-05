@@ -259,9 +259,7 @@ class TestRecordDbsnpVersion:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _fake_stream_download(
-    *, content: bytes = b"", headers=None, exc: BaseException | None = None
-):
+def _fake_stream_download(*, content: bytes = b"", headers=None, exc: BaseException | None = None):
     """Fake ``stream_download`` writing ``content`` (or raising ``exc``).
 
     The real transfer/resume logic is covered by ``test_http_download.py``; the
@@ -314,9 +312,7 @@ class TestDownloadRsmergeArch:
                 content=b"x", headers={"Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
             ),
         ):
-            download_rsmerge_arch(
-                tmp_path, url="https://example.com/test.bcp.gz", meta=meta
-            )
+            download_rsmerge_arch(tmp_path, url="https://example.com/test.bcp.gz", meta=meta)
         assert meta["version"] == "20151021"
 
     def test_download_error_propagates_no_temp(self, tmp_path: Path):

@@ -853,9 +853,7 @@ class TestRecordGwasVersion:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _fake_stream_download(
-    *, content: bytes = b"", headers=None, exc: BaseException | None = None
-):
+def _fake_stream_download(*, content: bytes = b"", headers=None, exc: BaseException | None = None):
     """Fake ``stream_download`` writing ``content`` (or raising ``exc``).
 
     Resume/retry behaviour is covered in ``test_http_download.py``; these tests
