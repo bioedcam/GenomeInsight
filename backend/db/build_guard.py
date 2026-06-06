@@ -27,15 +27,19 @@ if TYPE_CHECKING:
 
 # Guards the ``_locks`` registry itself (NOT held during a build).
 _registry_lock = threading.Lock()
-_locks: dict[str, threading.Lock] = {}
+# Per-DB locks are *reentrant*: a single thread that holds the build slot (e.g.
+# the clean path, which acquires it then calls health, which probes the lock via
+# is_build_locked) must not deadlock or self-report a phantom build. Reentrancy
+# is same-thread only — cross-thread mutual exclusion is identical to a plain Lock.
+_locks: dict[str, threading.RLock] = {}
 
 
-def _lock_for(db_name: str) -> threading.Lock:
-    """Return the (lazily created) per-database lock for ``db_name``."""
+def _lock_for(db_name: str) -> threading.RLock:
+    """Return the (lazily created) per-database reentrant lock for ``db_name``."""
     with _registry_lock:
         lock = _locks.get(db_name)
         if lock is None:
-            lock = threading.Lock()
+            lock = threading.RLock()
             _locks[db_name] = lock
         return lock
 
@@ -53,3 +57,37 @@ def build_lock(db_name: str) -> Iterator[None]:
         yield
     finally:
         lock.release()
+
+
+def is_build_locked(db_name: str) -> bool:
+    """Best-effort check of whether a build is currently running for ``db_name``.
+
+    Probes the per-DB lock without blocking: if it cannot be acquired, a builder
+    holds it (a build is in flight). Used by health reporting to surface an
+    in-progress build even when no session job links it (e.g. an update-manager
+    rebuild). A builder holds the lock for the whole build, so a transient
+    between-operations false negative is not possible mid-build.
+    """
+    lock = _lock_for(db_name)
+    acquired = lock.acquire(blocking=False)
+    if acquired:
+        lock.release()
+    return not acquired
+
+
+@contextmanager
+def try_acquire_build_lock(db_name: str) -> Iterator[bool]:
+    """Non-blocking variant of :func:`build_lock` for mutually-exclusive callers.
+
+    Yields ``True`` if this thread acquired the build slot (and releases it on
+    exit), or ``False`` immediately if a build already holds it. Used by the
+    "clean" path so removing a partial/corrupt artifact can never race a build
+    of the same database.
+    """
+    lock = _lock_for(db_name)
+    acquired = lock.acquire(blocking=False)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            lock.release()

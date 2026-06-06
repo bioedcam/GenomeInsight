@@ -210,6 +210,8 @@ GenomeInsight downloads reference databases needed for variant annotation:
 
 Downloads are resumable — if interrupted, they pick up where they left off. Progress is displayed per-database via real-time streaming.
 
+If a download is interrupted by a crash or disconnect, the wizard shows a **Resume** button for that database (it continues from the saved partial rather than restarting). At any time you can inspect every database's health — including integrity (is it readable by the annotation engine?), partial downloads, and last error — under **Settings → System Health → Database Health**, where you can Resume, Verify, or Clean a database that needs attention. A database is only treated as installed once its data is present *and* passes the integrity check, so a half-finished or corrupted download is reported honestly instead of silently failing during annotation.
+
 ### Step 6: Upload Your Data
 
 Upload your 23andMe raw data file (`.txt` or `.zip`). GenomeInsight auto-detects the file format version (v3, v4, or v5) and begins parsing. Once parsing completes, annotation runs automatically in the background.
