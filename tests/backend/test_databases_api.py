@@ -309,9 +309,7 @@ class TestBundledInstall:
         finally:
             manifest_mod.reset_cache()
 
-    def test_bundle_install_needed_uses_manifest_version(
-        self, tmp_data_dir: Path, monkeypatch
-    ):
+    def test_bundle_install_needed_uses_manifest_version(self, tmp_data_dir: Path, monkeypatch):
         from backend.api.routes.databases import _bundle_install_needed
         from backend.db import manifest as manifest_mod
         from backend.db.database_registry import _record_db_version

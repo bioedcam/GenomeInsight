@@ -1173,9 +1173,7 @@ class TestUpdateAPI:
                     return_value=f"job-{db_name}",
                 ),
             ):
-                resp = update_client.post(
-                    "/api/updates/trigger", json={"db_name": db_name}
-                )
+                resp = update_client.post("/api/updates/trigger", json={"db_name": db_name})
             assert resp.status_code == 202, (db_name, resp.text)
             assert resp.json()["db_name"] == db_name
 
