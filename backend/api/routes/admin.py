@@ -245,7 +245,7 @@ def get_db_stats() -> list[DatabaseStat]:
     # Row count table names for each DB
     db_main_tables = {
         "clinvar": "clinvar_variants",
-        "vep_bundle": "vep_predictions",
+        "vep_bundle": "vep_annotations",
         "gnomad": "gnomad_af",
         "dbnsfp": "dbnsfp_scores",
         "encode_ccres": "encode_ccres",

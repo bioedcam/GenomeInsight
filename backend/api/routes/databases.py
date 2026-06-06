@@ -6,6 +6,13 @@ Endpoints:
     GET    /api/databases/progress/{session_id}  — SSE stream with per-database progress events
     GET    /api/databases/sessions               — List all download sessions
     DELETE /api/databases/sessions/{session_id}  — Delete a download session
+
+Health & recovery (DB hardening):
+    GET    /api/databases/health                 — Fused per-DB health: state, integrity,
+                                                   resumable partials, last error
+    POST   /api/databases/resume                 — Resume an interrupted download from its partial
+    POST   /api/databases/{db_name}/verify       — Deep integrity check (PRAGMA quick_check)
+    POST   /api/databases/{db_name}/clean        — Remove a partial/corrupt artifact for re-fetch
 """
 
 from __future__ import annotations
@@ -15,8 +22,9 @@ import shutil
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
@@ -28,7 +36,7 @@ from starlette.responses import StreamingResponse
 
 from backend.api.sse import _format_sse, get_job_progress
 from backend.config import Settings, get_settings
-from backend.db.build_guard import build_lock
+from backend.db.build_guard import build_lock, try_acquire_build_lock
 from backend.db.connection import get_registry
 from backend.db.database_registry import (
     DATABASES,
@@ -38,6 +46,13 @@ from backend.db.database_registry import (
     get_database,
     get_database_status,
     install_committed_bundle,
+)
+from backend.db.db_health import (
+    clean_database_artifacts,
+    find_resumable_download,
+    get_all_database_health,
+    get_database_health,
+    validate_database,
 )
 from backend.db.download_manager import DownloadManager
 from backend.db.manifest import get_bundle_info
@@ -124,6 +139,61 @@ class SessionResponse(BaseModel):
     status: str
     created_at: str
     databases: list[DownloadJobInfo]
+
+
+class DatabaseHealthResponse(BaseModel):
+    """Fused health record for a single reference database."""
+
+    name: str
+    display_name: str
+    build_mode: str
+    required: bool
+    state: str  # not_installed|downloading|building|partial|corrupt|ready|failed
+    present: bool
+    version: str | None
+    downloaded_at: str | None
+    file_size_bytes: int | None
+    expected_size_bytes: int
+    integrity_ok: bool | None
+    integrity_detail: str | None
+    resumable: bool
+    download_id: int | None
+    downloaded_bytes: int | None
+    total_bytes: int | None
+    progress_pct: float | None
+    active_job_id: str | None
+    last_error: str | None
+    can_clean: bool
+    can_resume: bool
+    can_verify: bool
+
+
+class DatabaseHealthListResponse(BaseModel):
+    """Response for GET /api/databases/health."""
+
+    databases: list[DatabaseHealthResponse]
+
+
+class ResumeRequest(BaseModel):
+    """Request body for POST /api/databases/resume."""
+
+    db_name: str
+
+
+class VerifyResponse(BaseModel):
+    """Response for POST /api/databases/{db_name}/verify."""
+
+    db_name: str
+    ok: bool
+    detail: str
+    depth: str
+
+
+class CleanResponse(BaseModel):
+    """Response for POST /api/databases/{db_name}/clean."""
+
+    db_name: str
+    removed: list[str]
 
 
 # ── Active download sessions (in-memory cache) ──────────────────────
@@ -619,6 +689,29 @@ def _execute_build(
             message=f"Building {db_info.display_name} from upstream source...",
         )
 
+        # Hardening: a build killed mid-write can leave a corrupt/truncated
+        # standalone SQLite with no version stamp. Re-opening it for the rebuild
+        # would fail outright (malformed image) or splice onto stale rows. Drop
+        # a corrupt partial first so the build starts clean. reference.db is
+        # shared across DBs and is never removed here.
+        if db_info.target_db == "standalone" and db_info.build_mode == "pipeline":
+            dest = db_info.dest_path(settings)
+            if dest.exists() and not validate_database(db_info.name, settings).ok:
+                for stale in (dest, Path(f"{dest}-wal"), Path(f"{dest}-shm")):
+                    try:
+                        stale.unlink(missing_ok=True)
+                    except OSError as unlink_exc:
+                        logger.warning(
+                            "stale_partial_unlink_failed",
+                            path=str(stale),
+                            error=str(unlink_exc),
+                        )
+                logger.info(
+                    "corrupt_standalone_partial_removed",
+                    db_name=db_info.name,
+                    path=str(dest),
+                )
+
         build_fn = get_build_fn(db_info.name)
         if build_fn is None:
             raise ValueError(f"No build function registered for {db_info.name}")
@@ -975,3 +1068,175 @@ def _update_job(
                 time.sleep(0.1 * (2**attempt))
             else:
                 raise
+
+
+# ── GET /api/databases/health ────────────────────────────────────────
+
+
+@router.get("/health", response_model=DatabaseHealthListResponse)
+async def database_health() -> DatabaseHealthListResponse:
+    """Fused health for every reference database (100% observability surface).
+
+    Reports, per database: derived ``state`` (not_installed / downloading /
+    building / partial / corrupt / ready / failed), on-disk presence + size,
+    version stamp, a fast structural integrity verdict (is it readable by the
+    annotation code?), any resumable partial download, the active job id, and
+    the last error. The structural integrity probe is cheap (open + a
+    ``LIMIT 1`` per consumer table); the heavier ``PRAGMA quick_check`` is
+    reserved for the explicit ``/verify`` action.
+    """
+    settings = get_settings()
+    engine = get_registry().reference_engine
+    records = await asyncio.to_thread(get_all_database_health, settings, engine)
+    return DatabaseHealthListResponse(
+        databases=[DatabaseHealthResponse(**asdict(r)) for r in records]
+    )
+
+
+# ── POST /api/databases/resume ───────────────────────────────────────
+
+
+@router.post("/resume", response_model=DownloadResponse, status_code=202)
+async def resume_download(body: ResumeRequest) -> DownloadResponse:
+    """Resume an interrupted ``download``-mode transfer from its partial.
+
+    Re-runs the same download path the wizard uses; :class:`DownloadManager`
+    detects the checkpointed ``.tmp`` and continues via an HTTP ``Range``
+    request instead of restarting. Returns a ``session_id`` so the existing
+    ``/progress/{session_id}`` SSE stream tracks it identically to a fresh
+    download.
+    """
+    settings = get_settings()
+    engine = get_registry().reference_engine
+
+    db_info = get_database(body.db_name)
+    if db_info is None:
+        raise HTTPException(status_code=404, detail=f"Unknown database: {body.db_name}")
+
+    resumable = find_resumable_download(engine, db_info, settings)
+    if resumable is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"No resumable partial download for '{body.db_name}'.",
+        )
+
+    if body.db_name in _get_in_flight_db_names(engine):
+        raise HTTPException(
+            status_code=409,
+            detail=f"A download/build for '{body.db_name}' is already in progress.",
+        )
+
+    session_id = f"dbdl-{uuid.uuid4().hex[:12]}"
+    job_id = f"dbdl-{body.db_name}-{uuid.uuid4().hex[:8]}"
+    _create_job_record(engine, job_id, body.db_name)
+
+    executor = get_download_executor()
+    dm = DownloadManager(engine, settings.downloads_dir)
+    executor.submit(
+        _run_download,
+        dm=dm,
+        db_info=db_info,
+        job_id=job_id,
+        engine=engine,
+        settings=settings,
+    )
+
+    session_entries = [(body.db_name, job_id)]
+    _active_sessions[session_id] = session_entries
+    _persist_session(engine, session_id, session_entries)
+
+    logger.info(
+        "database_download_resumed",
+        session_id=session_id,
+        db_name=body.db_name,
+        offset=resumable["downloaded_bytes"],
+    )
+
+    return DownloadResponse(
+        session_id=session_id,
+        downloads=[DownloadJobInfo(db_name=body.db_name, job_id=job_id)],
+    )
+
+
+# ── POST /api/databases/{db_name}/verify ─────────────────────────────
+
+
+@router.post("/{db_name}/verify", response_model=VerifyResponse)
+async def verify_database(db_name: str) -> VerifyResponse:
+    """Run a deep integrity check (``PRAGMA quick_check`` for SQLite).
+
+    Slower than the structural probe in ``/health`` — it scans the whole file —
+    so it is an explicit user action. Confirms the artifact is not just present
+    but structurally sound and readable by the annotation pipeline.
+    """
+    if get_database(db_name) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown database: {db_name}")
+
+    settings = get_settings()
+    engine = get_registry().reference_engine
+    result = await asyncio.to_thread(
+        validate_database, db_name, settings, engine=engine, deep=True
+    )
+    return VerifyResponse(db_name=db_name, ok=result.ok, detail=result.detail, depth=result.depth)
+
+
+# ── POST /api/databases/{db_name}/clean ──────────────────────────────
+
+
+@router.post("/{db_name}/clean", response_model=CleanResponse)
+async def clean_database(db_name: str) -> CleanResponse:
+    """Remove a partial/corrupt artifact so a clean re-download/build can run.
+
+    Refuses to act while a download/build is active (409) or when the database
+    is healthy (409) — a clean is only for recovering a broken state.
+
+    The destructive work runs while holding the per-DB :func:`build_lock`, so a
+    clean can never race a concurrent build of the same database (setup wizard
+    OR update manager), and the health re-check happens *inside* the lock to
+    close the check-then-delete TOCTOU.
+    """
+    db_info = get_database(db_name)
+    if db_info is None:
+        raise HTTPException(status_code=404, detail=f"Unknown database: {db_name}")
+
+    settings = get_settings()
+    engine = get_registry().reference_engine
+
+    result = await asyncio.to_thread(_clean_under_lock, db_info, settings, engine)
+    if result == "locked":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot clean '{db_name}' while a build is in progress.",
+        )
+    if result == "active":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot clean '{db_name}' while a download/build is active.",
+        )
+    if result == "ready":
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{db_name}' is healthy; nothing to clean.",
+        )
+    return CleanResponse(db_name=result["db_name"], removed=result["removed"])
+
+
+def _clean_under_lock(
+    db_info: DatabaseInfo,
+    settings: Settings,
+    engine: sa.Engine,
+) -> dict | str:
+    """Acquire the per-DB build lock, re-check health, then clean atomically.
+
+    Returns the clean result dict on success, or a sentinel string
+    (``"locked"`` / ``"active"`` / ``"ready"``) the caller maps to a 409.
+    """
+    with try_acquire_build_lock(db_info.name) as acquired:
+        if not acquired:
+            return "locked"
+        health = get_database_health(db_info, settings, engine)
+        if health.state in ("downloading", "building"):
+            return "active"
+        if health.state == "ready":
+            return "ready"
+        return clean_database_artifacts(db_info, settings, engine)

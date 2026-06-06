@@ -27,6 +27,50 @@ beforeEach(() => {
 
 // ─── Helper to mock API responses ───────────────────────────────────
 
+/**
+ * Route DatabasesStep fetches by URL instead of FIFO. DatabasesStep now also
+ * fires GET /api/databases/health on mount (resume/partial observability), so
+ * strict mockResolvedValueOnce queues desync. This routes by URL and returns an
+ * empty health list by default. Check the more-specific paths before the bare
+ * /api/databases list path. `download` may set ok:false to simulate a failure.
+ */
+function routeDatabasesFetch(opts: {
+  list: unknown
+  download?: { ok?: boolean; status?: number; body?: unknown }
+  resume?: { ok?: boolean; status?: number; body?: unknown }
+  health?: unknown
+}) {
+  mockFetch.mockImplementation((url: string) => {
+    const u = typeof url === 'string' ? url : String(url)
+    if (u.includes('/api/databases/health')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(opts.health ?? { databases: [] }),
+      })
+    }
+    if (u.includes('/api/databases/resume')) {
+      const r = opts.resume ?? { ok: true, body: {} }
+      return Promise.resolve({
+        ok: r.ok ?? true,
+        status: r.status ?? (r.ok === false ? 409 : 202),
+        json: () => Promise.resolve(r.body ?? {}),
+      })
+    }
+    if (u.includes('/api/databases/download')) {
+      const d = opts.download ?? { ok: true, body: {} }
+      return Promise.resolve({
+        ok: d.ok ?? true,
+        status: d.status ?? (d.ok === false ? 500 : 200),
+        json: () => Promise.resolve(d.body ?? {}),
+      })
+    }
+    if (u.includes('/api/databases')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(opts.list) })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  })
+}
+
 function mockSetupStatus(overrides: Record<string, unknown> = {}) {
   return {
     needs_setup: true,
@@ -1171,23 +1215,19 @@ describe('DatabasesStep', () => {
   })
 
   it('triggers download on Download Selected click', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockDatabaseList()),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: 'dbdl-test123',
-            downloads: [
-              { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc' },
-              { db_name: 'vep_bundle', job_id: 'dbdl-vep-def' },
-              { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi' },
-            ],
-          }),
-      })
+    routeDatabasesFetch({
+      list: mockDatabaseList(),
+      download: {
+        body: {
+          session_id: 'dbdl-test123',
+          downloads: [
+            { db_name: 'clinvar', job_id: 'dbdl-clinvar-abc' },
+            { db_name: 'vep_bundle', job_id: 'dbdl-vep-def' },
+            { db_name: 'ancestry_pca', job_id: 'dbdl-pca-ghi' },
+          ],
+        },
+      },
+    })
 
     // Mock EventSource with event simulation
     let progressHandler: ((event: MessageEvent) => void) | null = null
@@ -1240,17 +1280,10 @@ describe('DatabasesStep', () => {
   })
 
   it('shows download error when trigger fails', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockDatabaseList()),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () =>
-          Promise.resolve({ detail: 'Download service unavailable' }),
-      })
+    routeDatabasesFetch({
+      list: mockDatabaseList(),
+      download: { ok: false, status: 500, body: { detail: 'Download service unavailable' } },
+    })
 
     render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
 
@@ -1263,6 +1296,57 @@ describe('DatabasesStep', () => {
     await waitFor(() => {
       expect(screen.getByText('Download service unavailable')).toBeInTheDocument()
     })
+  })
+
+  it('shows a Resume button for a resumable partial and resumes on click', async () => {
+    // Simulates a crash/disconnect mid-setup: health reports a resumable partial
+    // for lai_bundle, so the wizard offers an explicit Resume that continues the
+    // interrupted download instead of restarting it.
+    routeDatabasesFetch({
+      list: mockDatabaseListWithModes(),
+      health: {
+        databases: [
+          {
+            name: 'lai_bundle',
+            state: 'partial',
+            resumable: true,
+            can_resume: true,
+            progress_pct: 42,
+          },
+        ],
+      },
+      resume: {
+        body: {
+          session_id: 'dbdl-resume1',
+          downloads: [{ db_name: 'lai_bundle', job_id: 'j-lai-resume' }],
+        },
+      },
+    })
+
+    class MockEventSource {
+      addEventListener() {}
+      close() {}
+    }
+    vi.stubGlobal('EventSource', MockEventSource)
+
+    render(<DatabasesStep onNext={vi.fn()} onBack={vi.fn()} />)
+
+    const resumeBtn = await screen.findByTestId('db-resume-lai_bundle')
+    expect(resumeBtn).toBeInTheDocument()
+
+    fireEvent.click(resumeBtn)
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some((c) => c[0] === '/api/databases/resume'),
+      ).toBe(true)
+    })
+    const resumeCall = mockFetch.mock.calls.find(
+      (c) => c[0] === '/api/databases/resume',
+    )!
+    expect(JSON.parse(resumeCall[1].body).db_name).toBe('lai_bundle')
+
+    vi.unstubAllGlobals()
   })
 
   // ─── Step 14: Per-DB checkbox + running total ──────────────────
@@ -1464,23 +1548,19 @@ describe('DatabasesStep', () => {
   })
 
   it('disables selectable checkboxes while a download is in flight', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockDatabaseListWithModes()),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: 'dbdl-disable',
-            downloads: [
-              { db_name: 'clinvar', job_id: 'j-clinvar' },
-              { db_name: 'lai_bundle', job_id: 'j-lai' },
-              { db_name: 'encode_ccres', job_id: 'j-encode' },
-            ],
-          }),
-      })
+    routeDatabasesFetch({
+      list: mockDatabaseListWithModes(),
+      download: {
+        body: {
+          session_id: 'dbdl-disable',
+          downloads: [
+            { db_name: 'clinvar', job_id: 'j-clinvar' },
+            { db_name: 'lai_bundle', job_id: 'j-lai' },
+            { db_name: 'encode_ccres', job_id: 'j-encode' },
+          ],
+        },
+      },
+    })
 
     class MockEventSource {
       addEventListener() {}
@@ -1512,22 +1592,18 @@ describe('DatabasesStep', () => {
   })
 
   it('Download Selected sends only the selected subset', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockDatabaseListWithModes()),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: 'dbdl-step14',
-            downloads: [
-              { db_name: 'clinvar', job_id: 'j-clinvar' },
-              { db_name: 'encode_ccres', job_id: 'j-encode' },
-            ],
-          }),
-      })
+    routeDatabasesFetch({
+      list: mockDatabaseListWithModes(),
+      download: {
+        body: {
+          session_id: 'dbdl-step14',
+          downloads: [
+            { db_name: 'clinvar', job_id: 'j-clinvar' },
+            { db_name: 'encode_ccres', job_id: 'j-encode' },
+          ],
+        },
+      },
+    })
 
     class MockEventSource {
       addEventListener() {}
@@ -1546,12 +1622,16 @@ describe('DatabasesStep', () => {
 
     fireEvent.click(screen.getByText('Download Selected'))
 
+    // Find the download POST by URL (the component also fires GET list + health).
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(
+        mockFetch.mock.calls.some((c) => c[0] === '/api/databases/download'),
+      ).toBe(true)
     })
 
-    const downloadCall = mockFetch.mock.calls[1]
-    expect(downloadCall[0]).toBe('/api/databases/download')
+    const downloadCall = mockFetch.mock.calls.find(
+      (c) => c[0] === '/api/databases/download',
+    )!
     const body = JSON.parse(downloadCall[1].body)
     expect(new Set(body.databases)).toEqual(new Set(['clinvar', 'encode_ccres']))
 

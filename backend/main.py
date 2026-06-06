@@ -65,6 +65,7 @@ from backend.api.routes.watches import router as watches_router
 from backend.auth import AuthMiddleware
 from backend.config import get_settings
 from backend.db.connection import get_registry, reset_registry
+from backend.db.db_health import recover_orphaned_downloads
 from backend.db.reference_schema import ensure_reference_schema_current
 from backend.db.tables import reference_metadata
 from backend.logging_config import configure_logging
@@ -99,6 +100,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cleanup_interrupted_sessions(registry.reference_engine)
     # Mark any orphaned jobs (worker killed mid-task) as failed
     recover_orphaned_jobs(registry.reference_engine)
+    # Mark any download checkpoints stuck mid-transfer as failed so the partial
+    # surfaces as honestly resumable instead of a phantom "downloading" forever.
+    recover_orphaned_downloads(registry.reference_engine)
     logger.info("DBRegistry initialised (reference.db engine ready)")
     yield
     # Shutdown: stop download executor and dispose all engines

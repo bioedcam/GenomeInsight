@@ -15,6 +15,7 @@ import {
   type DatabaseStat,
 } from '@/api/admin'
 import { cn } from '@/lib/utils'
+import DatabaseHealthPanel from '@/components/settings/DatabaseHealthPanel'
 import {
   Activity,
   Database,
@@ -528,6 +529,7 @@ export default function SystemHealth() {
 
       <StatusOverview />
       <DiskUsageSection />
+      <DatabaseHealthPanel />
       <DatabaseStats />
       <LogExplorer />
     </div>

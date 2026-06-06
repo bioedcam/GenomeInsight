@@ -9,6 +9,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DATABASE_LIST_KEY, useDatabaseList, useTriggerDownload } from '@/api/setup'
+import {
+  DB_HEALTH_KEY,
+  useDatabaseHealth,
+  useResumeDownload,
+  type DatabaseHealth,
+} from '@/api/db-health'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { DatabaseProgressEvent, DownloadProgressData } from '@/types/setup'
@@ -51,7 +57,17 @@ function formatBytes(bytes: number): string {
 export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
   const queryClient = useQueryClient()
   const { data: dbList, isLoading, isError, error } = useDatabaseList()
+  const { data: health } = useDatabaseHealth()
   const triggerDownload = useTriggerDownload()
+  const resumeDownload = useResumeDownload()
+
+  // Map db_name → health record so we can surface resumable partials and
+  // integrity problems mid-setup (the most common crash/disconnect point).
+  const healthMap = useMemo(() => {
+    const map: Record<string, DatabaseHealth> = {}
+    for (const h of health?.databases ?? []) map[h.name] = h
+    return map
+  }, [health])
 
   // Per-DB progress from SSE
   const [dbProgress, setDbProgress] = useState<
@@ -105,6 +121,75 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
     }
   }, [])
 
+  // Shared SSE connector: drives per-DB progress for both a fresh download and
+  // a resume (the backend returns the same session shape for both).
+  const connectToSession = useCallback(
+    (
+      downloads: { db_name: string; job_id: string }[],
+      sessionId: string,
+    ) => {
+      const initial: Record<string, DatabaseProgressEvent> = {}
+      for (const dl of downloads) {
+        initial[dl.db_name] = {
+          db_name: dl.db_name,
+          job_id: dl.job_id,
+          status: 'pending',
+          progress_pct: 0,
+          message: 'Queued...',
+          error: null,
+        }
+      }
+      setDbProgress((prev) => ({ ...prev, ...initial }))
+
+      // Defensively close any prior stream so a second connect can never leak
+      // an EventSource (e.g. resume invoked while one is already open).
+      eventSourceRef.current?.close()
+      const es = new EventSource(`/api/databases/progress/${sessionId}`)
+      eventSourceRef.current = es
+
+      const refreshCaches = () => {
+        queryClient.invalidateQueries({ queryKey: DATABASE_LIST_KEY })
+        queryClient.invalidateQueries({ queryKey: DB_HEALTH_KEY })
+      }
+
+      es.addEventListener('progress', (event: MessageEvent) => {
+        const data: DownloadProgressData = JSON.parse(event.data)
+        setDbProgress((prev) => {
+          const updated = { ...prev }
+          for (const db of data.databases) updated[db.db_name] = db
+          return updated
+        })
+
+        const allTerminal = data.databases.every(
+          (db) => db.status === 'complete' || db.status === 'failed',
+        )
+        if (allTerminal) {
+          es.close()
+          eventSourceRef.current = null
+          setIsDownloading(false)
+          refreshCaches()
+          const failed = data.databases.filter((db) => db.status === 'failed')
+          if (failed.length > 0) {
+            setDownloadError(
+              `${failed.length} database(s) failed. You can retry or resume.`,
+            )
+          }
+        }
+      })
+
+      es.addEventListener('error', () => {
+        es.close()
+        eventSourceRef.current = null
+        setIsDownloading(false)
+        setDownloadError(
+          'Lost connection to download progress stream. Check your downloads and retry if needed.',
+        )
+        refreshCaches()
+      })
+    },
+    [queryClient],
+  )
+
   const handleStartDownload = useCallback(() => {
     if (!dbList) return
 
@@ -116,71 +201,7 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
     setDbProgress({})
 
     triggerDownload.mutate(toDownload, {
-      onSuccess: (result) => {
-        // Initialize progress for each database
-        const initial: Record<string, DatabaseProgressEvent> = {}
-        for (const dl of result.downloads) {
-          initial[dl.db_name] = {
-            db_name: dl.db_name,
-            job_id: dl.job_id,
-            status: 'pending',
-            progress_pct: 0,
-            message: 'Queued...',
-            error: null,
-          }
-        }
-        setDbProgress(initial)
-
-        // Connect to SSE progress stream
-        const es = new EventSource(
-          `/api/databases/progress/${result.session_id}`,
-        )
-        eventSourceRef.current = es
-
-        es.addEventListener('progress', (event: MessageEvent) => {
-          const data: DownloadProgressData = JSON.parse(event.data)
-
-          const updated: Record<string, DatabaseProgressEvent> = {}
-          for (const db of data.databases) {
-            updated[db.db_name] = db
-          }
-          setDbProgress(updated)
-
-          // Check if all are terminal
-          const allTerminal = data.databases.every(
-            (db) =>
-              db.status === 'complete' || db.status === 'failed',
-          )
-          if (allTerminal) {
-            es.close()
-            eventSourceRef.current = null
-            setIsDownloading(false)
-
-            // Refresh database list to get updated downloaded status
-            queryClient.invalidateQueries({ queryKey: DATABASE_LIST_KEY })
-
-            // Check if any failed
-            const failed = data.databases.filter(
-              (db) => db.status === 'failed',
-            )
-            if (failed.length > 0) {
-              setDownloadError(
-                `${failed.length} database(s) failed to download. You can retry.`,
-              )
-            }
-          }
-        })
-
-        es.addEventListener('error', () => {
-          es.close()
-          eventSourceRef.current = null
-          setIsDownloading(false)
-          setDownloadError(
-            'Lost connection to download progress stream. Check your downloads and retry if needed.',
-          )
-          queryClient.invalidateQueries({ queryKey: DATABASE_LIST_KEY })
-        })
-      },
+      onSuccess: (result) => connectToSession(result.downloads, result.session_id),
       onError: (err) => {
         setIsDownloading(false)
         setDownloadError(
@@ -188,7 +209,24 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
         )
       },
     })
-  }, [dbList, selectedDbs, triggerDownload, queryClient])
+  }, [dbList, selectedDbs, triggerDownload, connectToSession])
+
+  const handleResume = useCallback(
+    (dbName: string) => {
+      setIsDownloading(true)
+      setDownloadError(null)
+      resumeDownload.mutate(dbName, {
+        onSuccess: (result) => connectToSession(result.downloads, result.session_id),
+        onError: (err) => {
+          setIsDownloading(false)
+          setDownloadError(
+            err instanceof Error ? err.message : 'Failed to resume download',
+          )
+        },
+      })
+    },
+    [resumeDownload, connectToSession],
+  )
 
   const handleRetry = useCallback(() => {
     setDownloadError(null)
@@ -322,6 +360,15 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
             const showCheckbox = isSelectable(db)
             const isSelected = selectedDbs.has(db.name)
             const checkboxId = `db-select-${db.name}`
+            const dbHealth = healthMap[db.name]
+            // A resumable partial exists when a prior download was interrupted.
+            // Surface it (and an explicit Resume) only when not already running.
+            const showResume =
+              !!dbHealth?.resumable &&
+              !isDownloading &&
+              !isRunning &&
+              !isPending &&
+              !isComplete
 
             return (
               <div
@@ -441,6 +488,31 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                       <p className="mt-1 text-xs text-destructive">
                         {progress.error}
                       </p>
+                    )}
+
+                    {/* Resumable partial — surface progress + explicit resume */}
+                    {showResume && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-amber-600 dark:text-amber-400">
+                          Partial download
+                          {dbHealth?.progress_pct != null &&
+                            ` — ${dbHealth.progress_pct}% saved`}
+                          . Resume to continue where it stopped.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleResume(db.name)}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium',
+                            'text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-950/30',
+                            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+                          )}
+                          data-testid={`db-resume-${db.name}`}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Resume
+                        </button>
+                      </div>
                     )}
 
                     {/* Downloaded status */}

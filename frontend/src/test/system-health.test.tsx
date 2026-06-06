@@ -115,6 +115,9 @@ function mockAllEndpoints() {
     if (url.includes("/api/admin/logs")) {
       return { ok: true, json: async () => LOGS_RESPONSE }
     }
+    if (url.includes("/api/databases/health")) {
+      return { ok: true, json: async () => ({ databases: [] }) }
+    }
     return { ok: false, status: 404, text: async () => "Not found" }
   })
 }
@@ -192,9 +195,16 @@ describe("SystemHealth", () => {
   it("has a refresh button in log explorer", async () => {
     mockAllEndpoints()
     render(<SystemHealth />)
+    // The page now has two "Refresh" controls (Database Health panel + Log
+    // Explorer); the panel's carries a distinct accessible name, so scope to
+    // the log-explorer one by its plain text label.
     await waitFor(() => {
-      expect(screen.getByText("Refresh")).toBeInTheDocument()
+      const refreshButtons = screen.getAllByText("Refresh")
+      expect(refreshButtons.length).toBeGreaterThanOrEqual(1)
     })
+    expect(
+      screen.queryByRole("button", { name: "Refresh database health" }),
+    ).toBeInTheDocument()
   })
 
   it("has log level filter dropdown", async () => {

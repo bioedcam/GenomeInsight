@@ -246,6 +246,15 @@ Admin panel showing:
 - **Log explorer** — Search and filter structured application logs
 - **Database stats** — Row counts, file sizes, last-modified dates for all databases
 - **Disk usage** — Storage breakdown by database and sample
+- **Database health** — Per-database state (Ready / Downloading / Building / Partial /
+  Corrupt / Failed / Not installed) with an integrity check that confirms each database
+  is actually readable by the annotation engine. For a database that needs attention you can:
+  - **Resume** — continue an interrupted download from where it stopped (no restart)
+  - **Verify** — run a deep integrity check (`PRAGMA quick_check`) on demand
+  - **Clean** — remove a partial/corrupt artifact so it can be re-downloaded cleanly
+
+  Health is also surfaced during the setup wizard: an interrupted database download shows a
+  **Resume** button so a crash or disconnect mid-setup never forces you to start over.
 
 ### Authentication
 
