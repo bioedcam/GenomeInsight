@@ -293,16 +293,14 @@ DATABASES: dict[str, DatabaseInfo] = {
         name="gnomad",
         display_name="gnomAD",
         description="Population allele frequencies from the Genome Aggregation Database",
-        # TODO(gnomad-asset): publish the gnomad-bundle-v1.0.0 release asset before
-        # enabling auto-install/auto-update. Until then the bundles["gnomad"] manifest
-        # entry is intentionally absent (gnomad stays in pipeline_pins) and this URL is
-        # the eventual release-asset target — the install/update path is inert (returns
-        # "no manifest entry") rather than wrong. In bundled mode the runner reads the
-        # authoritative url/sha/size from the manifest, not this registry entry.
+        # In bundled mode the runner reads the authoritative url/sha/size from the
+        # manifest (bundles["gnomad"]); this URL is documentation/fallback and points
+        # at the published gnomad-bundle-v1.0.0 release asset.
         url="https://github.com/bioedcam/GenomeInsight/releases/download/gnomad-bundle-v1.0.0/gnomad_af.db",
         filename="gnomad_af.db",
-        # ~2 GB display estimate until the asset is built (§4); real size lands later.
-        expected_size_bytes=2_000_000_000,
+        # Exact size of the published gnomad_af.db asset (byte-matches
+        # bundles/manifest.json -> bundles.gnomad.size_bytes; gnomAD r2.1.1 exomes).
+        expected_size_bytes=1_952_698_368,
         # sha256 unpinned in bundled mode — the manifest bundles["gnomad"] entry is authoritative.
         sha256=None,
         required=True,

@@ -24,16 +24,20 @@
       "url": "",
       "sha256": "3593c24dd32f67e87fa4d58653621a5b5c6635bcce569ead909386c3139ddf58",
       "size_bytes": 414432
+    },
+    "gnomad": {
+      "version": "v1.0.0",
+      "build_date": "2026-06-06",
+      "url": "https://github.com/bioedcam/GenomeInsight/releases/download/gnomad-bundle-v1.0.0/gnomad_af.db",
+      "sha256": "8518eb9ff105646b088e761c405e993f26127bcf05fd93d47c5eeef40579ad79",
+      "size_bytes": 1952698368,
+      "min_app_version": "0.2.0"
     }
   },
   "pipeline_pins": {
     "clinvar": {
       "url": "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh37/clinvar.vcf.gz",
       "last_known_version": ""
-    },
-    "gnomad": {
-      "url": "https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/vcf/exomes/gnomad.exomes.r2.1.1.sites.vcf.bgz",
-      "last_known_version": "r2.1.1"
     },
     "dbnsfp": {
       "url": "https://dist.genos.us/academic/e55b09/dbNSFP5.3.1a.zip",
