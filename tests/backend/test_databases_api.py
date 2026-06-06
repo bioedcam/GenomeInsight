@@ -433,39 +433,58 @@ class TestTriggerDownload:
         assert "Unknown database" in resp.json()["detail"]
 
     def test_download_already_downloaded_returns_409(
-        self, db_client: TestClient, tmp_data_dir: Path
+        self, db_client: TestClient, tmp_data_dir: Path, monkeypatch
     ):
+        from backend.db import manifest as manifest_mod
+        from backend.db.manifest import get_bundle_info
         from backend.db.tables import database_versions
 
-        ref_path = tmp_data_dir / "reference.db"
-        engine = sa.create_engine(f"sqlite:///{ref_path}")
+        # Pin the manifest to the committed repo copy so _bundle_install_needed()
+        # compares against a deterministic version. Otherwise fetch_manifest()
+        # reads the live remote main manifest, whose bundles[] differ between this
+        # branch and main — which made this test's result depend on merge state
+        # (it would start failing once bundles["gnomad"] landed on remote main).
+        monkeypatch.setenv(manifest_mod.MANIFEST_PATH_ENV, str(_REPO_MANIFEST))
+        manifest_mod.reset_cache()
+        try:
+            ref_path = tmp_data_dir / "reference.db"
+            engine = sa.create_engine(f"sqlite:///{ref_path}")
 
-        # Mark all required databases as already current. Manual DBs are never
-        # auto-downloaded (the trigger skips them outright), so they don't block
-        # the 409. Pipeline DBs need a database_versions row; bundled DBs (now
-        # including gnomad) need one too so _bundle_install_needed() — which
-        # compares the recorded version against the manifest — treats them as up
-        # to date (in the deferred state bundles["gnomad"] is absent, so any
-        # recorded row short-circuits to "no install needed").
-        for db in get_all_databases():
-            if not db.required:
-                continue
-            if db.build_mode == "manual":
-                continue
-            with engine.begin() as conn:
-                conn.execute(database_versions.insert().values(db_name=db.name, version="test"))
-            # Standalone DBs (pipeline or bundled) also need the file on disk.
-            if db.target_db == "standalone" and db.filename:
-                dest = tmp_data_dir / db.filename
-                dest.write_bytes(b"fake")
+            # Mark all required databases as already current. Manual DBs are never
+            # auto-downloaded (the trigger skips them outright), so they don't block
+            # the 409. Pipeline DBs just need a database_versions row (+ file for
+            # standalone). Bundled DBs (gnomad) are version-compared against the
+            # manifest by _bundle_install_needed(), so record the manifest version
+            # — a sentinel like "test" reads as "older than manifest" and would
+            # (re)queue the install, defeating the 409.
+            for db in get_all_databases():
+                if not db.required:
+                    continue
+                if db.build_mode == "manual":
+                    continue
+                if db.build_mode == "bundled":
+                    entry = get_bundle_info(db.name)
+                    version = entry.version if entry is not None else "test"
+                else:
+                    version = "test"
+                with engine.begin() as conn:
+                    conn.execute(
+                        database_versions.insert().values(db_name=db.name, version=version)
+                    )
+                # Standalone DBs (pipeline or bundled) also need the file on disk.
+                if db.target_db == "standalone" and db.filename:
+                    dest = tmp_data_dir / db.filename
+                    dest.write_bytes(b"fake")
 
-        engine.dispose()
+            engine.dispose()
 
-        resp = db_client.post(
-            "/api/databases/download",
-            json={"databases": [db.name for db in get_all_databases() if db.required]},
-        )
-        assert resp.status_code == 409
+            resp = db_client.post(
+                "/api/databases/download",
+                json={"databases": [db.name for db in get_all_databases() if db.required]},
+            )
+            assert resp.status_code == 409
+        finally:
+            manifest_mod.reset_cache()
 
     def test_download_specific_dbs(
         self,

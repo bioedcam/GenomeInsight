@@ -1,24 +1,26 @@
 # gnomAD Bundle v1.0.0
 
-> **Status:** the code, build script (`scripts/build_gnomad_bundle.py`), docs, and
-> tests for the bundled-gnomAD path have landed. The ~2 GB release asset is a heavy
-> maintainer step that is published in a follow-up commit (GNOMAD_BUNDLE_PLAN.md §4,
-> §7). The `<…>` values below are filled in at asset-publish time from the real
-> `sha256sum` / `stat -c %s` of the built `gnomad_af.db`, and the
-> `bundles["gnomad"]` manifest entry is added then (until then gnomAD remains in
-> `pipeline_pins` so the manifest stays valid and auto-install/auto-update is inert).
+> **Status:** PUBLISHED. The `gnomad-bundle-v1.0.0` release asset (`gnomad_af.db`)
+> is live, and `bundles["gnomad"]` in `bundles/manifest.json` pins its SHA-256 +
+> size (with the obsolete `pipeline_pins["gnomad"]` entry removed). gnomAD
+> auto-install / auto-update via the manifest is now active. This is the
+> asset-publish follow-up to the code PR (#312); the bundle is built by
+> `scripts/build_gnomad_bundle.py`.
 
 - **Dataset source**: [gnomAD (Genome Aggregation Database)](https://gnomad.broadinstitute.org/)
 - **Version**: gnomAD v2.1.1 exomes (GRCh37) — `release/2.1.1` sites VCF
-- **Individuals**: ~141,456 (gnomAD v2.1.1)
+- **Individuals**: ~141,456 (gnomAD v2.1.1 cohort)
+- **Variants**: 14,774,008 unique rsIDs (table is keyed on `rsid`; 16,761,252 VCF
+  records parsed, 448,720 skipped for having no rsID, remainder deduplicated on
+  rsID). `af_global` is populated for ~100% of rows.
 - **Scope**: allele frequencies + homozygous counts only (table `gnomad_af`:
   `rsid, chrom, pos, ref, alt, af_global, af_afr, af_amr, af_eas, af_eur, af_fin,
   af_sas, homozygous_count`). No SpliceAI / CADD / REVEL / SIFT / PolyPhen or any
   academic-license-restricted predictor columns — those live in dbNSFP, which is
   NOT redistributed.
-- **Build date**: `<YYYY-MM-DD at asset publish>`
-- **Bundle SHA-256**: `<64-hex sha256 of gnomad_af.db at asset publish>`
-- **Bundle size**: `<size_bytes of gnomad_af.db at asset publish>`
+- **Build date**: `2026-06-06`
+- **Bundle SHA-256**: `8518eb9ff105646b088e761c405e993f26127bcf05fd93d47c5eeef40579ad79`
+- **Bundle size**: `1952698368` bytes (≈1.82 GiB / ≈1.95 GB)
 - **min_app_version**: `0.2.0`
 - **Built by**: `scripts/build_gnomad_bundle.py` (downloads the r2.1.1 exomes sites
   VCF and loads AF data via `backend.annotation.gnomad.load_gnomad_from_vcf`; table

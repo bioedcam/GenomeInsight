@@ -377,15 +377,38 @@ def test_gnomad_registry_entry_is_bundled() -> None:
 
 
 def test_gnomad_registry_url_targets_release_asset() -> None:
-    """The fallback URL points at the eventual gnomad-bundle release asset.
+    """The fallback URL points at the published gnomad-bundle release asset.
 
     In bundled mode the runner reads the authoritative url/sha/size from the
-    manifest; this registry URL is documentation/fallback. It is pinned here so a
-    future edit can't silently point it elsewhere. (Until the asset is published
-    the bundles["gnomad"] manifest entry is intentionally absent — see
-    GNOMAD_BUNDLE_PLAN.md §7 deferred path.)
+    manifest (bundles["gnomad"]); this registry URL is documentation/fallback. It
+    is pinned here so a future edit can't silently point it elsewhere.
     """
     from backend.db.database_registry import DATABASES
 
     entry = DATABASES["gnomad"]
     assert entry.url.endswith("/releases/download/gnomad-bundle-v1.0.0/gnomad_af.db")
+
+
+def test_gnomad_registry_matches_manifest_bundle() -> None:
+    """Publish path: the registry url + expected_size_bytes byte-match the
+    committed ``bundles/manifest.json`` ``bundles.gnomad`` entry.
+
+    Bundled mode pins the registry ``sha256`` to ``None`` (the manifest is the
+    single source of truth), so this asserts URL + size parity instead of sha —
+    the standalone-bundle analogue of
+    ``test_lai_bundle_registry_sha_matches_manifest``.
+    """
+    import json
+
+    import pytest
+
+    from backend.db.database_registry import DATABASES
+
+    repo_manifest = Path(__file__).resolve().parents[2] / "bundles" / "manifest.json"
+    if not repo_manifest.is_file():
+        pytest.skip("bundles/manifest.json not present in this checkout")
+    payload = json.loads(repo_manifest.read_text(encoding="utf-8"))
+    entry = payload["bundles"]["gnomad"]
+    reg = DATABASES["gnomad"]
+    assert reg.url == entry["url"]
+    assert reg.expected_size_bytes == entry["size_bytes"]
