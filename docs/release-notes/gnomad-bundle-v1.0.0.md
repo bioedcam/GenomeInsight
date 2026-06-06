@@ -4,7 +4,8 @@
 > is live, and `bundles["gnomad"]` in `bundles/manifest.json` pins its SHA-256 +
 > size (with the obsolete `pipeline_pins["gnomad"]` entry removed). gnomAD
 > auto-install / auto-update via the manifest is now active. This is the
-> asset-publish follow-up to the code PR (#312); see GNOMAD_BUNDLE_PLAN.md §4.
+> asset-publish follow-up to the code PR (#312); the bundle is built by
+> `scripts/build_gnomad_bundle.py`.
 
 - **Dataset source**: [gnomAD (Genome Aggregation Database)](https://gnomad.broadinstitute.org/)
 - **Version**: gnomAD v2.1.1 exomes (GRCh37) — `release/2.1.1` sites VCF

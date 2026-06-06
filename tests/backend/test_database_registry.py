@@ -396,7 +396,7 @@ def test_gnomad_registry_matches_manifest_bundle() -> None:
     Bundled mode pins the registry ``sha256`` to ``None`` (the manifest is the
     single source of truth), so this asserts URL + size parity instead of sha —
     the standalone-bundle analogue of
-    ``test_lai_bundle_registry_sha_matches_manifest`` (GNOMAD_BUNDLE_PLAN.md §5.7).
+    ``test_lai_bundle_registry_sha_matches_manifest``.
     """
     import json
 
