@@ -137,11 +137,21 @@ def _fetch_cancer_findings(
     sample_engine: sa.Engine,
     gene_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch cancer findings from the sample DB."""
+    """Fetch monogenic cancer variant findings from the sample DB.
+
+    Scoped to ``category == "monogenic_variant"`` so PRS findings — which
+    share ``module == "cancer"`` (category ``"prs"``) but carry no
+    ``gene_symbol`` / ``rsid`` / ``clinvar_significance`` — never leak into
+    the monogenic variant cards, where they would render as blank cards.
+    PRS findings have their own endpoint (:func:`list_cancer_prs`).
+    """
     with sample_engine.connect() as conn:
         stmt = (
             sa.select(findings)
-            .where(findings.c.module == "cancer")
+            .where(
+                findings.c.module == "cancer",
+                findings.c.category == "monogenic_variant",
+            )
             .order_by(findings.c.evidence_level.desc(), findings.c.gene_symbol)
         )
         if gene_filter:
