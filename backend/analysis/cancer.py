@@ -387,6 +387,7 @@ def store_cancer_findings(
         )
 
         detail = {
+            "genotype": v.genotype,
             "clinvar_accession": v.clinvar_accession,
             "clinvar_review_stars": v.clinvar_review_stars,
             "clinvar_conditions": v.clinvar_conditions,

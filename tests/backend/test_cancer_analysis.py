@@ -530,6 +530,22 @@ class TestStoreCancerFindings:
             ).fetchone()
         assert row.zygosity == "het"
 
+    def test_detail_json_has_genotype(
+        self, panel: CancerPanel, sample_with_cancer_variants: sa.Engine
+    ) -> None:
+        # The variant card renders genotype from detail_json["genotype"];
+        # store_cancer_findings must persist it (regression: it was omitted,
+        # so the card's genotype line never rendered).
+        result = extract_cancer_variants(panel, sample_with_cancer_variants)
+        store_cancer_findings(result, sample_with_cancer_variants)
+
+        with sample_with_cancer_variants.connect() as conn:
+            row = conn.execute(
+                sa.select(findings).where(findings.c.rsid == "rs80357906")
+            ).fetchone()
+        detail = json.loads(row.detail_json)
+        assert detail["genotype"] == "CT"
+
     def test_clears_previous_findings_on_rerun(
         self, panel: CancerPanel, sample_with_cancer_variants: sa.Engine
     ) -> None:
@@ -648,3 +664,50 @@ class TestCancerAnalysisResult:
             ]
         )
         assert len(result.dual_role_variants) == 1
+
+
+# ── Variant-list fetch (route helper) ─────────────────────────────────────
+
+
+class TestFetchCancerFindingsExcludesPRS:
+    """``_fetch_cancer_findings`` must return only monogenic variant findings.
+
+    PRS findings share ``module == "cancer"`` (category ``"prs"``) but have
+    no ``gene_symbol`` / ``rsid`` / ``clinvar_significance``. If they leak
+    into the variants endpoint they render as blank cards in the monogenic
+    grid (the reported bug). The fetch helper is category-scoped to prevent
+    that.
+    """
+
+    def test_prs_findings_excluded_from_variants(
+        self, panel: CancerPanel, sample_with_cancer_variants: sa.Engine
+    ) -> None:
+        from backend.api.routes.cancer import _fetch_cancer_findings
+
+        # Store the monogenic findings, then add a PRS finding the way
+        # store_cancer_prs_findings would (module=cancer, category=prs,
+        # no gene/rsid/significance columns).
+        result = extract_cancer_variants(panel, sample_with_cancer_variants)
+        store_cancer_findings(result, sample_with_cancer_variants)
+        with sample_with_cancer_variants.begin() as conn:
+            conn.execute(
+                sa.insert(findings),
+                [
+                    {
+                        "module": "cancer",
+                        "category": "prs",
+                        "evidence_level": 1,
+                        "finding_text": "Breast cancer PRS: 80th percentile",
+                        "prs_percentile": 80.0,
+                        "detail_json": json.dumps({"trait": "breast", "name": "Breast"}),
+                    }
+                ],
+            )
+
+        rows = _fetch_cancer_findings(sample_with_cancer_variants)
+
+        # Only the 5 monogenic P/LP variants — the PRS row is filtered out.
+        assert len(rows) == 5
+        # Every returned card has the content the UI needs (non-blank): the
+        # leaked PRS rows would have empty gene_symbol/rsid/significance.
+        assert all(r["gene_symbol"] and r["rsid"] and r["clinvar_significance"] for r in rows)
