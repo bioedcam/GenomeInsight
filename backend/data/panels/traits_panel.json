@@ -1,7 +1,7 @@
 {
   "module": "traits",
   "version": "1.0.0",
-  "description": "Curated Traits & Personality SNP panel for GenomeInsight (P3-62). PRS-primary module with weight sets for educational attainment (Okbay et al. 2022) and cognitive ability (Savage et al. 2018). Individual SNPs for neuroticism (CRHR1 rs1396862), extraversion (WSCD2 rs2164273), and risk tolerance (CADM2 rs993137). DRD4 rs747302 proxy for dopamine receptor variation with coverage caveat. All findings hard-capped at ★★☆☆ (Moderate Evidence). Associative language only — no directive claims.",
+  "description": "Curated Traits & Personality SNP panel for Yeliztli (P3-62). PRS-primary module with weight sets for educational attainment (Okbay et al. 2022) and cognitive ability (Savage et al. 2018). Individual SNPs for neuroticism (CRHR1 rs1396862), extraversion (WSCD2 rs2164273), and risk tolerance (CADM2 rs993137). DRD4 rs747302 proxy for dopamine receptor variation with coverage caveat. All findings hard-capped at ★★☆☆ (Moderate Evidence). Associative language only — no directive claims.",
   "evidence_cap": 2,
   "module_disclaimer": "Traits & Personality findings reflect statistical associations observed in large population studies. They do not predict individual outcomes. Behavioral traits are shaped by complex interactions between many genes, environment, culture, and personal experience. These results are for research and educational purposes only.",
   "pathways": [

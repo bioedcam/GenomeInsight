@@ -56,7 +56,7 @@ export default function Login() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <Dna className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">GenomeInsight</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Yeliztli</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Enter your password to continue
           </p>

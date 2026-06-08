@@ -32,7 +32,7 @@ export default function PlaceholderPage({
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               {description ??
-                `This module is planned for Phase ${phase} of the GenomeInsight roadmap.`}
+                `This module is planned for Phase ${phase} of the Yeliztli roadmap.`}
             </p>
           </div>
         </div>

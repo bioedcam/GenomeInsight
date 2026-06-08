@@ -243,9 +243,9 @@ describe('Settings page', () => {
   it('shows About page with version info', () => {
     setupFetchMocks()
     renderSettings(['/settings/about'])
-    // "About" in nav + "About GenomeInsight" in heading
+    // "About" in nav + "About Yeliztli" in heading
     expect(screen.getByText('About')).toBeDefined()
-    expect(screen.getByText('About GenomeInsight')).toBeDefined()
+    expect(screen.getByText('About Yeliztli')).toBeDefined()
     expect(screen.getByText('Current Version')).toBeDefined()
   })
 })
@@ -551,7 +551,7 @@ describe('Bundle build_date rendering', () => {
 // ── App version row (Step 30) ────────────────────────────────────────
 
 describe('App version row', () => {
-  it('renders the GenomeInsight row with current version', async () => {
+  it('renders the Yeliztli row with current version', async () => {
     setupFetchMocks({
       appUpdate: {
         update_available: false,
@@ -566,7 +566,7 @@ describe('App version row', () => {
     render(<UpdateManager />, { wrapper: createWrapper() })
 
     const row = await screen.findByTestId('app-version-row')
-    expect(row).toHaveTextContent('GenomeInsight')
+    expect(row).toHaveTextContent('Yeliztli')
     expect(row).toHaveTextContent('v0.1.0')
     expect(row).toHaveTextContent('Up to date')
   })

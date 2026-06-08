@@ -1,4 +1,4 @@
-"""Structured logging configuration for GenomeInsight (P4-21b).
+"""Structured logging configuration for Yeliztli (P4-21b).
 
 Configures structlog to write log entries to both console (for development)
 and the ``log_entries`` table in reference.db (for the admin panel log explorer).

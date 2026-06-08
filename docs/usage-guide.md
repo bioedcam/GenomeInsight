@@ -1,6 +1,6 @@
 # Usage Guide
 
-This guide walks through every major feature of GenomeInsight. After completing the [Setup Guide](setup-guide.md), open your browser to [http://localhost:8000](http://localhost:8000) (native install) or [http://localhost:5173](http://localhost:5173) (development mode).
+This guide walks through every major feature of Yeliztli. After completing the [Setup Guide](setup-guide.md), open your browser to [http://localhost:8000](http://localhost:8000) (native install) or [http://localhost:5173](http://localhost:5173) (development mode).
 
 ---
 
@@ -23,7 +23,7 @@ Use the sample selector in the top navigation bar to switch between uploaded sam
 
 ### Supported formats
 
-GenomeInsight accepts 23andMe raw data files:
+Yeliztli accepts 23andMe raw data files:
 
 - **23andMe v3, v4, v5** — Auto-detected from file header
 - File types: `.txt` (plain text) or `.zip` (compressed)
@@ -32,7 +32,7 @@ GenomeInsight accepts 23andMe raw data files:
 
 1. Click **Upload** from the dashboard or sidebar
 2. Drag and drop your file (or click to browse)
-3. GenomeInsight parses the file and displays progress
+3. Yeliztli parses the file and displays progress
 4. Annotation runs automatically in the background via the Huey task worker
 5. You are redirected to the dashboard when annotation completes
 
@@ -297,7 +297,7 @@ The command palette is navigation-only — no destructive or state-changing acti
 
 ## Data Privacy
 
-GenomeInsight is designed with privacy as a core principle:
+Yeliztli is designed with privacy as a core principle:
 
 - **Localhost only** — The server binds to 127.0.0.1 by default
 - **No telemetry** — Zero analytics, tracking, or usage reporting
@@ -317,7 +317,7 @@ A standard 23andMe file (~600,000 variants) annotates in under 2 minutes.
 Yes. Upload additional files from the Upload page. Each sample gets its own isolated database. Use the sample selector in the top nav to switch between them. If two samples come from the same person — for example, a 23andMe export and an AncestryDNA export — you can group them under an **individual** and optionally **merge** them into a single union sample with a concordance report. See [Multi-Source Sample Merging](multi-source-merging.md) for the end-to-end walkthrough.
 
 **Q: What if annotation is interrupted?**
-GenomeInsight uses crash recovery: the partial annotation is deleted and re-run from scratch. With under 2-minute runtime, checkpointing is unnecessary.
+Yeliztli uses crash recovery: the partial annotation is deleted and re-run from scratch. With under 2-minute runtime, checkpointing is unnecessary.
 
 **Q: Can I use files from other services (AncestryDNA, MyHeritage)?**
 Not yet in v1. 23andMe (v3/v4/v5) is the only supported format. AncestryDNA support is the top priority for post-v1.

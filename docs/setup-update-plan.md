@@ -282,8 +282,8 @@ So bundles show up in the history log identically to pipeline DBs.
 
 - New component `frontend/src/components/layout/AppUpdateBanner.tsx`.
 - Mounted on `Dashboard.tsx` only.
-- Reads `useAppUpdate()`. Subtle banner: *"GenomeInsight v1.2.0 is available — view release notes."* Dismissible per-version (localStorage keyed by `lastDismissedVersion`).
-- UpdateManager grows a top row "GenomeInsight" showing app version + "Open release notes" link via `useAppUpdate`.
+- Reads `useAppUpdate()`. Subtle banner: *"Yeliztli v1.2.0 is available — view release notes."* Dismissible per-version (localStorage keyed by `lastDismissedVersion`).
+- UpdateManager grows a top row "Yeliztli" showing app version + "Open release notes" link via `useAppUpdate`.
 
 ### 5.2 UpdateManager polish
 

@@ -29,7 +29,7 @@ export default function TopNav() {
     <header className="h-12 border-b border-border bg-background flex items-center px-4 gap-4 shrink-0">
       <Link to="/" className="flex items-center gap-2 font-semibold text-foreground">
         <Dna className="h-5 w-5 text-primary" />
-        <span>GenomeInsight</span>
+        <span>Yeliztli</span>
       </Link>
 
       <div className="flex-1" />

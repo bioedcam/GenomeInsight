@@ -1,4 +1,4 @@
-"""Hardcoded disclaimer text for GenomeInsight.
+"""Hardcoded disclaimer text for Yeliztli.
 
 All disclaimer, gate, and carrier status text lives here.
 Referenced by the setup wizard (global disclaimer) and analysis modules
@@ -7,16 +7,16 @@ Referenced by the setup wizard (global disclaimer) and analysis modules
 
 # ── Global first-launch disclaimer ────────────────────────────────────
 
-GLOBAL_DISCLAIMER_TITLE = "Important Information About GenomeInsight"
+GLOBAL_DISCLAIMER_TITLE = "Important Information About Yeliztli"
 
 GLOBAL_DISCLAIMER_TEXT = """\
-GenomeInsight is an educational and research tool designed to help you \
+Yeliztli is an educational and research tool designed to help you \
 explore your personal genomic data. It is NOT a medical device and has \
 NOT been reviewed or approved by the FDA or any regulatory authority.
 
 Please read and understand the following before proceeding:
 
-1. **Not a diagnostic tool.** The information provided by GenomeInsight \
+1. **Not a diagnostic tool.** The information provided by Yeliztli \
 is for educational and research purposes only. It should not be used to \
 diagnose, treat, cure, or prevent any disease or medical condition.
 
@@ -29,7 +29,7 @@ something you have read in this application.
 3. **Variant interpretation has limitations.** Genetic variant \
 classifications change over time as scientific understanding evolves. \
 A variant classified as "benign" today may be reclassified in the \
-future, and vice versa. GenomeInsight uses publicly available databases \
+future, and vice versa. Yeliztli uses publicly available databases \
 that may not reflect the most current scientific consensus.
 
 4. **Genotyping chip limitations.** Consumer genotyping chips (such as \
@@ -44,7 +44,7 @@ genetic studies have been conducted primarily in populations of European \
 descent, which may limit the applicability of results to other groups.
 
 6. **Privacy responsibility.** You are responsible for the security of \
-your own genetic data. GenomeInsight runs locally on your computer and \
+your own genetic data. Yeliztli runs locally on your computer and \
 does not transmit your genetic data to external servers (except for \
 optional PubMed literature lookups which send gene names only, never \
 variant data).
@@ -55,7 +55,7 @@ whether you are prepared to receive potentially sensitive information \
 before proceeding.
 
 By clicking "I Understand and Accept," you acknowledge that you have \
-read and understood these limitations and agree to use GenomeInsight \
+read and understood these limitations and agree to use Yeliztli \
 solely for educational and research purposes.\
 """
 
@@ -125,7 +125,7 @@ healthy and unaffected.
 2. **BRCA1/BRCA2 are a special case.** These genes follow autosomal \
 dominant inheritance for cancer predisposition. A single pathogenic \
 variant confers personal cancer risk (see the Cancer module) AND \
-reproductive carrier risk. Both perspectives are shown in GenomeInsight \
+reproductive carrier risk. Both perspectives are shown in Yeliztli \
 with distinct framing.
 
 3. **Genotyping chip limitations.** Consumer genotyping chips test only \

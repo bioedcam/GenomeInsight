@@ -46,7 +46,7 @@ _ANCESTRYDNA_SIGNATURE = "#ancestrydna"
 _ANCESTRYDNA_HEADER_COLUMNS = ("rsid", "chromosome", "position", "allele1", "allele2")
 
 _ERR_VCF = (
-    "This looks like a VCF file. GenomeInsight v1 expects 23andMe or "
+    "This looks like a VCF file. Yeliztli v1 expects 23andMe or "
     "AncestryDNA raw data. VCF support is planned for a future release."
 )
 _ERR_CSV = (
@@ -55,7 +55,7 @@ _ERR_CSV = (
 )
 _ERR_BINARY = "This file contains binary data and is not a valid text file."
 _ERR_UNKNOWN = (
-    "Unrecognized file format. GenomeInsight expects 23andMe or AncestryDNA "
+    "Unrecognized file format. Yeliztli expects 23andMe or AncestryDNA "
     "raw data (tab-separated, .txt). Please file a GitHub issue at "
     "https://github.com/bioedcam/GenomeInsight/issues if you believe this is "
     "a bug."

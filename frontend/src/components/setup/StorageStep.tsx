@@ -59,7 +59,7 @@ export default function StorageStep({ onNext, onBack }: StorageStepProps) {
           Storage Location
         </h2>
         <p className="text-sm text-muted-foreground">
-          Choose where GenomeInsight stores databases, samples, and configuration.
+          Choose where Yeliztli stores databases, samples, and configuration.
           Reference databases require approximately 4 GB of disk space.
         </p>
       </div>

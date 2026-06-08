@@ -1,4 +1,4 @@
-"""Database layer for GenomeInsight.
+"""Database layer for Yeliztli.
 
 Public API::
 

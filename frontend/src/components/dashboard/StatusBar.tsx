@@ -95,7 +95,7 @@ export default function StatusBar({ sample, variantCount }: StatusBarProps) {
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded',
           )}
           aria-label={`App update available: v${appUpdate.latest_version}`}
-          title={`GenomeInsight v${appUpdate.latest_version} available`}
+          title={`Yeliztli v${appUpdate.latest_version} available`}
         >
           <ArrowUpCircle className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">v{appUpdate.latest_version}</span>

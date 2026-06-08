@@ -1,4 +1,4 @@
-"""GenomeInsight FastAPI application entrypoint."""
+"""Yeliztli FastAPI application entrypoint."""
 
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """Build and return the configured FastAPI application."""
     app = FastAPI(
-        title="GenomeInsight",
+        title="Yeliztli",
         version=VERSION,
         lifespan=lifespan,
     )

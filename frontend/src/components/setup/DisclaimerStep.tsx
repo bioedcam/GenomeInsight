@@ -109,7 +109,7 @@ export default function DisclaimerStep({ onAccepted }: DisclaimerStepProps) {
         />
         <span className="text-sm text-foreground">
           I have read and understand the information above. I acknowledge that
-          GenomeInsight is for educational and research purposes only and is not
+          Yeliztli is for educational and research purposes only and is not
           a substitute for professional medical advice.
         </span>
       </label>

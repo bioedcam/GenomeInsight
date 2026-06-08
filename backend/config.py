@@ -1,4 +1,4 @@
-"""GenomeInsight configuration via Pydantic Settings.
+"""Yeliztli configuration via Pydantic Settings.
 
 Layered: defaults -> ~/.genomeinsight/config.toml -> environment variables.
 """
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # --- Paths ---
     data_dir: Path = Field(
         default=DEFAULT_DATA_DIR,
-        description="Root directory for all GenomeInsight data (DBs, samples, logs).",
+        description="Root directory for all Yeliztli data (DBs, samples, logs).",
     )
 
     # --- Server ---

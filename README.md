@@ -1,8 +1,8 @@
-# GenomeInsight
+# Yeliztli
 
 Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe file, annotate variants against clinical databases, and explore findings across 15 specialized analysis modules — all running locally on your machine.
 
-**Your data never leaves your computer.** GenomeInsight runs entirely on localhost with no telemetry, no cloud processing, and no outbound variant data.
+**Your data never leaves your computer.** Yeliztli runs entirely on localhost with no telemetry, no cloud processing, and no outbound variant data.
 
 ## Features
 
@@ -43,7 +43,7 @@ For a walkthrough of all features, see the [Usage Guide](docs/usage-guide.md).
 
 ### Ancestry Module
 
-GenomeInsight includes a two-tier ancestry analysis system:
+Yeliztli includes a two-tier ancestry analysis system:
 
 - **Tier 1 (Instant):** 5,000-AIM PCA projection with NNLS admixture estimation across 7 superpopulations (AFR, AMR, CSA, EAS, EUR, MID, OCE). Runs in under 1 second. Always available.
 - **Tier 2 (Deep Analysis):** Local ancestry inference via Gnomix models with Beagle phasing. Provides chromosome-level ancestry painting. Runs in 15–30 minutes. Requires an optional LAI bundle download (~500 MB) and Java 8+.
@@ -98,7 +98,7 @@ GenomeInsight/
 
 ### Configuration
 
-GenomeInsight uses layered configuration (highest priority first):
+Yeliztli uses layered configuration (highest priority first):
 
 1. Environment variables (`GENOMEINSIGHT_` prefix)
 2. `~/.genomeinsight/config.toml`
@@ -160,7 +160,7 @@ make test-e2e          # Playwright E2E (Chrome, Firefox, WebKit)
 
 ## Data Sources & Attribution
 
-GenomeInsight annotates variants against several public reference datasets. Most
+Yeliztli annotates variants against several public reference datasets. Most
 are downloaded and built locally; **gnomAD** ships as a prebuilt, redistributable
 allele-frequency bundle.
 
@@ -171,7 +171,7 @@ allele-frequency bundle.
   "The mutational constraint spectrum quantified from variation in 141,456 humans,"
   *Nature* 581, 434–443 (2020), doi:10.1038/s41586-020-2308-7.
   "gnomAD" and "Broad Institute" are trademarks of their respective owners, used
-  here solely for source attribution; GenomeInsight is an independent project and
+  here solely for source attribution; Yeliztli is an independent project and
   is not affiliated with or endorsed by the Broad Institute.
 
 See the repo-root [`NOTICE`](NOTICE) file for the full third-party data

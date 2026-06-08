@@ -1,7 +1,7 @@
 {
   "module": "cardiovascular",
   "version": "1.0.0",
-  "description": "Curated cardiovascular gene panel for GenomeInsight (P3-19). Covers genes associated with familial hypercholesterolemia, cardiomyopathies, and channelopathies.",
+  "description": "Curated cardiovascular gene panel for Yeliztli (P3-19). Covers genes associated with familial hypercholesterolemia, cardiomyopathies, and channelopathies.",
   "genes": [
     {
       "gene_symbol": "LDLR",

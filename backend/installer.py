@@ -1,4 +1,4 @@
-"""GenomeInsight native install/uninstall logic.
+"""Yeliztli native install/uninstall logic.
 
 Handles:
 - launchd plist installation on macOS
@@ -218,7 +218,7 @@ def install_systemd() -> None:
         print("    systemd=true")
         print("  Then restart WSL with: wsl --shutdown")
         print()
-        print("  You can still run GenomeInsight manually:")
+        print("  You can still run Yeliztli manually:")
         print(f"    cd {_repo_root()}")
         print("    uvicorn backend.main:app --host 127.0.0.1 --port 8000 &")
         print("    huey_consumer backend.tasks.huey_tasks.huey -w 1 &")
@@ -424,18 +424,18 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point for genomeinsight-setup."""
     parser = argparse.ArgumentParser(
         prog="genomeinsight-setup",
-        description="GenomeInsight native install manager",
+        description="Yeliztli native install manager",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # install
-    p_install = subparsers.add_parser("install", help="Install GenomeInsight services")
+    p_install = subparsers.add_parser("install", help="Install Yeliztli services")
     p_install.add_argument("--skip-pip", action="store_true", help="Skip pip install step")
     p_install.add_argument("--skip-frontend", action="store_true", help="Skip frontend build step")
     p_install.set_defaults(func=cmd_install)
 
     # uninstall
-    p_uninstall = subparsers.add_parser("uninstall", help="Remove GenomeInsight services")
+    p_uninstall = subparsers.add_parser("uninstall", help="Remove Yeliztli services")
     p_uninstall.add_argument(
         "--remove-data",
         action="store_true",

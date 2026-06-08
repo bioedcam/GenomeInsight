@@ -1,4 +1,4 @@
-"""LAI runner — Local Ancestry Inference pipeline for GenomeInsight.
+"""LAI runner — Local Ancestry Inference pipeline for Yeliztli.
 
 Orchestrates the full LAI pipeline:
   1. Read genotypes from sample DB (raw_variants table)

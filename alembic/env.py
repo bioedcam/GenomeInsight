@@ -1,4 +1,4 @@
-"""Alembic environment configuration for GenomeInsight."""
+"""Alembic environment configuration for Yeliztli."""
 
 from logging.config import fileConfig
 

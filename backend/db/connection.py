@@ -1,4 +1,4 @@
-"""Database connection management for GenomeInsight.
+"""Database connection management for Yeliztli.
 
 Provides the DBRegistry singleton that manages connections to all SQLite
 databases (reference + per-sample). Reference DB connections are long-lived

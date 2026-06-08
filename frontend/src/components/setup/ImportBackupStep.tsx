@@ -119,7 +119,7 @@ export default function ImportBackupStep({
             Existing Installation Detected
           </h2>
           <p className="text-sm text-muted-foreground">
-            Found existing GenomeInsight data at{' '}
+            Found existing Yeliztli data at{' '}
             <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
               {existing.data_dir}
             </code>
@@ -248,7 +248,7 @@ export default function ImportBackupStep({
           Import from Backup
         </h2>
         <p className="text-sm text-muted-foreground">
-          Restore a previous GenomeInsight backup, or skip to start fresh.
+          Restore a previous Yeliztli backup, or skip to start fresh.
         </p>
       </div>
 

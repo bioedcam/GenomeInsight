@@ -1,4 +1,4 @@
-/** Subtle dashboard banner announcing a new GenomeInsight release.
+/** Subtle dashboard banner announcing a new Yeliztli release.
  *
  * Reads `useAppUpdate` (GitHub Releases check). Dismissal is per-version —
  * the dismissed version string lives in `localStorage["appUpdateDismissed"]`,
@@ -62,7 +62,7 @@ function AppReleaseBanner() {
     <div
       data-testid="app-update-banner"
       role="status"
-      aria-label={`GenomeInsight v${appUpdate.latest_version} is available`}
+      aria-label={`Yeliztli v${appUpdate.latest_version} is available`}
       className={cn(
         'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm',
         'border-amber-200 bg-amber-50 text-amber-800',
@@ -72,7 +72,7 @@ function AppReleaseBanner() {
       <div className="flex items-center gap-2 min-w-0">
         <ArrowUpCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="truncate">
-          GenomeInsight v{appUpdate.latest_version} is available
+          Yeliztli v{appUpdate.latest_version} is available
           {appUpdate.release_url ? (
             <>
               {' — '}

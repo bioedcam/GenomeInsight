@@ -1,7 +1,7 @@
 {
   "module": "gene_health",
   "version": "1.0.0",
-  "description": "Curated Gene Health expansion panel for GenomeInsight (P3-65). Covers 17 disease conditions across 4 body-system pathways (Neurological, Metabolic, Autoimmune, Sensory) with variants from ClinVar pathogenic classifications and replicated GWAS findings. Includes cross-module links to APOE, Allergy, Methylation, Nutrigenomics, and Traits modules.",
+  "description": "Curated Gene Health expansion panel for Yeliztli (P3-65). Covers 17 disease conditions across 4 body-system pathways (Neurological, Metabolic, Autoimmune, Sensory) with variants from ClinVar pathogenic classifications and replicated GWAS findings. Includes cross-module links to APOE, Allergy, Methylation, Nutrigenomics, and Traits modules.",
   "evidence_cap": null,
   "module_disclaimer": "Gene Health findings are based on published genetic association studies and ClinVar pathogenic classifications. Results indicate statistical associations, not diagnoses. Many conditions have complex environmental and lifestyle components. Consult a healthcare provider or genetic counselor for clinical interpretation.",
   "pathways": [

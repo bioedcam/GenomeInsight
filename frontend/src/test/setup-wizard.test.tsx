@@ -84,8 +84,8 @@ function mockSetupStatus(overrides: Record<string, unknown> = {}) {
 
 function mockDisclaimer() {
   return {
-    title: 'Important Information About GenomeInsight',
-    text: 'GenomeInsight is an educational and research tool.\n\nPlease read carefully.\n\n**Not a diagnostic tool.** This is for education only.',
+    title: 'Important Information About Yeliztli',
+    text: 'Yeliztli is an educational and research tool.\n\nPlease read carefully.\n\n**Not a diagnostic tool.** This is for education only.',
     accept_label: 'I Understand and Accept',
   }
 }
@@ -136,7 +136,7 @@ describe('DisclaimerStep', () => {
     render(<DisclaimerStep onAccepted={onAccepted} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Important Information About GenomeInsight')).toBeInTheDocument()
+      expect(screen.getByText('Important Information About Yeliztli')).toBeInTheDocument()
     })
   })
 
@@ -169,7 +169,7 @@ describe('DisclaimerStep', () => {
     render(<DisclaimerStep onAccepted={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Important Information About GenomeInsight')).toBeInTheDocument()
+      expect(screen.getByText('Important Information About Yeliztli')).toBeInTheDocument()
     })
 
     const checkbox = screen.getByRole('checkbox')
@@ -185,7 +185,7 @@ describe('DisclaimerStep', () => {
     render(<DisclaimerStep onAccepted={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Important Information About GenomeInsight')).toBeInTheDocument()
+      expect(screen.getByText('Important Information About Yeliztli')).toBeInTheDocument()
     })
 
     const acceptButton = screen.getByRole('button', { name: /i understand and accept/i })
@@ -424,7 +424,7 @@ describe('SetupWizard', () => {
     render(<SetupWizard />)
 
     await waitFor(() => {
-      expect(screen.getByText('GenomeInsight')).toBeInTheDocument()
+      expect(screen.getByText('Yeliztli')).toBeInTheDocument()
       expect(screen.getByText('Setup Wizard')).toBeInTheDocument()
     })
 
@@ -469,7 +469,7 @@ function mockStorageInfo(overrides: Record<string, unknown> = {}) {
     total_space_bytes: 100 * 1024 * 1024 * 1024,
     total_space_gb: 100,
     status: 'ok',
-    message: '50.0 GB free — sufficient for GenomeInsight.',
+    message: '50.0 GB free — sufficient for Yeliztli.',
     path_exists: true,
     path_writable: true,
     ...overrides,
@@ -540,7 +540,7 @@ describe('StorageStep', () => {
             status: 'blocked',
             free_space_gb: 2,
             message:
-              'Insufficient disk space. GenomeInsight requires at least 5 GB free. Current: 2.0 GB.',
+              'Insufficient disk space. Yeliztli requires at least 5 GB free. Current: 2.0 GB.',
           }),
         ),
     })

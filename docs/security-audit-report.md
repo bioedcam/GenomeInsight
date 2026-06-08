@@ -1,4 +1,4 @@
-# GenomeInsight Security Audit Report (P4-24)
+# Yeliztli Security Audit Report (P4-24)
 
 **Date:** 2026-03-31
 **Scope:** Full application security audit per PRD P4-24
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-GenomeInsight passes all security audit criteria. The application:
+Yeliztli passes all security audit criteria. The application:
 - Binds exclusively to `127.0.0.1` in all native deployment configurations
 - Sends zero variant/genotype/sample data to external services
 - Contains no telemetry, analytics, or tracking code
@@ -118,4 +118,4 @@ All security assertions are automated in `tests/backend/test_security_audit.py`:
 
 ## Conclusion
 
-GenomeInsight meets all PRD security requirements for P4-24. The application maintains strict data privacy: all genetic/variant data remains local, all outbound communication is limited to downloading public reference databases and querying public APIs with non-sensitive metadata.
+Yeliztli meets all PRD security requirements for P4-24. The application maintains strict data privacy: all genetic/variant data remains local, all outbound communication is limited to downloading public reference databases and querying public APIs with non-sensitive metadata.

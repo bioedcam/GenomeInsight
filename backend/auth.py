@@ -1,4 +1,4 @@
-"""Authentication system for GenomeInsight (P4-21a).
+"""Authentication system for Yeliztli (P4-21a).
 
 Optional PIN/password authentication with bcrypt hashing,
 session cookies, and 4-hour inactivity timeout.

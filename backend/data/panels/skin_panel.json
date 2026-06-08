@@ -1,7 +1,7 @@
 {
   "module": "skin",
   "version": "1.0.0",
-  "description": "Curated Gene Skin SNP panel for GenomeInsight (P3-54). Covers 4 skin pathways (Pigmentation & UV Response, Skin Barrier & Inflammation, Oxidative Stress & Aging, Skin Micronutrients) with 10 curated SNPs across MC1R, FLG, GSTP1, MMP1, VDR, and SOD2 plus GWAS Catalog skin/pigmentation EFO term associations. MC1R uses multi-allele haplotype-aware calling (0/1/2 R alleles). FLG 2282del4 flagged as Insufficient Data due to lacking full array coverage.",
+  "description": "Curated Gene Skin SNP panel for Yeliztli (P3-54). Covers 4 skin pathways (Pigmentation & UV Response, Skin Barrier & Inflammation, Oxidative Stress & Aging, Skin Micronutrients) with 10 curated SNPs across MC1R, FLG, GSTP1, MMP1, VDR, and SOD2 plus GWAS Catalog skin/pigmentation EFO term associations. MC1R uses multi-allele haplotype-aware calling (0/1/2 R alleles). FLG 2282del4 flagged as Insufficient Data due to lacking full array coverage.",
   "pathways": [
     {
       "id": "pigmentation_uv",

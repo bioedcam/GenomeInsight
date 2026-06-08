@@ -372,7 +372,7 @@ function AppVersionRow() {
             )}
             aria-hidden="true"
           />
-          <span className="font-medium text-sm">GenomeInsight</span>
+          <span className="font-medium text-sm">Yeliztli</span>
         </div>
       </td>
 

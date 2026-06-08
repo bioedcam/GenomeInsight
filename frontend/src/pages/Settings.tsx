@@ -90,7 +90,7 @@ function AboutPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground mb-1">About GenomeInsight</h2>
+        <h2 className="text-xl font-semibold text-foreground mb-1">About Yeliztli</h2>
         <p className="text-sm text-muted-foreground">
           Version information and update notifications.
         </p>
