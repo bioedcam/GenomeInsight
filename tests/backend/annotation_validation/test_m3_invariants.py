@@ -13,8 +13,6 @@ the supporting fixtures already exist.
 
 from __future__ import annotations
 
-import pytest
-
 from backend.analysis.zygosity import CARRIED_ZYGOSITIES, classify_zygosity
 from tests.backend.annotation_validation.conftest import clinvar_row, with_xx_scaffold
 
@@ -130,8 +128,6 @@ def test_inv4_no_chry_finding_on_xx(build_live_run) -> None:
 # ── inv6 — raw reconciles with annotated + an explicit coverage=0 bucket ──
 
 
-@pytest.mark.xfail(strict=True, reason="F36: variants matching no source are "
-                   "silently dropped (no coverage=0 marker); fixed by Phase E1")
 def test_inv6_raw_annotated_reconciliation(build_live_run) -> None:
     """count(raw) == count(annotated) — no variant is silently dropped.
 

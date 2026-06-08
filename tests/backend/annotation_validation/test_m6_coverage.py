@@ -8,8 +8,6 @@ self-consistent.
 
 from __future__ import annotations
 
-import pytest
-
 from backend.annotation import engine as engine_mod
 from tests.backend.annotation_validation.conftest import clinvar_row
 
@@ -128,8 +126,6 @@ def test_merged_rsids_are_recovered(build_live_run) -> None:
 # ── F36: raw→annotated reconciliation with an explicit coverage=0 bucket ───
 
 
-@pytest.mark.xfail(strict=True, reason="F36: unmatched variants dropped with no "
-                   "coverage=0 marker; fixed by Phase E1")
 def test_unmatched_variant_gets_coverage_zero_marker(build_live_run) -> None:
     run = build_live_run(
         variants=[

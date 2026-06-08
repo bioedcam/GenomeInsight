@@ -499,9 +499,14 @@ def _merge_annotations(
         if ref is not None and alt is not None:
             row_data["zygosity"] = classify_zygosity(raw.genotype, ref, alt)
 
-        if bitmask > 0:
-            row_data["annotation_coverage"] = bitmask
-            merged.append(row_data)
+        # Always emit a row, even when no source matched (F36). An explicit
+        # ``annotation_coverage = 0`` marker distinguishes a variant that was
+        # *processed but had no source data* from one that *never entered the
+        # pipeline* (the latter has no row at all). Previously the ~465
+        # per-chip unmatched variants were dropped silently, so the two cases
+        # were indistinguishable and raw↔annotated reconciliation was impossible.
+        row_data["annotation_coverage"] = bitmask
+        merged.append(row_data)
 
     return merged
 
