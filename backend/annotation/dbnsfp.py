@@ -88,7 +88,7 @@ _TSV_COLUMN_MAP = {
     "Polyphen2_HVAR_score": "polyphen2_hsvar_score",
     "Polyphen2_HVAR_pred": "polyphen2_hsvar_pred",
     "REVEL_score": "revel",
-    "MutPred_score": "mutpred2",
+    "MutPred2_score": "mutpred2",
     "VEST4_score": "vest4",
     "MetaSVM_score": "metasvm",
     "MetaLR_score": "metalr",
@@ -413,7 +413,9 @@ def parse_dbnsfp_tsv_line(
     polyphen2_score = _parse_dbnsfp_float(fields.get("Polyphen2_HVAR_score"))
     polyphen2_pred = _parse_dbnsfp_pred(fields.get("Polyphen2_HVAR_pred"))
     revel = _parse_dbnsfp_float(fields.get("REVEL_score"))
-    mutpred2 = _parse_dbnsfp_float(fields.get("MutPred_score"))
+    # dbNSFP 5.x distributes MutPred2 under ``MutPred2_score`` (F31). The old
+    # ``MutPred_score`` key never matched, leaving the column 100% NULL.
+    mutpred2 = _parse_dbnsfp_float(fields.get("MutPred2_score"))
     vest4 = _parse_dbnsfp_float(fields.get("VEST4_score"))
     metasvm = _parse_dbnsfp_float(fields.get("MetaSVM_score"))
     metalr = _parse_dbnsfp_float(fields.get("MetaLR_score"))

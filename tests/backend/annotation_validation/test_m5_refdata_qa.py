@@ -61,8 +61,6 @@ def test_correctly_mapped_dbnsfp_scores_populate(build_live_run) -> None:
     assert row.revel == pytest.approx(0.9)
 
 
-@pytest.mark.xfail(strict=True, reason="F31: dbNSFP loader maps MutPred_score, not "
-                   "the real MutPred2_score → 100% NULL; fixed by Phase F4")
 def test_mutpred2_column_has_coverage(build_live_run) -> None:
     """MutPred2 must populate from the genuine ``MutPred2_score`` header."""
     run = _scored_run(build_live_run)
