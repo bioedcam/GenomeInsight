@@ -118,8 +118,6 @@ def test_inv3_no_double_carry_at_palindrome() -> None:
 # ── inv4 — no chrY/chrX-nonPAR finding contradicts inferred sex (F8) ──────
 
 
-@pytest.mark.xfail(strict=True, reason="F8: findings are not sex/chromosome "
-                   "gated; fixed by Phase D2")
 def test_inv4_no_chry_finding_on_xx(build_live_run) -> None:
     run = build_live_run(
         variants=with_xx_scaffold(

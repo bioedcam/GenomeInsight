@@ -18,8 +18,6 @@ they would have failed on day one.
 
 from __future__ import annotations
 
-import pytest
-
 from tests.backend.annotation_validation.conftest import with_xx_scaffold
 
 
@@ -236,8 +234,6 @@ def test_merged_rsid_resolved(build_live_run) -> None:
 # ── F8: chrY finding on an XX sample is biologically impossible ────────────
 
 
-@pytest.mark.xfail(strict=True, reason="F8: no sex/chromosome gate on findings; "
-                   "fixed by Phase D2")
 def test_no_chry_finding_on_xx_sample(build_live_run) -> None:
     run = build_live_run(
         variants=with_xx_scaffold(

@@ -122,6 +122,11 @@ class RareVariantFilter:
     # probe, so without this the finder dumps homozygous-reference and
     # unscoreable (indel/no-call) calls as findings. ``run_all`` sets it.
     carried_only: bool = False
+    # Biologically-inferred sex ("XX"/"XY"/"manual_review"/"unknown"). When set,
+    # findings that contradict it are dropped via ``finding_gate.is_surfaceable``
+    # — chiefly a Y-chromosome finding on an XX sample (F8). ``run_all`` computes
+    # it once and passes it; None means "do not sex-gate" (standalone callers).
+    inferred_sex: str | None = None
 
 
 @dataclass
@@ -382,6 +387,14 @@ def find_rare_variants(
         )
         variant.evidence_level = _assign_evidence_level(variant)
         variants.append(variant)
+
+    # Sex/chromosome gate (F8): drop findings impossible for the inferred sex —
+    # e.g. a Y-chromosome finding on an XX sample. Applied only when a sex was
+    # supplied (the live ``run_all`` path); standalone callers are unaffected.
+    if filters.inferred_sex is not None:
+        from backend.analysis.finding_gate import is_surfaceable
+
+        variants = [v for v in variants if is_surfaceable(v.chrom, filters.inferred_sex)]
 
     logger.info(
         "rare_variants_found",
