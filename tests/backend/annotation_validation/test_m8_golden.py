@@ -19,8 +19,6 @@ import json
 import os
 from pathlib import Path
 
-import pytest
-
 from backend.analysis.qc_carriage import audit_carriage
 from tests.backend.annotation_validation.conftest import clinvar_row, with_xx_scaffold
 
@@ -76,8 +74,6 @@ def test_snapshot_builder_runs(build_live_run) -> None:
     assert isinstance(snapshot["carriage_table"], dict)
 
 
-@pytest.mark.xfail(strict=True, reason="Golden encodes post-remediation output; "
-                   "regenerate with GENOMEINSIGHT_UPDATE_GOLDEN=1 in Phase G")
 def test_golden_snapshot_matches(build_live_run) -> None:
     snapshot = _build_snapshot(_golden_run(build_live_run))
 
