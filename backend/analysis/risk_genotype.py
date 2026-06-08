@@ -159,6 +159,10 @@ class GenotypeModel:
     finding_text: str  # template; supports {genotype} {penetrance_text} {classification}
     zygosity: str | None = None
     odds_ratio: str | None = None
+    # Ancestry-specific OR text, e.g. {"EAS": "...", "default": "..."}. When set,
+    # the engine picks the band for the sample's inferred ancestry (gout effect
+    # sizes are larger in East Asian ancestry); falls back to "default".
+    odds_ratio_by_ancestry: dict[str, str] | None = None
     penetrance: Any = None  # str, or {"by_sex": {"XX": ..., "XY": ...}}
     absolute_risk_context: str | None = None
     caveats: list[str] = field(default_factory=list)
@@ -275,7 +279,9 @@ def load_risk_panel(path: str | Path) -> RiskPanel:
                     f"Panel '{data['module']}' model '{m['id']}' references unknown "
                     f"caveat key '{key}'."
                 )
-        if m.get("odds_ratio") and not m.get("absolute_risk_context"):
+        if (m.get("odds_ratio") or m.get("odds_ratio_by_ancestry")) and not m.get(
+            "absolute_risk_context"
+        ):
             raise ValueError(
                 f"Panel '{data['module']}' model '{m['id']}' sets an odds_ratio without "
                 f"an absolute_risk_context — relative risk must always be paired with "
@@ -298,6 +304,7 @@ def load_risk_panel(path: str | Path) -> RiskPanel:
                 finding_text=m["finding_text"],
                 zygosity=m.get("zygosity"),
                 odds_ratio=m.get("odds_ratio"),
+                odds_ratio_by_ancestry=m.get("odds_ratio_by_ancestry"),
                 penetrance=m.get("penetrance"),
                 absolute_risk_context=m.get("absolute_risk_context"),
                 caveats=caveats,
@@ -475,12 +482,21 @@ def _resolve_penetrance_text(penetrance: Any, sex: str | None) -> str:
     return ""
 
 
+def _resolve_odds_ratio(model: GenotypeModel, inferred_ancestry: str | None) -> str:
+    """Pick the ancestry-appropriate OR text, falling back to ``default``/``odds_ratio``."""
+    by = model.odds_ratio_by_ancestry
+    if by:
+        return by.get(inferred_ancestry or "", by.get("default", "")) or model.odds_ratio or ""
+    return model.odds_ratio or ""
+
+
 def _render_finding(
     model: GenotypeModel,
     panel: RiskPanel,
     dosages: dict[str, int | None],
     readouts: dict[str, ProbeReadout],
     sex: str | None,
+    inferred_ancestry: str | None = None,
 ) -> RiskCall:
     match_rsids = _model_rsids(model)
     primary = model.primary_rsid or match_rsids[0]
@@ -495,12 +511,13 @@ def _render_finding(
     )
     penetrance_text = _resolve_penetrance_text(model.penetrance, sex)
     resolved_caveats = [CAVEAT_REGISTRY[k] for k in model.caveats]
+    effective_or = _resolve_odds_ratio(model, inferred_ancestry)
 
     context = {
         "genotype": genotype_text,
         "penetrance_text": penetrance_text,
         "classification": model.risk_classification,
-        "odds_ratio": model.odds_ratio or "",
+        "odds_ratio": effective_or,
         "absolute_risk": model.absolute_risk_context or "",
     }
     finding_text = model.finding_text.format_map(_SafeDict(context))
@@ -511,7 +528,7 @@ def _render_finding(
         "genotype_calls": genotype_calls,
         "dosages": {rsid: dosages.get(rsid) for rsid in match_rsids},
         "evidence_stars": model.evidence_stars,
-        "odds_ratio": model.odds_ratio,
+        "odds_ratio": effective_or or model.odds_ratio,
         "penetrance": model.penetrance,
         "penetrance_text": penetrance_text,
         "absolute_risk_context": model.absolute_risk_context,
@@ -741,7 +758,7 @@ def classify(
 
     calls = []
     for m in matched:
-        call = _render_finding(m, panel, dosages, readouts, sex)
+        call = _render_finding(m, panel, dosages, readouts, sex, inferred_ancestry)
         call = _apply_partial_guardrail(call, m, dosages)
         call = _apply_modifier(call, m, dosages)
         calls.append(call)

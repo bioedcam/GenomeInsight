@@ -181,6 +181,59 @@ class TestAncestryGate:
         assert assessment.ancestry_suppressed is False
 
 
+class TestAncestrySpecificOdds:
+    def _or_panel(self) -> RiskPanel:
+        model = GenotypeModel(
+            id="risk",
+            match={"rsA": {"dosage_min": 1}},
+            risk_classification="Risk",
+            evidence_stars=2,
+            finding_text="Risk: {odds_ratio}",
+            odds_ratio_by_ancestry={"EAS": "OR 4.5 (East Asian)", "default": "OR 2.0"},
+            absolute_risk_context="Absolute risk stays modest.",
+        )
+        return _panel([model])
+
+    def test_eas_gets_larger_band(self, sample_engine: sa.Engine) -> None:
+        _seed(sample_engine, [{"rsid": "rsA", "chrom": "4", "pos": 1, "genotype": "AA"}])
+        panel = self._or_panel()
+        readouts = read_genotypes(panel, sample_engine)
+        dosages = compute_dosages(panel, readouts)
+        a = classify(panel, dosages, readouts, inferred_ancestry="EAS")
+        assert "4.5" in a.calls[0].finding_text
+        assert a.calls[0].detail["odds_ratio"] == "OR 4.5 (East Asian)"
+
+    def test_default_band_for_other_ancestry(self, sample_engine: sa.Engine) -> None:
+        _seed(sample_engine, [{"rsid": "rsA", "chrom": "4", "pos": 1, "genotype": "AA"}])
+        panel = self._or_panel()
+        readouts = read_genotypes(panel, sample_engine)
+        dosages = compute_dosages(panel, readouts)
+        a = classify(panel, dosages, readouts, inferred_ancestry="EUR")
+        assert "2.0" in a.calls[0].finding_text
+        assert a.calls[0].detail["odds_ratio"] == "OR 2.0"  # default band in detail too
+
+    def test_loader_requires_absolute_for_ancestry_odds(self, tmp_path) -> None:
+        bad = {
+            "module": "x",
+            "version": "1.0.0",
+            "loci": [{"rsid": "rsA", "gene_symbol": "G", "risk_allele": "A", "ref_allele": "G"}],
+            "genotype_models": [
+                {
+                    "id": "m",
+                    "match": {"rsA": {"dosage": 1}},
+                    "risk_classification": "carrier",
+                    "evidence_stars": 2,
+                    "finding_text": "x",
+                    "odds_ratio_by_ancestry": {"EAS": "OR 4", "default": "OR 2"},
+                }
+            ],
+        }
+        path = tmp_path / "bad_anc.json"
+        path.write_text(json.dumps(bad))
+        with pytest.raises(ValueError, match="absolute_risk_context"):
+            load_risk_panel(path)
+
+
 class TestLoadRiskPanelGuards:
     def test_rejects_empty_match(self, tmp_path) -> None:
         bad = {
