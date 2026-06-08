@@ -524,3 +524,16 @@ genetic and non-genetic factors are not captured here.
 - National Kidney Foundation: https://www.kidney.org/
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
 """
+
+
+# ── Calibrated in-silico (Pejaver PP3/BP4) evidence-only disclosure ──────────
+# Attached to the in-silico tier block (backend.analysis.insilico_tiers) that is
+# added to existing cancer/cardiovascular findings. It is an ACMG/AMP *evidence*
+# strength tag only — never a clinical classification — and never alters the
+# finding's evidence_level or ClinVar significance.
+
+INSILICO_ACMG_EVIDENCE_ONLY = (
+    "Draft ACMG/AMP in-silico evidence strength from REVEL (Pejaver 2022) — an "
+    "evidence tag only, NOT a clinical classification. It does not change the "
+    "variant's ClinVar significance or this finding's evidence level."
+)

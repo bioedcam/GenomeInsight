@@ -49,6 +49,7 @@ import sqlalchemy as sa
 import structlog
 
 from backend.analysis.evidence import assign_clinvar_evidence_level
+from backend.analysis.insilico_tiers import insilico_block
 from backend.analysis.zygosity import CARRIED_ZYGOSITIES
 from backend.db.tables import annotated_variants, findings
 
@@ -213,6 +214,8 @@ class CardiovascularVariantResult:
     evidence_level: int
     cross_links: list[str]
     pmids: list[str]
+    revel: float | None = None
+    consequence: str | None = None
 
 
 @dataclass
@@ -317,6 +320,8 @@ def extract_cardiovascular_variants(
                 annotated_variants.c.clinvar_review_stars,
                 annotated_variants.c.clinvar_accession,
                 annotated_variants.c.clinvar_conditions,
+                annotated_variants.c.revel,
+                annotated_variants.c.consequence,
             )
             .where(
                 annotated_variants.c.gene_symbol.in_(gene_symbols),
@@ -356,6 +361,8 @@ def extract_cardiovascular_variants(
                 evidence_level=evidence,
                 cross_links=gene_info.cross_links,
                 pmids=gene_info.pmids,
+                revel=row.revel,
+                consequence=row.consequence,
             )
         )
 
@@ -418,6 +425,9 @@ def store_cardiovascular_findings(
             "cardiovascular_category": v.cardiovascular_category,
             "inheritance": v.inheritance,
             "cross_links": v.cross_links,
+            # Additive, DRAFT in-silico evidence tag (Pejaver 2022, REVEL-only).
+            # Never mutates evidence_level / clinvar_significance below.
+            "insilico": insilico_block(v.revel, v.consequence),
         }
 
         rows.append(
