@@ -60,8 +60,6 @@ def test_crash_during_reannotation_preserves_prior(build_live_run, monkeypatch) 
 # ── F29: an unreadable source DB must be recorded, not silently dropped ───
 
 
-@pytest.mark.xfail(strict=True, reason="F29: _check_engine_available swallows the "
-                   "error and treats an unreadable DB as absent; fixed by Phase E2")
 def test_unreadable_source_is_recorded(build_live_run, monkeypatch) -> None:
     run = build_live_run(variants=_VARIANTS, clinvar=_CLINVAR)
 
@@ -72,11 +70,15 @@ def test_unreadable_source_is_recorded(build_live_run, monkeypatch) -> None:
     monkeypatch.setattr(type(run.registry), "dbnsfp_engine", property(_raise))
     result = run_annotation(run.sample_engine, run.registry)
 
-    errors = " ".join(getattr(result, "errors", []))
-    failures = getattr(result, "source_failures", {}) or {}
-    assert "dbnsfp" in errors.lower() or "dbnsfp" in failures, (
-        "an unreadable dbNSFP DB was not recorded as a failure"
+    # The unreadable source is recorded as a failure, not silently treated as
+    # absent (the F29 defect: a locked/corrupt DB indistinguishable from a
+    # genuinely-uninstalled one, with the run still reported complete).
+    assert "dbnsfp" in result.source_failures, (
+        f"unreadable dbNSFP not recorded; source_failures={result.source_failures}"
     )
+    # ...and the rest of the annotation still completes from the readable sources.
+    assert result.rows_written > 0
+    assert result.clinvar_matched > 0
 
 
 # ── F39: large-input streaming / memory ceiling — Phase H (roadmap) ───────

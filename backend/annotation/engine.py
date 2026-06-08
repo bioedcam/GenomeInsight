@@ -97,6 +97,11 @@ class AnnotationEngineResult:
     rows_written: int = 0
     batches_processed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Sources that were present-but-unreadable (locked / corrupt / raised on
+    # access), keyed by source name → error text (F29). Distinct from a source
+    # that is simply not installed: an unreadable source must downgrade the run
+    # to ``partial`` rather than be silently treated as absent.
+    source_failures: dict[str, str] = field(default_factory=dict)
     # Per-source cumulative timing (seconds) for bottleneck identification (P4-22)
     timing_vep_s: float = 0.0
     timing_clinvar_s: float = 0.0
@@ -850,16 +855,36 @@ def _build_coverage_stats(
 # ── Engine availability checks ───────────────────────────────────────────
 
 
-def _check_engine_available(engine_getter: Callable, name: str) -> sa.Engine | None:
-    """Try to get an engine, returning None if the DB file doesn't exist."""
+def _check_engine_available(
+    engine_getter: Callable,
+    name: str,
+    result: AnnotationEngineResult | None = None,
+) -> sa.Engine | None:
+    """Resolve a source engine, distinguishing *absent* from *unreadable* (F29).
+
+    Returns the engine on success, ``None`` otherwise. A ``FileNotFoundError``
+    means the source is simply not installed — unavailable, but not a failure
+    (graceful degradation). Any other error (locked, corrupt, permission, a
+    registry property that raised) means the source is present-but-unreadable:
+    it is recorded in ``result.source_failures`` so the run can be reported as
+    ``partial`` instead of silently dropping the source and claiming success.
+    """
     try:
         engine = engine_getter()
         # Quick connectivity check
         with engine.connect() as conn:
             conn.execute(sa.text("SELECT 1"))
         return engine
-    except Exception:
+    except FileNotFoundError:
         logger.info("annotation_source_unavailable", extra={"source": name})
+        return None
+    except Exception as exc:
+        logger.warning(
+            "annotation_source_failed",
+            extra={"source": name, "error": str(exc)},
+        )
+        if result is not None:
+            result.source_failures[name] = str(exc)
         return None
 
 
@@ -918,10 +943,10 @@ def run_annotation(
     _delete_all_annotations(sample_engine)
 
     # 3. Detect available annotation sources
-    vep_engine = _check_engine_available(lambda: registry.vep_engine, "vep")
+    vep_engine = _check_engine_available(lambda: registry.vep_engine, "vep", result)
     reference_engine = registry.reference_engine  # always available
-    gnomad_engine = _check_engine_available(lambda: registry.gnomad_engine, "gnomad")
-    dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp")
+    gnomad_engine = _check_engine_available(lambda: registry.gnomad_engine, "gnomad", result)
+    dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp", result)
 
     # 3b. dbSNP merge reconciliation (F18): a chip may carry a deprecated rsid
     # whose ClinVar/gnomAD/dbNSFP record now lives under its current rsid. Build

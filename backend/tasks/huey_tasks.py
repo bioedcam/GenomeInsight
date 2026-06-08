@@ -332,15 +332,26 @@ def run_annotation_task(sample_id: int, job_id: str) -> None:
             )
             # Non-fatal: annotation succeeded, SVG generation is best-effort
 
+        # An unreadable source (locked/corrupt) means the annotation is
+        # incomplete — report ``partial`` rather than silently claiming success
+        # (F29). A genuinely-absent source is not a failure and stays ``complete``.
+        if result.source_failures:
+            failed = ", ".join(sorted(result.source_failures))
+            final_status = "partial"
+            status_note = f" — partial: source(s) unavailable ({failed})"
+        else:
+            final_status = "complete"
+            status_note = ""
+
         _update_job(
             job_id,
-            status="complete",
+            status=final_status,
             progress_pct=100.0,
             message=(
                 f"Annotated {result.rows_written:,} variants "
                 f"(VEP: {result.vep_matched}, ClinVar: {result.clinvar_matched}, "
                 f"gnomAD: {result.gnomad_matched}, dbNSFP: {result.dbnsfp_matched}, "
-                f"GenePhenotype: {result.gene_phenotype_matched})"
+                f"GenePhenotype: {result.gene_phenotype_matched}){status_note}"
             ),
             error=error_summary,
         )
