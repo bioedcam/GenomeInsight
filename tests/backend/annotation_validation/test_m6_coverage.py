@@ -16,10 +16,23 @@ from tests.backend.annotation_validation.conftest import clinvar_row
 # ── F33: bitmask constants must be distinct ───────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="F33: CPIC_BIT collides with "
-                   "GENE_PHENOTYPE_BIT (both 0b10000); fixed by Phase E4")
 def test_cpic_bit_distinct_from_gene_phenotype_bit() -> None:
+    """F33: every coverage bit is distinct — no two sources share a bit.
+
+    Constant/meta check (not a live-path coverage test): a shared bit makes
+    "this variant has CPIC data" indistinguishable from "…gene-phenotype data".
+    """
+    bits = {
+        "VEP": engine_mod.VEP_BIT,
+        "CLINVAR": engine_mod.CLINVAR_BIT,
+        "GNOMAD": engine_mod.GNOMAD_BIT,
+        "DBNSFP": engine_mod.DBNSFP_BIT,
+        "GENE_PHENOTYPE": engine_mod.GENE_PHENOTYPE_BIT,
+        "GWAS": engine_mod.GWAS_BIT,
+        "CPIC": engine_mod.CPIC_BIT,
+    }
     assert engine_mod.CPIC_BIT != engine_mod.GENE_PHENOTYPE_BIT
+    assert len(set(bits.values())) == len(bits), f"coverage bits collide: {bits}"
 
 
 # ── inv5 (standing guard): a set coverage bit implies a populated column ───
