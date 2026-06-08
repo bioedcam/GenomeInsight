@@ -58,6 +58,7 @@ from backend.api.routes.setup import router as setup_router
 from backend.api.routes.skin import router as skin_router
 from backend.api.routes.sleep import router as sleep_router
 from backend.api.routes.tags import router as tags_router
+from backend.api.routes.thrombophilia import router as thrombophilia_router
 from backend.api.routes.traits import router as traits_router
 from backend.api.routes.updates import router as updates_router
 from backend.api.routes.variant_detail import router as variant_detail_router
@@ -197,6 +198,7 @@ def create_app() -> FastAPI:
     api_router.include_router(skin_router)
     api_router.include_router(sleep_router)
     api_router.include_router(tags_router)
+    api_router.include_router(thrombophilia_router)
     api_router.include_router(traits_router)
     api_router.include_router(updates_router)
     api_router.include_router(variants_router)

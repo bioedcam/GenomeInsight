@@ -72,6 +72,7 @@ _FULLY_GATED_MODULES = frozenset(
         "skin",
         "sleep",
         "tags",
+        "thrombophilia",
         "traits",
         "variant_detail",
         "variants",
