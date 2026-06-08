@@ -14,12 +14,15 @@ import pytest
 import sqlalchemy as sa
 
 from backend.analysis.risk_genotype import (
+    ALLELE_TYPE_INDEL,
     PROBE_ABSENT,
     PROBE_NO_CALL,
     PROBE_TYPED,
+    TOTAL_RISK_DOSAGE_KEY,
     GenotypeModel,
     RiskLocus,
     RiskPanel,
+    _indel_dosage,
     classify,
     compute_dosages,
     load_risk_panel,
@@ -240,6 +243,178 @@ class TestLoadRiskPanelGuards:
         path.write_text(json.dumps(bad))
         with pytest.raises(ValueError, match="caveat"):
             load_risk_panel(path)
+
+
+# ── Engine extensions for APOL1 (recessive / total_risk_dosage / indel / modifier) ──
+
+
+def _recessive_panel(**kwargs) -> RiskPanel:
+    """A 3-locus APOL1-shaped panel: G1 (snv), G2 (indel), modifier (snv)."""
+    high_risk = GenotypeModel(
+        id="high_risk",
+        match={TOTAL_RISK_DOSAGE_KEY: {"rsids": ["rsG1", "rsG2"], "dosage_min": 2}},
+        primary_rsid="rsG1",
+        recessive=True,
+        risk_classification="High risk (two risk alleles)",
+        evidence_stars=3,
+        finding_text="High risk {genotype}",
+        modifier={
+            "rsid": "rsMod",
+            "attenuates_risk_loci": ["rsG2"],
+            "present_min_dosage": 1,
+            "unassessed_caveat": "Modifier not assessed — risk may be overstated.",
+            "reclassify": {
+                "risk_classification": "Attenuated by modifier",
+                "evidence_stars": 1,
+                "finding_text": "Attenuated by the modifier.",
+            },
+        },
+    )
+    return RiskPanel(
+        module="apol1test",
+        version="1.0.0",
+        description="",
+        category="risk_genotype",
+        loci=[
+            RiskLocus(
+                rsid="rsG1", gene_symbol="APOL1", label="G1", risk_allele="A", ref_allele="G"
+            ),
+            RiskLocus(
+                rsid="rsG2",
+                gene_symbol="APOL1",
+                label="G2",
+                risk_allele="D",
+                ref_allele="I",
+                allele_type=ALLELE_TYPE_INDEL,
+            ),
+            RiskLocus(
+                rsid="rsMod", gene_symbol="APOL1", label="Mod", risk_allele="T", ref_allele="C"
+            ),
+        ],
+        genotype_models=[high_risk],
+        **kwargs,
+    )
+
+
+def _assess(panel: RiskPanel, sample_engine: sa.Engine, **classify_kw):
+    readouts = read_genotypes(panel, sample_engine)
+    dosages = compute_dosages(panel, readouts)
+    return classify(panel, dosages, readouts, **classify_kw)
+
+
+class TestIndelDosage:
+    def test_indel_token_counts(self) -> None:
+        assert _indel_dosage("DD", "D", "I") == 2
+        assert _indel_dosage("DI", "D", "I") == 1
+        assert _indel_dosage("ID", "D", "I") == 1
+        assert _indel_dosage("II", "D", "I") == 0
+        assert _indel_dosage("D", "D", "I") == 1
+
+    def test_indel_unresolvable_is_none(self) -> None:
+        assert _indel_dosage("--", "D", "I") is None
+        assert _indel_dosage(None, "D", "I") is None
+        assert _indel_dosage("DG", "D", "I") is None  # mixed with a non-token allele
+
+    def test_indel_locus_not_treated_as_no_call(self, sample_engine: sa.Engine) -> None:
+        """The global is_no_call discards 'DD'/'II'; an indel locus must not."""
+        _seed(sample_engine, [{"rsid": "rsG2", "chrom": "22", "pos": 1, "genotype": "DD"}])
+        panel = _recessive_panel()
+        readouts = read_genotypes(panel, sample_engine)
+        assert readouts["rsG2"].status == PROBE_TYPED
+        assert compute_dosages(panel, readouts)["rsG2"] == 2
+
+
+class TestTotalRiskDosageRecessive:
+    def test_two_risk_alleles_fires(self, sample_engine: sa.Engine) -> None:
+        # G1/G1 homozygous = 2 risk alleles.
+        _seed(sample_engine, [{"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AA"}])
+        a = _assess(_recessive_panel(), sample_engine)
+        assert len(a.calls) == 1
+        assert a.calls[0].model_id == "high_risk"
+
+    def test_compound_two_alleles_fires(self, sample_engine: sa.Engine) -> None:
+        # G1 het + G2 het = 2 risk alleles total.
+        _seed(
+            sample_engine,
+            [
+                {"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AG"},
+                {"rsid": "rsG2", "chrom": "22", "pos": 2, "genotype": "DI"},
+            ],
+        )
+        a = _assess(_recessive_panel(), sample_engine)
+        assert len(a.calls) == 1
+
+    def test_single_risk_allele_no_finding(self, sample_engine: sa.Engine) -> None:
+        # G1 het only, G2 absent -> 1 known risk allele -> recessive does not fire.
+        _seed(sample_engine, [{"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AG"}])
+        a = _assess(_recessive_panel(), sample_engine)
+        assert a.calls == []
+
+
+class TestPartialGuardrail:
+    def test_partial_when_contributing_locus_untyped(self, sample_engine: sa.Engine) -> None:
+        # G1/G1 fires (2 alleles) but G2 indel is off-chip -> partial genotype caveat.
+        _seed(sample_engine, [{"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AA"}])
+        a = _assess(_recessive_panel(), sample_engine)
+        assert len(a.calls) == 1
+        detail = a.calls[0].detail
+        assert detail["partial_genotype"] is True
+        assert "rsG2" in detail["untyped_loci"]
+        assert "partial genotype" in a.calls[0].finding_text.lower()
+
+    def test_no_partial_when_all_typed(self, sample_engine: sa.Engine) -> None:
+        _seed(
+            sample_engine,
+            [
+                {"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AA"},
+                {"rsid": "rsG2", "chrom": "22", "pos": 2, "genotype": "II"},
+                {"rsid": "rsMod", "chrom": "22", "pos": 3, "genotype": "CC"},
+            ],
+        )
+        a = _assess(_recessive_panel(), sample_engine)
+        assert a.calls[0].detail.get("partial_genotype") is None
+
+
+class TestModifier:
+    def test_modifier_present_attenuates(self, sample_engine: sa.Engine) -> None:
+        # G2/G2 high risk + modifier present -> reclassified to attenuated.
+        _seed(
+            sample_engine,
+            [
+                {"rsid": "rsG2", "chrom": "22", "pos": 2, "genotype": "DD"},
+                {"rsid": "rsMod", "chrom": "22", "pos": 3, "genotype": "CT"},
+            ],
+        )
+        a = _assess(_recessive_panel(), sample_engine)
+        assert a.calls[0].risk_classification == "Attenuated by modifier"
+        assert a.calls[0].evidence_stars == 1
+        assert a.calls[0].detail["modifier_applied"] == "rsMod"
+
+    def test_modifier_unassessed_caveats_high_risk(self, sample_engine: sa.Engine) -> None:
+        # G1/G1 high risk, G2 + modifier both off-chip -> both caveats, still high-risk.
+        _seed(sample_engine, [{"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AA"}])
+        a = _assess(_recessive_panel(), sample_engine)
+        call = a.calls[0]
+        assert call.risk_classification == "High risk (two risk alleles)"
+        caveats = " ".join(call.detail["caveats"]).lower()
+        assert "modifier not assessed" in caveats  # modifier-unassessed caveat
+        assert "partial genotype" in caveats  # partial-genotype caveat
+
+    def test_modifier_confidently_absent_no_caveat(self, sample_engine: sa.Engine) -> None:
+        # G1/G1 high risk, G2 typed-absent, modifier typed-absent -> confident, no caveat.
+        _seed(
+            sample_engine,
+            [
+                {"rsid": "rsG1", "chrom": "22", "pos": 1, "genotype": "AA"},
+                {"rsid": "rsG2", "chrom": "22", "pos": 2, "genotype": "II"},
+                {"rsid": "rsMod", "chrom": "22", "pos": 3, "genotype": "CC"},
+            ],
+        )
+        a = _assess(_recessive_panel(), sample_engine)
+        call = a.calls[0]
+        assert call.risk_classification == "High risk (two risk alleles)"
+        caveats = " ".join(call.detail["caveats"]).lower()
+        assert "modifier not assessed" not in caveats
 
 
 class TestStoreRiskFindings:

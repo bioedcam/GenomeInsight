@@ -437,3 +437,51 @@ with an optometrist or ophthalmologist.
 - American Academy of Ophthalmology: https://www.aao.org/eye-health/diseases/amd-macular-degeneration
 - National Eye Institute: https://www.nei.nih.gov/learn-about-eye-health/eye-conditions-and-diseases/age-related-macular-degeneration\
 """
+
+
+# ── APOL1 kidney-risk (G1 / G2 / N264K) module ──────────────────────────────
+
+APOL1_DISCLAIMER_TITLE = "About APOL1 Kidney-Risk Results"
+
+APOL1_DISCLAIMER_TEXT = """\
+This section reports the APOL1 G1 (rs73885319 / rs60910145) and G2 (rs71785313) \
+kidney-risk variants and the N264K (rs73885316) modifier. These variants arose \
+on, and are validated in, recent African-ancestry genetic backgrounds and are \
+near-absent in other populations.
+
+**Please understand the following before reviewing:**
+
+1. **Ancestry-specific.** This module is reported as actionable only for \
+individuals of inferred African ancestry. The G1/G2 alleles are essentially \
+absent elsewhere, and the risk estimates were established in African-ancestry \
+cohorts. For other inferred ancestries, no actionable high-risk result is shown.
+
+2. **Recessive — two risk alleles are needed.** Increased kidney-disease risk \
+requires two risk alleles (any combination of G1 and G2). Carrying a single \
+risk allele does not raise risk.
+
+3. **Relative risk, with incomplete penetrance.** The two-risk-allele genotype \
+is associated with higher odds of focal segmental glomerulosclerosis (OR ~10.5) \
+and hypertension-attributed end-stage kidney disease (OR ~7.3), but these are \
+*relative* odds. Most people with the high-risk genotype never develop kidney \
+disease; a 'second hit' (such as an interferon-driven inflammatory state or \
+certain infections) is usually involved. This is not a diagnosis.
+
+4. **The N264K modifier matters.** N264K (rs73885316) strongly attenuates \
+G2-associated risk and can reclassify a high-risk genotype toward low risk. If \
+N264K was not typed on your array, a high-risk estimate may be overstated.
+
+5. **The G2 variant is a 6-bp deletion often missing from arrays.** When G2 \
+(rs71785313) is not typed, your genotype is partial and the risk-allele count \
+could be higher than observed — never read a partial result as 'low risk'. \
+(Some datasets label this deletion rs1317778148.)
+
+6. **Confirm clinically.** Discuss results with a nephrologist or genetic \
+counselor; confirm in a CLIA/accredited laboratory before any medical action. \
+This is a research/educational result, not a clinical test.
+
+**Resources:**
+- National Kidney Foundation: https://www.kidney.org/
+- American Society of Nephrology (APOL1): https://www.asn-online.org/
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
+"""
