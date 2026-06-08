@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Performance benchmark for GenomeInsight annotation pipeline.
+"""Performance benchmark for Yeliztli annotation pipeline.
 
 Generates a synthetic 600k-SNP dataset, populates in-memory annotation
 source databases, and times the full annotation pipeline against the
@@ -446,7 +446,7 @@ def run_benchmark(num_variants: int = 600_000) -> dict:
     results: dict = {"num_variants": num_variants}
 
     print(f"\n{'=' * 60}")
-    print("  GenomeInsight Annotation Pipeline Benchmark")
+    print("  Yeliztli Annotation Pipeline Benchmark")
     print(f"  Variants: {num_variants:,}")
     print(f"{'=' * 60}\n")
 
@@ -625,7 +625,7 @@ def run_benchmark(num_variants: int = 600_000) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GenomeInsight annotation pipeline benchmark")
+    parser = argparse.ArgumentParser(description="Yeliztli annotation pipeline benchmark")
     parser.add_argument(
         "--variants",
         "-n",

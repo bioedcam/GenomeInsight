@@ -31,7 +31,7 @@ function mockStorageInfo() {
     total_space_bytes: 100 * 1024 * 1024 * 1024,
     total_space_gb: 100,
     status: 'ok' as const,
-    message: '50.0 GB free — sufficient for GenomeInsight.',
+    message: '50.0 GB free — sufficient for Yeliztli.',
     path_exists: true,
     path_writable: true,
   }

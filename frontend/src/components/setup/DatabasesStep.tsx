@@ -332,7 +332,7 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
           Reference Databases
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          GenomeInsight needs reference databases for variant annotation.
+          Yeliztli needs reference databases for variant annotation.
           {dbList && (
             <span className="block mt-1">
               Total size: {formatBytes(dbList.total_size_bytes)} &middot;{' '}
@@ -527,7 +527,7 @@ export default function DatabasesStep({ onNext, onBack }: DatabasesStepProps) {
                     {/* Bundled status */}
                     {isBundled && (
                       <p className="mt-0.5 text-xs text-green-600 dark:text-green-400">
-                        Ships with GenomeInsight
+                        Ships with Yeliztli
                       </p>
                     )}
                   </div>

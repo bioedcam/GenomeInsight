@@ -1,7 +1,7 @@
 {
   "module": "sleep",
   "version": "1.0.0",
-  "description": "Curated Gene Sleep SNP panel for GenomeInsight (P3-48/P3-49). Covers 4 sleep pathways (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality, Sleep Disorders) with 6 curated SNPs plus GWAS Catalog sleep/circadian EFO term associations. CYP1A2 rs762551 has cross-module reference to Pharmacogenomics. PER3 rs57875989 is a VNTR proxy with coverage caveat. HLA-DQB1*06:02 proxy (rs2858884) for narcolepsy susceptibility with accuracy caveat.",
+  "description": "Curated Gene Sleep SNP panel for Yeliztli (P3-48/P3-49). Covers 4 sleep pathways (Caffeine & Sleep, Chronotype & Circadian Rhythm, Sleep Quality, Sleep Disorders) with 6 curated SNPs plus GWAS Catalog sleep/circadian EFO term associations. CYP1A2 rs762551 has cross-module reference to Pharmacogenomics. PER3 rs57875989 is a VNTR proxy with coverage caveat. HLA-DQB1*06:02 proxy (rs2858884) for narcolepsy susceptibility with accuracy caveat.",
   "pathways": [
     {
       "id": "caffeine_sleep",

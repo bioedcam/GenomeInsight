@@ -1,7 +1,7 @@
 {
   "module": "methylation",
   "version": "1.0.0",
-  "description": "Curated MTHFR & Methylation SNP panel for GenomeInsight (P3-51). Covers 5 sub-pathways (Folate/MTHFR, Methionine Cycle, Transsulfuration, BH4 & Neurotransmitter Synthesis, Choline & Betaine) with ~35 curated SNPs. MTHFR C677T and A1298C are flagship variants. CBS rs234706 is a proxy SNP with coverage caveat. COMT Val158Met is framed as catecholamine clearance only (not psychiatric). This panel migrates MTHFR findings from the Nutrigenomics module for deeper pathway-level analysis.",
+  "description": "Curated MTHFR & Methylation SNP panel for Yeliztli (P3-51). Covers 5 sub-pathways (Folate/MTHFR, Methionine Cycle, Transsulfuration, BH4 & Neurotransmitter Synthesis, Choline & Betaine) with ~35 curated SNPs. MTHFR C677T and A1298C are flagship variants. CBS rs234706 is a proxy SNP with coverage caveat. COMT Val158Met is framed as catecholamine clearance only (not psychiatric). This panel migrates MTHFR findings from the Nutrigenomics module for deeper pathway-level analysis.",
   "pathways": [
     {
       "id": "folate_mthfr",

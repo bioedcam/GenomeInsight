@@ -296,7 +296,7 @@ class AppUpdateResponse(BaseModel):
 
 @router.get("/app-update", response_model=AppUpdateResponse)
 async def check_app_update() -> AppUpdateResponse:
-    """Check GitHub Releases API for a newer GenomeInsight version."""
+    """Check GitHub Releases API for a newer Yeliztli version."""
     from backend.utils.update_checker import check_app_update as _check
 
     info = await _check()

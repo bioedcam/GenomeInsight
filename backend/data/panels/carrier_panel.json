@@ -1,7 +1,7 @@
 {
   "module": "carrier",
   "version": "1.0.0",
-  "description": "Curated carrier status gene panel for GenomeInsight (P3-35). Covers 5 autosomal recessive genes plus 2 dual-role AD genes (BRCA1/BRCA2) for reproductive carrier screening.",
+  "description": "Curated carrier status gene panel for Yeliztli (P3-35). Covers 5 autosomal recessive genes plus 2 dual-role AD genes (BRCA1/BRCA2) for reproductive carrier screening.",
   "genes": [
     {
       "gene_symbol": "CFTR",

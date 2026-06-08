@@ -1,7 +1,7 @@
 {
   "module": "fitness",
   "version": "1.0.0",
-  "description": "Curated Gene Fitness SNP panel for GenomeInsight (P3-45). Covers 4 fitness pathways (Endurance, Power, Recovery & Injury, Training Response) with 8 curated SNPs plus GWAS Catalog fitness EFO term associations. ACTN3 R577X uses three-state calling (RR/RX/XX). ACE rs4341 is an I/D proxy with coverage caveat.",
+  "description": "Curated Gene Fitness SNP panel for Yeliztli (P3-45). Covers 4 fitness pathways (Endurance, Power, Recovery & Injury, Training Response) with 8 curated SNPs plus GWAS Catalog fitness EFO term associations. ACTN3 R577X uses three-state calling (RR/RX/XX). ACE rs4341 is an I/D proxy with coverage caveat.",
   "pathways": [
     {
       "id": "endurance",

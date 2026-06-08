@@ -1,7 +1,7 @@
 """GWAS Catalog TSV downloader, EFO-filtered SQLite loader, and annotation lookup.
 
 Downloads the GWAS Catalog associations TSV from the EBI GWAS Catalog,
-filters to a whitelist of EFO trait terms relevant to GenomeInsight modules
+filters to a whitelist of EFO trait terms relevant to Yeliztli modules
 (nutrigenomics, fitness, sleep, skin, allergy, traits), and bulk-loads
 into the ``gwas_associations`` table in reference.db.
 

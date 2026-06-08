@@ -1,6 +1,6 @@
 # Ancestry Module — Methods & Validation
 
-GenomeInsight's ancestry module uses a two-tier system to estimate genetic ancestry from 23andMe raw data.
+Yeliztli's ancestry module uses a two-tier system to estimate genetic ancestry from 23andMe raw data.
 
 ## Populations
 

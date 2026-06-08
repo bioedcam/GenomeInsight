@@ -1,6 +1,6 @@
 # Multi-Source Sample Merging
 
-GenomeInsight lets you upload more than one raw data file for the same person — for example, a 23andMe export and an AncestryDNA export — and combine them into a single richer sample. This guide walks through the full end-user flow: from two separate uploads to a merged dashboard with a concordance report and post-merge VUS re-watch.
+Yeliztli lets you upload more than one raw data file for the same person — for example, a 23andMe export and an AncestryDNA export — and combine them into a single richer sample. This guide walks through the full end-user flow: from two separate uploads to a merged dashboard with a concordance report and post-merge VUS re-watch.
 
 For background on the underlying data model, see the [AncestryDNA Integration Plan §10](AncestryDNA_Integration_Plan.md#10-sample-merging).
 
@@ -131,7 +131,7 @@ Once the merged sample's annotation finishes, a **Post-merge re-watch** modal au
 
 ## Source-deletion cascade
 
-If you later delete a source sample that participated in a merge, GenomeInsight will surface a single confirmation showing every merged sample that depends on it. Confirming the delete removes the merged samples first, then the source. The other source sample is untouched. This guarantees there is no merged sample on disk whose provenance points at a missing source.
+If you later delete a source sample that participated in a merge, Yeliztli will surface a single confirmation showing every merged sample that depends on it. Confirming the delete removes the merged samples first, then the source. The other source sample is untouched. This guarantees there is no merged sample on disk whose provenance points at a missing source.
 
 If you do not want to delete the merged samples, abort the confirmation and unlink (rather than delete) the source.
 
@@ -147,7 +147,7 @@ You can re-merge the same two sources later — for example, with a different st
 
 - Merging is **always two samples** in v1. Three- or four-way merges (e.g., 23andMe + AncestryDNA + MyHeritage) are post-v1.
 - Tags and watches **do not propagate** across the merge. The re-watch modal addresses watches; tags must be reapplied manually if needed.
-- Linking is **explicit** — GenomeInsight never auto-merges samples it thinks belong to the same person. A backfill script (`scripts/backfill_individuals.py`) can suggest candidate pairs by `file_hash` or near-matching name+date for review, but never executes the link.
+- Linking is **explicit** — Yeliztli never auto-merges samples it thinks belong to the same person. A backfill script (`scripts/backfill_individuals.py`) can suggest candidate pairs by `file_hash` or near-matching name+date for review, but never executes the link.
 - A source sample that is **stale** (its annotation predates a major VEP bundle upgrade) blocks the merge with a 423 response. Re-annotate the source first, then retry the merge.
 
 ---

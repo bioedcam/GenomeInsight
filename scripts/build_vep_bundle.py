@@ -781,7 +781,7 @@ Examples:
         sys.exit(1)
 
     print("=" * 60)
-    print("GenomeInsight VEP Bundle Builder")
+    print("Yeliztli VEP Bundle Builder")
     print(f"  Input:           {input_path}")
     print(f"  Output:          {args.output}")
     print(f"  Ensembl version: {args.ensembl_version}")

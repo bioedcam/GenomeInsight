@@ -73,7 +73,7 @@ export default function NuclearDelete() {
                 All sample databases, reference databases (ClinVar, gnomAD, dbNSFP,
                 VEP bundle, ENCODE), cached downloads, logs, and your configuration
                 will be permanently deleted. You will need to re-run the setup wizard
-                to use GenomeInsight again.
+                to use Yeliztli again.
               </p>
             </div>
           </div>

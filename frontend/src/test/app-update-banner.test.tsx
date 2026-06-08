@@ -110,7 +110,7 @@ describe('AppUpdateBanner', () => {
     render(<AppUpdateBanner />, { wrapper: createWrapper() })
 
     expect(
-      await screen.findByText(/GenomeInsight v1\.2\.0 is available/),
+      await screen.findByText(/Yeliztli v1\.2\.0 is available/),
     ).toBeInTheDocument()
   })
 
@@ -168,7 +168,7 @@ describe('AppUpdateBanner', () => {
     render(<AppUpdateBanner />, { wrapper: createWrapper() })
 
     expect(
-      await screen.findByText(/GenomeInsight v1\.3\.0 is available/),
+      await screen.findByText(/Yeliztli v1\.3\.0 is available/),
     ).toBeInTheDocument()
   })
 
@@ -268,7 +268,7 @@ describe('AppUpdateBanner — LAI degraded coverage advisory', () => {
     render(<AppUpdateBanner />, { wrapper: createWrapper() })
 
     expect(
-      await screen.findByText(/GenomeInsight v1\.2\.0 is available/),
+      await screen.findByText(/Yeliztli v1\.2\.0 is available/),
     ).toBeInTheDocument()
     expect(
       await screen.findByText(/LAI coverage degraded for AncestryDNA/),

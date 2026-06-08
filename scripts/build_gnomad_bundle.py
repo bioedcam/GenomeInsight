@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     print("=" * 60)
-    print("GenomeInsight gnomAD Bundle Builder")
+    print("Yeliztli gnomAD Bundle Builder")
     print(f"  Output:   {args.out}")
     if args.vcf:
         print(f"  VCF:      {args.vcf} (pre-downloaded)")

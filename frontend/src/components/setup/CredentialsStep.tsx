@@ -58,7 +58,7 @@ function CredentialsHeader() {
         External Services
       </h2>
       <p className="text-sm text-muted-foreground">
-        Configure credentials for external data services used by GenomeInsight.
+        Configure credentials for external data services used by Yeliztli.
       </p>
     </div>
   )

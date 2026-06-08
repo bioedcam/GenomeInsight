@@ -391,7 +391,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Path to the GenomeInsight data directory (defaults to the value "
+            "Path to the Yeliztli data directory (defaults to the value "
             "Settings() resolves from config / environment)."
         ),
     )

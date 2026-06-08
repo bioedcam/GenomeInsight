@@ -26,7 +26,7 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Canonical population order used throughout GenomeInsight
+# Canonical population order used throughout Yeliztli
 CANONICAL_POPULATIONS = ("AFR", "AMR", "CSA", "EAS", "EUR", "MID", "OCE")
 
 

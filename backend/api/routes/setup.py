@@ -243,7 +243,7 @@ async def accept_disclaimer() -> AcceptDisclaimerResponse:
 
 @router.get("/detect-existing", response_model=DetectExistingResponse)
 async def detect_existing() -> DetectExistingResponse:
-    """Auto-detect an existing GenomeInsight installation.
+    """Auto-detect an existing Yeliztli installation.
 
     Checks if ~/.genomeinsight/ already has data (config.toml, samples, DBs).
     If config.toml exists but DBs are missing, the frontend should resume
@@ -665,17 +665,17 @@ def _assess_disk_space(free_bytes: int) -> tuple[Literal["ok", "warning", "block
     if free_gb < _BLOCK_THRESHOLD_GB:
         return (
             "blocked",
-            f"Insufficient disk space. GenomeInsight requires at least "
+            f"Insufficient disk space. Yeliztli requires at least "
             f"{_BLOCK_THRESHOLD_GB} GB free. Current: {free_gb:.1f} GB.",
         )
     if free_gb < _WARN_THRESHOLD_GB:
         return (
             "warning",
-            f"Low disk space ({free_gb:.1f} GB free). GenomeInsight reference "
+            f"Low disk space ({free_gb:.1f} GB free). Yeliztli reference "
             f"databases require ~4 GB, and sample data needs additional headroom. "
             f"Consider freeing space or choosing a different path.",
         )
-    return "ok", f"{free_gb:.1f} GB free — sufficient for GenomeInsight."
+    return "ok", f"{free_gb:.1f} GB free — sufficient for Yeliztli."
 
 
 def _resolve_storage_path(raw_path: str) -> Path:

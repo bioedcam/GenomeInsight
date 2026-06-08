@@ -731,7 +731,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.vendor == "ancestrydna":
         print("=" * 60)
-        print("GenomeInsight synthetic AncestryDNA fixture regeneration")
+        print("Yeliztli synthetic AncestryDNA fixture regeneration")
         print(f"  Template:   {args.template.resolve()}")
         print(f"  Output dir: {output_dir.resolve()}")
         if dry_run:
@@ -753,7 +753,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     print("=" * 60)
-    print("GenomeInsight fixture regeneration")
+    print("Yeliztli fixture regeneration")
     print(f"  Seed dir:   {seed_dir.resolve()}")
     print(f"  Output dir: {output_dir.resolve()}")
     if dry_run:

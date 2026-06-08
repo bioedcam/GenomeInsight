@@ -1,6 +1,6 @@
 # Setup Guide
 
-This guide covers installing and running GenomeInsight on your local machine. Choose the method that fits your environment:
+This guide covers installing and running Yeliztli on your local machine. Choose the method that fits your environment:
 
 - [Native Install](#native-install) — recommended for daily use (macOS, Linux, WSL2)
 - [Docker Compose](#docker-compose) — alternative containerized deployment
@@ -18,7 +18,7 @@ This guide covers installing and running GenomeInsight on your local machine. Ch
 | RAM | 1 GB available |
 | OS | macOS (ARM/x86), Linux, Windows (WSL2) |
 
-GenomeInsight runs entirely on localhost. No internet connection is needed after initial setup (database downloads).
+Yeliztli runs entirely on localhost. No internet connection is needed after initial setup (database downloads).
 
 ---
 
@@ -35,7 +35,7 @@ cd frontend && npm install && npm run build && cd ..
 
 ### 2. Install as a service
 
-The installer sets up GenomeInsight to run automatically in the background:
+The installer sets up Yeliztli to run automatically in the background:
 
 ```bash
 # Install services (auto-detects macOS/Linux/WSL2)
@@ -176,19 +176,19 @@ Open [http://localhost:5173](http://localhost:5173) — the Vite dev server prox
 
 ## First-Time Setup Wizard
 
-On first launch, GenomeInsight presents a 6-step setup wizard:
+On first launch, Yeliztli presents a 6-step setup wizard:
 
 ### Step 1: Disclaimer
 
-Read and accept the disclaimer acknowledging that GenomeInsight is for educational and informational purposes only, not a diagnostic tool.
+Read and accept the disclaimer acknowledging that Yeliztli is for educational and informational purposes only, not a diagnostic tool.
 
 ### Step 2: Import from Backup (optional)
 
-If you have a previous GenomeInsight backup (`.tar.gz`), import it here. This restores your samples, configuration, and optionally reference databases. Skip this step for a fresh install.
+If you have a previous Yeliztli backup (`.tar.gz`), import it here. This restores your samples, configuration, and optionally reference databases. Skip this step for a fresh install.
 
 ### Step 3: Storage Path
 
-Configure where GenomeInsight stores its data. Default: `~/.genomeinsight/`. The wizard displays available disk space and warns if space is low (< 10 GB warning, < 5 GB blocks setup).
+Configure where Yeliztli stores its data. Default: `~/.genomeinsight/`. The wizard displays available disk space and warns if space is low (< 10 GB warning, < 5 GB blocks setup).
 
 ### Step 4: External Services
 
@@ -197,7 +197,7 @@ Configure where GenomeInsight stores its data. Default: `~/.genomeinsight/`. The
 
 ### Step 5: Download Databases
 
-GenomeInsight downloads reference databases needed for variant annotation:
+Yeliztli downloads reference databases needed for variant annotation:
 
 | Database | Size | Purpose |
 |----------|------|---------|
@@ -214,13 +214,13 @@ If a download is interrupted by a crash or disconnect, the wizard shows a **Resu
 
 ### Step 6: Upload Your Data
 
-Upload your 23andMe raw data file (`.txt` or `.zip`). GenomeInsight auto-detects the file format version (v3, v4, or v5) and begins parsing. Once parsing completes, annotation runs automatically in the background.
+Upload your 23andMe raw data file (`.txt` or `.zip`). Yeliztli auto-detects the file format version (v3, v4, or v5) and begins parsing. Once parsing completes, annotation runs automatically in the background.
 
 ---
 
 ## Configuration Reference
 
-GenomeInsight reads configuration from `~/.genomeinsight/config.toml`. Settings can also be overridden with environment variables using the `GENOMEINSIGHT_` prefix.
+Yeliztli reads configuration from `~/.genomeinsight/config.toml`. Settings can also be overridden with environment variables using the `GENOMEINSIGHT_` prefix.
 
 ### Example config.toml
 
@@ -270,7 +270,7 @@ Settings are resolved in this order (highest priority first):
 
 ## WSL2 Notes
 
-GenomeInsight is fully supported on Windows via WSL2:
+Yeliztli is fully supported on Windows via WSL2:
 
 1. Install WSL2 with a Linux distribution (Ubuntu recommended)
 2. Install Python 3.12+ and Node 20+ inside WSL2
@@ -293,7 +293,7 @@ Then restart WSL2: `wsl --shutdown` from PowerShell.
 
 ### Application updates
 
-GenomeInsight checks for new releases on GitHub at startup (configurable). When an update is available, a subtle indicator appears in the UI. To update:
+Yeliztli checks for new releases on GitHub at startup (configurable). When an update is available, a subtle indicator appears in the UI. To update:
 
 ```bash
 cd GenomeInsight
@@ -327,7 +327,7 @@ From **Settings > Backup**, export a `.tar.gz` archive containing:
 
 ### Import a backup
 
-Import during initial setup (Step 2 of the wizard) or from **Settings > Backup > Import**. GenomeInsight auto-detects existing installations and offers to merge or replace.
+Import during initial setup (Step 2 of the wizard) or from **Settings > Backup > Import**. Yeliztli auto-detects existing installations and offers to merge or replace.
 
 ---
 

@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table definitions for GenomeInsight.
+"""SQLAlchemy Core table definitions for Yeliztli.
 
 All tables are defined as SQLAlchemy Core Table objects — no ORM.
 Two MetaData instances exist:
