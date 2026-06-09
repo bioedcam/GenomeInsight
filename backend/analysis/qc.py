@@ -132,7 +132,9 @@ def het_outlier_zscore(target_rate: float, other_rates: list[float]) -> float | 
     if len(other_rates) < 3:
         return None
     mean = sum(other_rates) / len(other_rates)
-    var = sum((r - mean) ** 2 for r in other_rates) / len(other_rates)
+    # Sample variance (Bessel's correction) — the cohort is itself a sample, so
+    # dividing by N-1 gives a more conservative SD (fewer false outlier flags).
+    var = sum((r - mean) ** 2 for r in other_rates) / (len(other_rates) - 1)
     if var <= 0:
         return None
     return round((target_rate - mean) / (var**0.5), 3)

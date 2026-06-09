@@ -76,7 +76,9 @@ def _other_sample_het_rates(registry, sample_id: int) -> list[float]:
         try:
             engine = registry.get_sample_engine(path)
             with engine.connect() as conn:
-                rate = conn.execute(sa.select(qc_metrics.c.heterozygosity_rate)).scalar()
+                rate = conn.execute(
+                    sa.select(qc_metrics.c.heterozygosity_rate).order_by(qc_metrics.c.id.desc())
+                ).scalar()
             if rate is not None:
                 rates.append(float(rate))
         except sa.exc.SQLAlchemyError:
