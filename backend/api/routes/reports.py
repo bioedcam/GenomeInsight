@@ -34,7 +34,7 @@ class ReportRequest(BaseModel):
         description="List of module names to include. None = all modules.",
     )
     title: str = Field(
-        "GenomeInsight Genomic Report",
+        "Yeliztli Genomic Report",
         description="Report title",
     )
 
@@ -76,7 +76,7 @@ async def generate_report(request: ReportRequest) -> Response:
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    filename = f"genomeinsight_report_{request.sample_id}.pdf"
+    filename = f"yeliztli_report_{request.sample_id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

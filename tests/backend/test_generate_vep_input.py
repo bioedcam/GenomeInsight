@@ -190,7 +190,7 @@ def test_rsid_catalog_mode_emits_sorted_sites_only_vcf(tmp_path: Path) -> None:
 
     headers, data_lines = _read_vcf_lines(output_path)
     assert headers[0] == "##fileformat=VCFv4.2"
-    assert any("##source=GenomeInsight-rsid-catalog" in h for h in headers)
+    assert any("##source=Yeliztli-rsid-catalog" in h for h in headers)
     assert headers[-1] == "\t".join(
         ("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO")
     )
@@ -263,7 +263,7 @@ def test_cli_rsid_catalog_round_trip(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     headers, data_lines = _read_vcf_lines(output_path)
-    assert any("##source=GenomeInsight-rsid-catalog" in h for h in headers)
+    assert any("##source=Yeliztli-rsid-catalog" in h for h in headers)
     assert data_lines == [
         "1\t100\trs1\tN\t.\t.\tPASS\t.",
         "2\t200\trs2\tN\t.\t.\tPASS\t.",

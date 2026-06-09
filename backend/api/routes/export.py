@@ -190,7 +190,7 @@ def _validate_read_only(sql: str) -> None:
 def _make_filename(ext: str) -> str:
     """Generate an export filename with a timestamp."""
     ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    return f"genomeinsight_export_{ts}.{ext}"
+    return f"yeliztli_export_{ts}.{ext}"
 
 
 # ── Streaming generators ─────────────────────────────────────────────

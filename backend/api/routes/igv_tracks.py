@@ -56,7 +56,7 @@ def _get_sample_engine(sample_id: int) -> sa.Engine:
 
 VCF_HEADER = """\
 ##fileformat=VCFv4.2
-##source=GenomeInsight-ClinVar
+##source=Yeliztli-ClinVar
 ##INFO=<ID=CLNSIG,Number=.,Type=String,Description="Clinical significance">
 ##INFO=<ID=CLNREVSTAT,Number=.,Type=String,Description="Review stars (0-4)">
 ##INFO=<ID=GENEINFO,Number=.,Type=String,Description="Gene symbol">
@@ -129,7 +129,7 @@ async def clinvar_vcf_region(
 
 USER_VCF_HEADER = """\
 ##fileformat=VCFv4.2
-##source=GenomeInsight-UserVariants
+##source=Yeliztli-UserVariants
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE"""
 

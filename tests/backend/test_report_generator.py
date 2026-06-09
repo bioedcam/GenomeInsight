@@ -380,7 +380,7 @@ class TestHtmlRendering:
         """T4-07: Report renders with all modules, disclaimers, PMIDs."""
         html = _render_html_helper(tmp_data_dir, sample_with_findings)
 
-        assert "GenomeInsight Genomic Report" in html
+        assert "Yeliztli Genomic Report" in html
         assert "Test Patient" in html
         # Module headers present
         assert "Cancer Predisposition" in html
@@ -571,7 +571,7 @@ class TestReportAPI:
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
         html = resp.text
-        assert "GenomeInsight Genomic Report" in html
+        assert "Yeliztli Genomic Report" in html
         assert "Test Patient" in html
 
     def test_preview_with_modules(self, report_client: TestClient) -> None:

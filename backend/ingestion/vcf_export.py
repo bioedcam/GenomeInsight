@@ -28,7 +28,7 @@ from backend.ingestion.chrom_order import CHROM_ORDER as _CHROM_ORDER
 # ---------------------------------------------------------------------------
 
 _VCF_VERSION = "VCFv4.2"
-_SOURCE = "GenomeInsight"
+_SOURCE = "Yeliztli"
 _REFERENCE = "GRCh37"
 
 # VCF header column names.
@@ -111,7 +111,7 @@ def _build_header_lines(
         f"##source={_SOURCE}",
         f"##reference={_REFERENCE}",
         (
-            "##GenomeInsight_note=REF/ALT alleles are inferred from genotype "
+            "##Yeliztli_note=REF/ALT alleles are inferred from genotype "
             "calls, not from a reference genome. Heterozygous REF/ALT "
             "assignment may not match the true reference allele."
         ),

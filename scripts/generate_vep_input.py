@@ -175,7 +175,7 @@ def generate_vep_vcf(
         "skipped": 0,
     }
 
-    header_lines = _build_header_lines("GenomeInsight-VEP-input-generator")
+    header_lines = _build_header_lines("Yeliztli-VEP-input-generator")
     header_lines.append(
         '##INFO=<ID=23AM,Number=0,Type=Flag,Description="Variant from vendor raw data">'
     )
@@ -267,7 +267,7 @@ def generate_catalog_vcf(
 
     stats = {"total_parsed": len(rows), "written": 0}
 
-    header_lines = _build_header_lines("GenomeInsight-rsid-catalog")
+    header_lines = _build_header_lines("Yeliztli-rsid-catalog")
     header_lines.append("\t".join(_VCF_COLUMNS_SITES))
 
     fh, close_fh = _open_output(output_path)
