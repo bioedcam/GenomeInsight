@@ -69,6 +69,9 @@ def _env(tmp_path: Path, request) -> Generator[Settings, None, None]:
     settings = Settings(data_dir=data_dir)
     reset_registry()
     registry = DBRegistry(settings)
+    # The kinship route resolves engines two ways: directly via
+    # kinship.get_registry, and via resolve_sample_engine (imported from
+    # risk_common, which calls risk_common.get_registry) — both must be patched.
     with (
         patch("backend.api.routes.risk_common.get_registry", return_value=registry),
         patch("backend.api.routes.kinship.get_registry", return_value=registry),

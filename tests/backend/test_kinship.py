@@ -96,3 +96,11 @@ class TestKingRobust:
         gj = {"r1": "AG", "r2": "AA", "only_j": "CC"}
         s = king_kinship(gi, gj)
         assert s.n_shared == 2  # only r1, r2 are shared
+
+    def test_malformed_genotype_not_counted_as_ibs0(self) -> None:
+        # Malformed (non-biallelic) calls must not inflate the opposite-homozygote
+        # count; only the genuine AA/GG opposite homozygote (r3) is an IBS0.
+        gi = {"r1": "A", "r2": "AAA", "r3": "AA"}
+        gj = {"r1": "GG", "r2": "GG", "r3": "GG"}
+        s = king_kinship(gi, gj)
+        assert s.ibs0 == 1

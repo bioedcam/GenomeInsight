@@ -140,7 +140,13 @@ def _classify(phi: float, ibs0_proportion: float) -> str:
 
 
 def king_kinship(genos_i: dict[str, str], genos_j: dict[str, str]) -> KinshipStats:
-    """Compute KING-robust kinship between two rsID→genotype maps."""
+    """Compute KING-robust kinship between two rsID→genotype maps.
+
+    Both maps should map rsID → an uppercase biallelic ACGT genotype (``"AA"``,
+    ``"AG"``, ``"CT"``); :func:`read_autosomal_genotypes` produces exactly that.
+    A non-biallelic / malformed call contributes neither a het nor an IBS0 (it is
+    skipped), so it can never inflate the opposite-homozygote count.
+    """
     # Iterate the smaller map for speed.
     if len(genos_j) < len(genos_i):
         genos_i, genos_j = genos_j, genos_i
@@ -159,8 +165,10 @@ def king_kinship(genos_i: dict[str, str], genos_j: dict[str, str]) -> KinshipSta
         if i_het and j_het:
             hethet += 1
         elif not i_het and not j_het:
-            # both homozygous → IBS0 when the homozygous alleles differ
-            if _hom_allele(gi) != _hom_allele(gj):
+            # both homozygous → IBS0 when the (valid) homozygous alleles differ.
+            # A malformed call yields a None allele and is skipped, never a false IBS0.
+            hom_i, hom_j = _hom_allele(gi), _hom_allele(gj)
+            if hom_i is not None and hom_j is not None and hom_i != hom_j:
                 ibs0 += 1
     denom = het_i + het_j
     phi = (hethet - 2 * ibs0) / denom if denom > 0 else 0.0
