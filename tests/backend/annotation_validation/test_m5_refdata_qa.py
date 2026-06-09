@@ -66,7 +66,11 @@ def test_mutpred2_column_has_coverage(build_live_run) -> None:
     run = _scored_run(build_live_run)
     row = run.annotated_by_rsid("rs_scored")
     assert row is not None
-    assert row.mutpred2 is not None, "mutpred2 is NULL — wrong dbNSFP field-map key"
+    # Lock to the fixture's MutPred2_score (0.88): a wrong field-map key that
+    # happened to surface a non-null fallback would otherwise slip through.
+    assert row.mutpred2 == pytest.approx(0.88), (
+        f"mutpred2 is {row.mutpred2!r} (expected 0.88 from MutPred2_score) — wrong field-map key"
+    )
 
 
 # ── F21: obsolete MONDO terms must not reach the user ─────────────────────
@@ -146,7 +150,12 @@ def test_dominant_gene_inheritance(build_live_run) -> None:
 # ── F26: AF=0 (monomorphic) is not the same as observed-ultra-rare ────────
 
 
-def test_af_zero_is_not_ultra_rare() -> None:
-    """A variant never observed in gnomAD (AF=0) must not be flagged ultra-rare."""
-    _rare, ultra_rare = compute_rare_flags(0.0)
+def test_af_zero_is_not_rare_or_ultra_rare() -> None:
+    """AF=0 (never observed in gnomAD) is monomorphic-reference, not rare.
+
+    Both flags must be False — asserting only ``ultra_rare`` would miss a
+    regression that re-flagged AF=0 as ``rare``.
+    """
+    rare, ultra_rare = compute_rare_flags(0.0)
+    assert rare is False
     assert ultra_rare is False

@@ -47,7 +47,10 @@ def test_crash_during_reannotation_preserves_prior(build_live_run, monkeypatch) 
         raise RuntimeError("simulated worker crash mid-batch")
 
     monkeypatch.setattr(engine_mod, "_bulk_upsert", _boom)
-    with pytest.raises(Exception):  # noqa: B017 - any failure path is fine
+    # Assert the *injected* crash propagates — not just any error — so the test
+    # stays a true crash-recovery regression gate (an unrelated failure that
+    # happened to leave the table intact must not make it pass).
+    with pytest.raises(RuntimeError, match="simulated worker crash"):
         run_annotation(run.sample_engine, run.registry)
 
     # The prior good annotation must survive the crash.

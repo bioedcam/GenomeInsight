@@ -14,17 +14,26 @@ These structural guards make that class of bug visible:
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import backend.annotation.engine as engine_mod
 
-_ENGINE_SRC = Path(engine_mod.__file__).read_text(encoding="utf-8")
 _SUITE_DIR = Path(__file__).resolve().parent
 
 
 def test_live_engine_computes_carriage() -> None:
-    """``run_annotation``'s module must use the carriage classifier."""
-    assert "classify_zygosity" in _ENGINE_SRC or "CARRIED_ZYGOSITIES" in _ENGINE_SRC
+    """The engine's merge step must actually *call* the carriage classifier.
+
+    Stronger than a module-level grep (which a stray import or comment could
+    satisfy while ``run_annotation`` stays genotype-agnostic): assert
+    ``classify_zygosity`` is invoked inside ``_merge_annotations`` — the function
+    that computes per-row carriage on the live path.
+    """
+    merge_src = inspect.getsource(engine_mod._merge_annotations)
+    assert "classify_zygosity(" in merge_src, (
+        "_merge_annotations does not call classify_zygosity — the live engine is genotype-agnostic"
+    )
 
 
 def test_validation_suite_never_calls_orphan_writers() -> None:

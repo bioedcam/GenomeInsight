@@ -27,7 +27,7 @@ There are also independent defects: multi-allelic record selection that picks by
 
 ## 2. How the pipeline works (the part that matters for validation)
 
-```
+```text
 upload → parser_23andme / parser_ancestrydna  (rsid, chrom, pos, genotype; NO ref/alt)
        → raw_variants  (PK = rsid; columns: rsid,chrom,pos,genotype,source,…  — no ref/alt)
        → huey_tasks.run_annotation_task → engine.run_annotation()

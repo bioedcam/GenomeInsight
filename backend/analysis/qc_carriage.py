@@ -147,7 +147,17 @@ def audit_carriage(
     for rsid, category in finding_rows:
         bucket = report.by_category.setdefault(category, CategoryCarriage())
         genotype = genotypes.get(rsid) if rsid else None
-        ref_alt = best_clinvar.get(rsid) or annotated_alleles.get(rsid)
+        # Prefer the sample's actually-annotated (carried) alleles; fall back to
+        # the highest-star ClinVar record only when the annotation lacks ref/alt
+        # (e.g. a genotype-agnostic regression leaves them NULL). Auditing
+        # best-by-stars first would score a multi-allelic finding against the
+        # wrong ALT and misclassify carriage. ``(None, None)`` is truthy, so the
+        # NULL check is explicit rather than relying on ``or``.
+        annotated = annotated_alleles.get(rsid)
+        if annotated and annotated[0] is not None and annotated[1] is not None:
+            ref_alt = annotated
+        else:
+            ref_alt = best_clinvar.get(rsid)
         if genotype is None or not ref_alt or ref_alt[0] is None or ref_alt[1] is None:
             bucket.undetermined += 1
             continue
