@@ -526,6 +526,41 @@ genetic and non-genetic factors are not captured here.
 """
 
 
+# ── Runs-of-Homozygosity (ROH / FROH) autozygosity metric ───────────────────
+
+ROH_DISCLAIMER_TITLE = "About Runs of Homozygosity (FROH)"
+
+ROH_DISCLAIMER_TEXT = """\
+This section reports runs of homozygosity (ROH) — long stretches of the genome \
+where both inherited copies are identical — and summarises them as FROH, a \
+genome-wide estimate of autozygosity.
+
+**Please understand the following before reviewing:**
+
+1. **FROH is an estimate, not a diagnosis.** It is a population-genetics metric \
+describing how much of your genome falls in long homozygous runs. It is not a \
+medical result and does not, by itself, indicate any health condition.
+
+2. **It is not a statement about your parents.** Long runs of homozygosity arise \
+from many benign causes — the history of your ancestral population, genuine \
+ancestral isolation, and large stretches of the genome that simply recombine \
+rarely. A given FROH value does not establish that your parents are related, and \
+Yeliztli does not infer or report any such relationship.
+
+3. **It is an array-based approximation.** The estimate depends on which \
+positions the array typed and on the detection parameters used; sequencing-based \
+methods can give different values. It is provided for genomic-ancestry context, \
+not clinical use.
+
+4. **Confirm clinically if relevant.** If you have a specific clinical question \
+about recessive-condition risk, discuss it with a clinician or genetic counselor \
+rather than relying on this estimate.
+
+**Resources:**
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
+"""
+
+
 # ── LHON (Leber hereditary optic neuropathy) primary-mutation module ────────
 
 LHON_DISCLAIMER_TITLE = "About Leber Hereditary Optic Neuropathy (LHON) Results"

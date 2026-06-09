@@ -75,6 +75,7 @@ _FULLY_GATED_MODULES = frozenset(
         "query_builder",
         "rare_variants",
         "reports",
+        "roh",
         "skin",
         "sleep",
         "tags",

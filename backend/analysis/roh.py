@@ -1,0 +1,265 @@
+"""Runs-of-Homozygosity (ROH) / FROH autozygosity estimate — roadmap #29.
+
+A clean-room sliding-run detector (PLINK ``--homozyg`` equivalent, no GPL code)
+that scans the autosomal genotypes for long stretches of consecutive homozygous
+calls — the signature of autozygosity (a segment inherited identical-by-descent
+from a shared ancestor). The summed ROH length over the autosomal genome gives
+**FROH**, a standard genomic estimate of autozygosity.
+
+What this is *not* (the load-bearing honesty guardrail, §12): FROH is a
+genome-wide *estimate* derived from one array, **not** a diagnosis or a statement
+about whether a person's parents are related. Long ROH arise from many benign
+causes — population history, genuine isolation, large pericentromeric LD blocks —
+and a single chip cannot distinguish them. The finding states this plainly and
+never names or infers a relationship.
+
+Method (parameters documented and tuned for a dense ~600–700k-marker array):
+
+  - Homozygosity is read straight from the genotype string (``"AA"`` hom,
+    ``"AG"`` het, ``"--"``/haploid/indel → missing); ROH is strand-independent so
+    no ref/alt is needed.
+  - Per autosome, SNPs are walked in position order. A run extends across
+    consecutive non-missing SNPs while (a) it accumulates at most
+    ``HET_TOLERANCE`` heterozygous calls (genotyping-error slack) and (b) no gap
+    between adjacent typed SNPs exceeds ``MAX_GAP_KB`` (so coverage gaps /
+    centromeres break a run instead of being spanned).
+  - A run is recorded as an ROH segment when, after trimming to homozygous
+    endpoints, it spans ≥ ``MIN_ROH_KB`` and contains ≥ ``MIN_ROH_SNPS``
+    homozygous SNPs.
+  - ``FROH = Σ segment length / AUTOSOMAL_GENOME_KB`` (a fixed ~2.77 Gb
+    denominator, the convention from McQuillan 2008, so FROH is comparable
+    across samples rather than array-relative).
+
+This is a **route-triggered** metric (``POST /api/analysis/roh/run``), not part of
+the auto-run :mod:`backend.analysis.run_all` pipeline: it is a full-genome scan
+that always emits a summary finding, so running it on demand keeps the standard
+post-annotation finding set (and its validation golden snapshot) unchanged.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any
+
+import sqlalchemy as sa
+import structlog
+
+from backend.analysis.zygosity import is_no_call
+from backend.db.tables import findings, raw_variants
+
+logger = structlog.get_logger(__name__)
+
+MODULE = "roh"
+CATEGORY = "autozygosity"
+
+# ── Detection parameters (documented; tuned for dense consumer arrays) ───────
+MIN_ROH_KB = 1500  # minimum segment span to count as an ROH (autozygosity focus)
+MIN_ROH_SNPS = 100  # minimum homozygous SNPs in a segment (guards against sparse spans)
+MAX_GAP_KB = 1000  # a gap > this between adjacent typed SNPs breaks a run
+HET_TOLERANCE = 1  # heterozygous calls allowed within one run (genotyping-error slack)
+
+# FROH denominator: the autosomal genome length (~2.77 Gb), McQuillan 2008
+# convention, so FROH is comparable across samples rather than array-relative.
+AUTOSOMAL_GENOME_KB = 2_770_000
+
+_AUTOSOMES = frozenset(str(n) for n in range(1, 23))
+_ACGT = frozenset("ACGT")
+
+# Cap on how many segments we persist in detail_json (longest first), to bound row size.
+_MAX_PERSISTED_SEGMENTS = 25
+
+# Genotype-state vocabulary.
+_HOM = "hom"
+_HET = "het"
+_MISS = "miss"
+
+
+@dataclass(frozen=True)
+class RohSegment:
+    """One run of homozygosity."""
+
+    chrom: str
+    start: int
+    end: int
+    length_kb: float
+    n_snps: int  # homozygous SNPs spanned
+
+
+@dataclass
+class RohResult:
+    """The autozygosity assessment for one sample."""
+
+    segments: list[RohSegment] = field(default_factory=list)
+    froh: float = 0.0
+    total_roh_kb: float = 0.0
+    longest_kb: float = 0.0
+    autosomal_snps_used: int = 0
+
+
+def _genotype_state(genotype: str | None) -> str:
+    """Classify a genotype string as homozygous / heterozygous / missing.
+
+    Diploid two-character ACGT calls only contribute hom/het; everything else
+    (no-call, haploid single base, indel I/D tokens) is missing — never a false
+    homozygous call.
+    """
+    if is_no_call(genotype):
+        return _MISS
+    assert genotype is not None
+    gt = genotype.strip().upper()
+    if len(gt) != 2 or gt[0] not in _ACGT or gt[1] not in _ACGT:
+        return _MISS
+    return _HOM if gt[0] == gt[1] else _HET
+
+
+def _read_autosomal_states(sample_engine: sa.Engine) -> dict[str, list[tuple[int, str]]]:
+    """Return ``{chrom: [(pos, state), ...]}`` for autosomes, sorted by position.
+
+    Missing SNPs are dropped from the sequence (they neither extend nor break a
+    run on their own); coverage gaps are handled by the position-gap rule.
+    """
+    by_chrom: dict[str, list[tuple[int, str]]] = {}
+    with sample_engine.connect() as conn:
+        stmt = (
+            sa.select(raw_variants.c.chrom, raw_variants.c.pos, raw_variants.c.genotype)
+            .where(raw_variants.c.chrom.in_(_AUTOSOMES))
+            .order_by(raw_variants.c.chrom, raw_variants.c.pos)
+        )
+        for chrom, pos, genotype in conn.execute(stmt):
+            if pos is None:
+                continue
+            state = _genotype_state(genotype)
+            if state == _MISS:
+                continue
+            by_chrom.setdefault(chrom, []).append((int(pos), state))
+    return by_chrom
+
+
+def _scan_chromosome(chrom: str, snps: list[tuple[int, str]]) -> list[RohSegment]:
+    """Greedy non-overlapping ROH detection over one chromosome's typed SNPs."""
+    segments: list[RohSegment] = []
+    n = len(snps)
+    i = 0
+    while i < n:
+        # Extend a run from i while het tolerance and gap rules hold.
+        hets = 1 if snps[i][1] == _HET else 0
+        k = i + 1
+        while k < n:
+            if snps[k][0] - snps[k - 1][0] > MAX_GAP_KB * 1000:
+                break
+            add_het = 1 if snps[k][1] == _HET else 0
+            if hets + add_het > HET_TOLERANCE:
+                break
+            hets += add_het
+            k += 1
+        # Run is snps[i .. k-1]; trim to homozygous endpoints.
+        lo, hi = i, k - 1
+        while lo <= hi and snps[lo][1] != _HOM:
+            lo += 1
+        while hi >= lo and snps[hi][1] != _HOM:
+            hi -= 1
+        if lo <= hi:
+            start, end = snps[lo][0], snps[hi][0]
+            length_kb = (end - start) / 1000.0
+            n_hom = sum(1 for j in range(lo, hi + 1) if snps[j][1] == _HOM)
+            if length_kb >= MIN_ROH_KB and n_hom >= MIN_ROH_SNPS:
+                segments.append(RohSegment(chrom, start, end, round(length_kb, 1), n_hom))
+        i = max(k, i + 1)
+    return segments
+
+
+def detect_roh(sample_engine: sa.Engine) -> RohResult:
+    """Detect ROH segments and compute FROH for a sample."""
+    by_chrom = _read_autosomal_states(sample_engine)
+    autosomal_snps = sum(len(v) for v in by_chrom.values())
+
+    segments: list[RohSegment] = []
+    for chrom in sorted(by_chrom, key=lambda c: int(c)):
+        segments.extend(_scan_chromosome(chrom, by_chrom[chrom]))
+
+    total_kb = round(sum(s.length_kb for s in segments), 1)
+    longest_kb = max((s.length_kb for s in segments), default=0.0)
+    froh = round(total_kb / AUTOSOMAL_GENOME_KB, 5) if total_kb else 0.0
+
+    logger.info(
+        "roh_detected",
+        segments=len(segments),
+        total_roh_kb=total_kb,
+        froh=froh,
+        autosomal_snps=autosomal_snps,
+    )
+    return RohResult(
+        segments=segments,
+        froh=froh,
+        total_roh_kb=total_kb,
+        longest_kb=longest_kb,
+        autosomal_snps_used=autosomal_snps,
+    )
+
+
+def _finding_text(result: RohResult) -> str:
+    if not result.segments:
+        return (
+            "No long runs of homozygosity were detected (FROH ≈ 0). This is the "
+            "typical result and is reported here only as a genomic-ancestry metric. "
+            "FROH is a genome-wide estimate of autozygosity — it is not a diagnosis "
+            "and says nothing about whether your parents are related."
+        )
+    return (
+        f"Runs of homozygosity: {len(result.segments)} autosomal segment(s) totalling "
+        f"{result.total_roh_kb:.0f} kb (longest {result.longest_kb:.0f} kb), giving an "
+        f"FROH autozygosity estimate of {result.froh:.4f}. FROH is a genome-wide "
+        f"*estimate* of the fraction of the genome in long homozygous runs — a "
+        f"population-genetics metric, not a diagnosis. Long runs have many benign "
+        f"causes (population history, genuine ancestral isolation, large low-"
+        f"recombination blocks); this result is not a statement about whether your "
+        f"parents are related."
+    )
+
+
+def store_roh_findings(result: RohResult, sample_engine: sa.Engine) -> int:
+    """Persist a single ROH summary finding (idempotent)."""
+    longest = sorted(result.segments, key=lambda s: s.length_kb, reverse=True)
+    detail: dict[str, Any] = {
+        "froh": result.froh,
+        "total_roh_kb": result.total_roh_kb,
+        "longest_kb": result.longest_kb,
+        "n_segments": len(result.segments),
+        "autosomal_snps_used": result.autosomal_snps_used,
+        "params": {
+            "min_roh_kb": MIN_ROH_KB,
+            "min_roh_snps": MIN_ROH_SNPS,
+            "max_gap_kb": MAX_GAP_KB,
+            "het_tolerance": HET_TOLERANCE,
+            "froh_denominator_kb": AUTOSOMAL_GENOME_KB,
+        },
+        "segments": [
+            {
+                "chrom": s.chrom,
+                "start": s.start,
+                "end": s.end,
+                "length_kb": s.length_kb,
+                "n_snps": s.n_snps,
+            }
+            for s in longest[:_MAX_PERSISTED_SEGMENTS]
+        ],
+        "segments_truncated": len(result.segments) > _MAX_PERSISTED_SEGMENTS,
+    }
+
+    row = {
+        "module": MODULE,
+        "category": CATEGORY,
+        "evidence_level": 1,  # a genomic metric, never a clinical high-confidence finding
+        "finding_text": _finding_text(result),
+        "conditions": "Autozygosity (FROH) estimate",
+        "clinvar_significance": None,
+        "detail_json": json.dumps(detail),
+    }
+
+    with sample_engine.begin() as conn:
+        conn.execute(
+            sa.delete(findings).where(findings.c.module == MODULE, findings.c.category == CATEGORY)
+        )
+        conn.execute(sa.insert(findings), [row])
+    return 1
