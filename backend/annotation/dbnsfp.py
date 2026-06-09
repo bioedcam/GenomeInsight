@@ -88,7 +88,7 @@ _TSV_COLUMN_MAP = {
     "Polyphen2_HVAR_score": "polyphen2_hsvar_score",
     "Polyphen2_HVAR_pred": "polyphen2_hsvar_pred",
     "REVEL_score": "revel",
-    "MutPred_score": "mutpred2",
+    "MutPred2_score": "mutpred2",
     "VEST4_score": "vest4",
     "MetaSVM_score": "metasvm",
     "MetaLR_score": "metalr",
@@ -413,7 +413,9 @@ def parse_dbnsfp_tsv_line(
     polyphen2_score = _parse_dbnsfp_float(fields.get("Polyphen2_HVAR_score"))
     polyphen2_pred = _parse_dbnsfp_pred(fields.get("Polyphen2_HVAR_pred"))
     revel = _parse_dbnsfp_float(fields.get("REVEL_score"))
-    mutpred2 = _parse_dbnsfp_float(fields.get("MutPred_score"))
+    # dbNSFP 5.x distributes MutPred2 under ``MutPred2_score`` (F31). The old
+    # ``MutPred_score`` key never matched, leaving the column 100% NULL.
+    mutpred2 = _parse_dbnsfp_float(fields.get("MutPred2_score"))
     vest4 = _parse_dbnsfp_float(fields.get("VEST4_score"))
     metasvm = _parse_dbnsfp_float(fields.get("MetaSVM_score"))
     metalr = _parse_dbnsfp_float(fields.get("MetaLR_score"))
@@ -963,9 +965,58 @@ def check_dbnsfp_update(
 # ── Annotation lookup ────────────────────────────────────────────────────
 
 
+def _dbnsfp_row_to_annotation(row: sa.Row) -> DbNSFPAnnotation:
+    """Build a :class:`DbNSFPAnnotation` from a ``dbnsfp_scores`` row."""
+    return DbNSFPAnnotation(
+        rsid=row.rsid,
+        chrom=row.chrom,
+        pos=row.pos,
+        ref=row.ref,
+        alt=row.alt,
+        cadd_phred=row.cadd_phred,
+        sift_score=row.sift_score,
+        sift_pred=row.sift_pred,
+        polyphen2_hsvar_score=row.polyphen2_hsvar_score,
+        polyphen2_hsvar_pred=row.polyphen2_hsvar_pred,
+        revel=row.revel,
+        mutpred2=row.mutpred2,
+        vest4=row.vest4,
+        metasvm=row.metasvm,
+        metalr=row.metalr,
+        gerp_rs=row.gerp_rs,
+        phylop=row.phylop,
+        mpc=row.mpc,
+        primateai=row.primateai,
+    )
+
+
+def _pick_dbnsfp_row(rows: list[sa.Row], genotype: str | None) -> sa.Row:
+    """Select the dbNSFP row whose ALT the sample carries (F11).
+
+    A multi-allelic site has one ``dbnsfp_scores`` row per ALT, with different
+    in-silico scores per ALT. The old code kept whichever row SQLite returned
+    last, so the stored scores (and the ensemble_pathogenic flag) could come
+    from an ALT the sample does not carry. Pick the carried ALT instead; when
+    carriage is indeterminate (hom-ref / no-call / no genotype) fall back to a
+    *deterministic* choice (lowest ALT then REF) rather than row order.
+    """
+    if len(rows) == 1:
+        return rows[0]
+    if genotype:
+        from backend.analysis.zygosity import CARRIED_ZYGOSITIES, classify_zygosity
+
+        carried = [
+            r for r in rows if classify_zygosity(genotype, r.ref, r.alt) in CARRIED_ZYGOSITIES
+        ]
+        if carried:
+            rows = carried
+    return min(rows, key=lambda r: ((r.alt or ""), (r.ref or "")))
+
+
 def lookup_dbnsfp_by_rsids(
     rsids: list[str],
     dbnsfp_engine: sa.Engine,
+    genotype_by_rsid: dict[str, str] | None = None,
 ) -> dict[str, DbNSFPAnnotation]:
     """Look up dbNSFP scores for a batch of rsids.
 
@@ -974,6 +1025,9 @@ def lookup_dbnsfp_by_rsids(
     Args:
         rsids: List of rsid strings (e.g. ["rs429358", "rs7412"]).
         dbnsfp_engine: SQLAlchemy engine for dbnsfp.db.
+        genotype_by_rsid: Optional sample genotypes; when given, a multi-allelic
+            site resolves to the row whose ALT the sample carries (F11) instead
+            of an arbitrary row.
 
     Returns:
         Dict mapping rsid → DbNSFPAnnotation for matched variants.
@@ -981,7 +1035,8 @@ def lookup_dbnsfp_by_rsids(
     if not rsids:
         return {}
 
-    results: dict[str, DbNSFPAnnotation] = {}
+    genotype_by_rsid = genotype_by_rsid or {}
+    rows_by_rsid: dict[str, list[sa.Row]] = {}
 
     with dbnsfp_engine.connect() as conn:
         for i in range(0, len(rsids), LOOKUP_BATCH_SIZE):
@@ -998,29 +1053,12 @@ def lookup_dbnsfp_by_rsids(
             rows = conn.execute(stmt, params).fetchall()
 
             for row in rows:
-                results[row.rsid] = DbNSFPAnnotation(
-                    rsid=row.rsid,
-                    chrom=row.chrom,
-                    pos=row.pos,
-                    ref=row.ref,
-                    alt=row.alt,
-                    cadd_phred=row.cadd_phred,
-                    sift_score=row.sift_score,
-                    sift_pred=row.sift_pred,
-                    polyphen2_hsvar_score=row.polyphen2_hsvar_score,
-                    polyphen2_hsvar_pred=row.polyphen2_hsvar_pred,
-                    revel=row.revel,
-                    mutpred2=row.mutpred2,
-                    vest4=row.vest4,
-                    metasvm=row.metasvm,
-                    metalr=row.metalr,
-                    gerp_rs=row.gerp_rs,
-                    phylop=row.phylop,
-                    mpc=row.mpc,
-                    primateai=row.primateai,
-                )
+                rows_by_rsid.setdefault(row.rsid, []).append(row)
 
-    return results
+    return {
+        rsid: _dbnsfp_row_to_annotation(_pick_dbnsfp_row(rows, genotype_by_rsid.get(rsid)))
+        for rsid, rows in rows_by_rsid.items()
+    }
 
 
 def lookup_dbnsfp_by_positions(

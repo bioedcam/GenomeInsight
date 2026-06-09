@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from backend.analysis.zygosity import classify_zygosity
 from backend.annotation.dbnsfp import (
     ENSEMBLE_PATHOGENIC_THRESHOLD,
     DbNSFPAnnotation,
@@ -64,9 +65,12 @@ VEP_BIT = 0b000001  # bit 0 = 1
 CLINVAR_BIT = 0b000010  # bit 1 = 2
 GNOMAD_BIT = 0b000100  # bit 2 = 4
 DBNSFP_BIT = 0b001000  # bit 3 = 8
-GENE_PHENOTYPE_BIT = 0b010000  # bit 4 = 16
-CPIC_BIT = 0b010000  # bit 4 = 16 (CPIC/PharmGKB — P3-04a)
-GWAS_BIT = 0b100000  # bit 5 = 32 (GWAS Catalog — P3-09a)
+GENE_PHENOTYPE_BIT = 0b0010000  # bit 4 = 16
+GWAS_BIT = 0b0100000  # bit 5 = 32 (GWAS Catalog — P3-09a)
+# F33: CPIC must occupy its own bit, not collide with GENE_PHENOTYPE_BIT — a
+# variant covered by gene-phenotype was otherwise indistinguishable from one
+# covered by CPIC. Bit 6 = 64 is the next free bit above GWAS.
+CPIC_BIT = 0b1000000  # bit 6 = 64 (CPIC/PharmGKB — P3-04a)
 
 # Maximum concurrent annotation source lookups (VEP, ClinVar, gnomAD, dbNSFP)
 # Gene-phenotype runs sequentially after VEP since it depends on gene_symbol.
@@ -93,6 +97,11 @@ class AnnotationEngineResult:
     rows_written: int = 0
     batches_processed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Sources that were present-but-unreadable (locked / corrupt / raised on
+    # access), keyed by source name → error text (F29). Distinct from a source
+    # that is simply not installed: an unreadable source must downgrade the run
+    # to ``partial`` rather than be silently treated as absent.
+    source_failures: dict[str, str] = field(default_factory=dict)
     # Per-source cumulative timing (seconds) for bottleneck identification (P4-22)
     timing_vep_s: float = 0.0
     timing_clinvar_s: float = 0.0
@@ -170,10 +179,17 @@ def _lookup_clinvar(
     raw_by_rsid: dict[str, sa.Row],
     reference_engine: sa.Engine,
 ) -> dict[str, dict]:
-    """Look up ClinVar annotations for a batch of rsids."""
+    """Look up ClinVar annotations for a batch of rsids.
+
+    Passes the sample genotypes so multi-allelic sites are scored against the
+    allele the sample actually carries (``_pick_clinvar_row``), and keeps the
+    matched record's ``ref``/``alt`` so ``_merge_annotations`` can compute
+    carriage (zygosity). Without these two the engine is genotype-agnostic.
+    """
     from backend.annotation.clinvar import lookup_clinvar_by_rsids
 
-    matches = lookup_clinvar_by_rsids(rsids, reference_engine)
+    genotype_by_rsid = {rsid: raw_by_rsid[rsid].genotype for rsid in rsids if rsid in raw_by_rsid}
+    matches = lookup_clinvar_by_rsids(rsids, reference_engine, genotype_by_rsid=genotype_by_rsid)
 
     results: dict[str, dict] = {}
     for rsid, annot in matches.items():
@@ -182,6 +198,9 @@ def _lookup_clinvar(
             "clinvar_review_stars": annot.clinvar_review_stars,
             "clinvar_accession": annot.clinvar_accession,
             "clinvar_conditions": annot.clinvar_conditions,
+            # Carried-allele identity for zygosity computation in the merge.
+            "ref": annot.ref,
+            "alt": annot.alt,
         }
     return results
 
@@ -298,8 +317,11 @@ def _lookup_dbnsfp(
     if not rsids:
         return {}
 
-    # Primary: rsid-based lookup
-    rsid_matches = lookup_dbnsfp_by_rsids(rsids, dbnsfp_engine)
+    # Primary: rsid-based lookup. Pass the genotypes so a multi-allelic site
+    # resolves to the carried-ALT row, not an arbitrary one (F11) — mirrors the
+    # ClinVar carried-allele selection.
+    genotype_by_rsid = {rsid: raw_by_rsid[rsid].genotype for rsid in rsids if rsid in raw_by_rsid}
+    rsid_matches = lookup_dbnsfp_by_rsids(rsids, dbnsfp_engine, genotype_by_rsid=genotype_by_rsid)
 
     results: dict[str, dict] = {}
     for rsid, annot in rsid_matches.items():
@@ -387,6 +409,25 @@ def _lookup_gene_phenotype(
 # ── Merge + bitmask ──────────────────────────────────────────────────────
 
 
+def _rekey_to_original(
+    data_by_query: dict[str, dict],
+    lookup_key: dict[str, str],
+) -> dict[str, dict]:
+    """Re-key source-lookup results from the queried rsid back to the sample's.
+
+    Source lookups are issued under the *current* (merge-resolved) rsid, so a
+    deprecated chip rsid recovers the record filed under its replacement (F18).
+    Results come back keyed by the current rsid; map each back to the original
+    sample rsid so the annotated row stays keyed by what the chip reported.
+    """
+    out: dict[str, dict] = {}
+    for original, query in lookup_key.items():
+        match = data_by_query.get(query)
+        if match is not None:
+            out[original] = match
+    return out
+
+
 def _merge_annotations(
     raw_rows: list[sa.Row],
     vep_data: dict[str, dict],
@@ -394,14 +435,20 @@ def _merge_annotations(
     gnomad_data: dict[str, dict],
     dbnsfp_data: dict[str, dict],
     gene_phenotype_data: dict[str, dict] | None = None,
+    merged_rsid_map: dict[str, str] | None = None,
 ) -> list[dict]:
     """Merge all annotation sources into upsert-ready dicts.
 
     For each raw variant, merges columns from whichever sources matched
-    and computes the ``annotation_coverage`` bitmask.
+    and computes the ``annotation_coverage`` bitmask. ``merged_rsid_map`` (F18)
+    maps a deprecated sample rsid to the current rsid its annotations were
+    recovered under; it is recorded in ``dbsnp_rsid_current`` (no coverage bit —
+    rsid-merge resolution is a cross-reference, not one of the six sources).
     """
     if gene_phenotype_data is None:
         gene_phenotype_data = {}
+    if merged_rsid_map is None:
+        merged_rsid_map = {}
 
     merged: list[dict] = []
 
@@ -415,6 +462,10 @@ def _merge_annotations(
             "pos": raw.pos,
             "genotype": raw.genotype,
         }
+
+        current_rsid = merged_rsid_map.get(rsid)
+        if current_rsid:
+            row_data["dbsnp_rsid_current"] = current_rsid
 
         if rsid in vep_data:
             row_data.update(vep_data[rsid])
@@ -436,9 +487,25 @@ def _merge_annotations(
             row_data.update(gene_phenotype_data[rsid])
             bitmask |= GENE_PHENOTYPE_BIT
 
-        if bitmask > 0:
-            row_data["annotation_coverage"] = bitmask
-            merged.append(row_data)
+        # Carriage: a genotyping chip reports a call at every probe regardless
+        # of whether the person carries the variant, so annotate against the
+        # allele actually carried. ``ref``/``alt`` come from the source that
+        # supplied allele identity (ClinVar today). ``classify_zygosity``
+        # returns None when carriage is indeterminate (indel / no-call /
+        # strand-ambiguous), in which case zygosity stays NULL.
+        ref = row_data.get("ref")
+        alt = row_data.get("alt")
+        if ref is not None and alt is not None:
+            row_data["zygosity"] = classify_zygosity(raw.genotype, ref, alt)
+
+        # Always emit a row, even when no source matched (F36). An explicit
+        # ``annotation_coverage = 0`` marker distinguishes a variant that was
+        # *processed but had no source data* from one that *never entered the
+        # pipeline* (the latter has no row at all). Previously the ~465
+        # per-chip unmatched variants were dropped silently, so the two cases
+        # were indistinguishable and raw↔annotated reconciliation was impossible.
+        row_data["annotation_coverage"] = bitmask
+        merged.append(row_data)
 
     return merged
 
@@ -465,6 +532,10 @@ def apply_ensemble_pathogenic(merged: list[dict]) -> None:
 # ── Bulk upsert ──────────────────────────────────────────────────────────
 
 _UPSERT_COLUMNS = [
+    # Carriage (allele identity + zygosity vs the carried allele)
+    "ref",
+    "alt",
+    "zygosity",
     # VEP
     "gene_symbol",
     "transcript_id",
@@ -480,6 +551,8 @@ _UPSERT_COLUMNS = [
     "clinvar_review_stars",
     "clinvar_accession",
     "clinvar_conditions",
+    # dbSNP merge reconciliation (F18) — current rsid a deprecated id resolved to
+    "dbsnp_rsid_current",
     # gnomAD
     "gnomad_af_global",
     "gnomad_af_afr",
@@ -519,11 +592,53 @@ _UPSERT_COLUMNS = [
 ]
 
 
+# ── Atomic-swap staging (F28) ─────────────────────────────────────────────
+# Crash recovery used to delete ``annotated_variants`` up front and re-annotate
+# in place, so a crash mid-run left the table empty — the prior good annotation
+# gone, with no transaction protecting it. Instead we annotate into a staging
+# clone and swap it into ``annotated_variants`` in a single transaction at the
+# end: a crash before the swap leaves the prior annotation untouched, and the
+# swap itself is all-or-nothing.
+_STAGING_NAME = "annotated_variants_staging"
+_STAGING_METADATA = sa.MetaData()
+annotated_variants_staging = annotated_variants.to_metadata(_STAGING_METADATA, name=_STAGING_NAME)
+# Drop the copied secondary indexes: SQLite index names are database-global so
+# they would collide with the live table's, and a write-once staging table
+# needs no read indexes. The ``rsid`` primary key (and its ON CONFLICT support)
+# is part of the table definition and is preserved.
+annotated_variants_staging.indexes.clear()
+
+
+def _reset_staging_table(sample_engine: sa.Engine) -> None:
+    """Drop and recreate an empty staging table (clears any crashed-run remnant)."""
+    with sample_engine.begin() as conn:
+        annotated_variants_staging.drop(conn, checkfirst=True)
+        annotated_variants_staging.create(conn)
+
+
+def _swap_staging_into_place(sample_engine: sa.Engine) -> None:
+    """Atomically replace ``annotated_variants`` with the staged annotation.
+
+    The delete-then-insert-select runs in a single transaction, so a crash
+    during the swap rolls back and leaves the prior good annotation intact; a
+    crash *before* the swap never touches the live table at all (F28).
+    """
+    cols = ", ".join(c.name for c in annotated_variants.c)
+    with sample_engine.begin() as conn:
+        conn.execute(annotated_variants.delete())
+        conn.execute(
+            sa.text(f"INSERT INTO annotated_variants ({cols}) SELECT {cols} FROM {_STAGING_NAME}")
+        )
+    with sample_engine.begin() as conn:
+        annotated_variants_staging.drop(conn, checkfirst=True)
+
+
 def _bulk_upsert(
     sample_engine: sa.Engine,
     rows: list[dict],
+    target: sa.Table = annotated_variants,
 ) -> int:
-    """Upsert merged annotation rows into annotated_variants.
+    """Upsert merged annotation rows into *target* (live table or staging).
 
     Uses SQLite INSERT ... ON CONFLICT DO UPDATE to merge columns.
     The annotation_coverage bitmask is ORed with existing values.
@@ -552,7 +667,7 @@ def _bulk_upsert(
         for i in range(0, len(normalised), upsert_batch_size):
             batch = normalised[i : i + upsert_batch_size]
 
-            stmt = sqlite_insert(annotated_variants).values(batch)
+            stmt = sqlite_insert(target).values(batch)
 
             # Build the SET clause: update all annotation columns from incoming row
             set_clause: dict = {}
@@ -562,14 +677,10 @@ def _bulk_upsert(
             # OR the bitmask into existing coverage
             set_clause["annotation_coverage"] = sa.case(
                 (
-                    annotated_variants.c.annotation_coverage.is_(None),
+                    target.c.annotation_coverage.is_(None),
                     stmt.excluded.annotation_coverage,
                 ),
-                else_=(
-                    annotated_variants.c.annotation_coverage.op("|")(
-                        stmt.excluded.annotation_coverage
-                    )
-                ),
+                else_=(target.c.annotation_coverage.op("|")(stmt.excluded.annotation_coverage)),
             )
 
             stmt = stmt.on_conflict_do_update(
@@ -786,16 +897,36 @@ def _build_coverage_stats(
 # ── Engine availability checks ───────────────────────────────────────────
 
 
-def _check_engine_available(engine_getter: Callable, name: str) -> sa.Engine | None:
-    """Try to get an engine, returning None if the DB file doesn't exist."""
+def _check_engine_available(
+    engine_getter: Callable,
+    name: str,
+    result: AnnotationEngineResult | None = None,
+) -> sa.Engine | None:
+    """Resolve a source engine, distinguishing *absent* from *unreadable* (F29).
+
+    Returns the engine on success, ``None`` otherwise. A ``FileNotFoundError``
+    means the source is simply not installed — unavailable, but not a failure
+    (graceful degradation). Any other error (locked, corrupt, permission, a
+    registry property that raised) means the source is present-but-unreadable:
+    it is recorded in ``result.source_failures`` so the run can be reported as
+    ``partial`` instead of silently dropping the source and claiming success.
+    """
     try:
         engine = engine_getter()
         # Quick connectivity check
         with engine.connect() as conn:
             conn.execute(sa.text("SELECT 1"))
         return engine
-    except Exception:
+    except FileNotFoundError:
         logger.info("annotation_source_unavailable", extra={"source": name})
+        return None
+    except Exception as exc:
+        logger.warning(
+            "annotation_source_failed",
+            extra={"source": name, "error": str(exc)},
+        )
+        if result is not None:
+            result.source_failures[name] = str(exc)
         return None
 
 
@@ -850,14 +981,27 @@ def run_annotation(
     if not raw_rows:
         return result
 
-    # 2. Crash recovery: delete partial results from any previous run
-    _delete_all_annotations(sample_engine)
+    # 2. Crash recovery (F28): annotate into a fresh staging table, not in place.
+    # The prior good annotation in ``annotated_variants`` is left untouched until
+    # the atomic swap at the very end, so a crash mid-run loses nothing.
+    _reset_staging_table(sample_engine)
 
     # 3. Detect available annotation sources
-    vep_engine = _check_engine_available(lambda: registry.vep_engine, "vep")
+    vep_engine = _check_engine_available(lambda: registry.vep_engine, "vep", result)
     reference_engine = registry.reference_engine  # always available
-    gnomad_engine = _check_engine_available(lambda: registry.gnomad_engine, "gnomad")
-    dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp")
+    gnomad_engine = _check_engine_available(lambda: registry.gnomad_engine, "gnomad", result)
+    dbnsfp_engine = _check_engine_available(lambda: registry.dbnsfp_engine, "dbnsfp", result)
+
+    # 3b. dbSNP merge reconciliation (F18): a chip may carry a deprecated rsid
+    # whose ClinVar/gnomAD/dbNSFP record now lives under its current rsid. Build
+    # old→current once so every per-source lookup queries the current id and the
+    # recovered record is re-keyed back to the rsid the chip actually reported.
+    from backend.annotation.dbsnp import lookup_merged_rsids
+
+    merge_records = lookup_merged_rsids([r.rsid for r in raw_rows], reference_engine)
+    current_by_old = {
+        old: rec.current_rsid for old, rec in merge_records.items() if rec.current_rsid
+    }
 
     # 4. Process in batches
     # Reuse a single ThreadPoolExecutor across all batches to avoid
@@ -885,6 +1029,19 @@ def run_annotation(
             batch_rsids = [r.rsid for r in batch_rows]
             raw_by_rsid = {r.rsid: r for r in batch_rows}
 
+            # Resolve deprecated rsids to their current id for the source lookups
+            # (F18), keeping ``lookup_key`` so results re-key to the original
+            # sample rsid. ``raw_by_query`` carries the genotype/position under
+            # the queried id; a directly-genotyped current rsid keeps its own row
+            # (self-map wins over a merged old→current contribution).
+            lookup_key = {r: current_by_old.get(r, r) for r in batch_rsids}
+            query_rsids = list(dict.fromkeys(lookup_key.values()))
+            raw_by_query: dict[str, sa.Row] = {}
+            for r in batch_rsids:
+                q = lookup_key[r]
+                if q == r or q not in raw_by_query:
+                    raw_by_query[q] = raw_by_rsid[r]
+
             # 5. Concurrent lookups across annotation sources
             vep_data: dict[str, dict] = {}
             clinvar_data: dict[str, dict] = {}
@@ -902,8 +1059,8 @@ def run_annotation(
                     executor.submit(
                         _timed_lookup,
                         _lookup_vep,
-                        batch_rsids,
-                        raw_by_rsid,
+                        query_rsids,
+                        raw_by_query,
                         vep_engine,
                         source_timings=source_timings,
                         source_name="vep",
@@ -914,8 +1071,8 @@ def run_annotation(
                 executor.submit(
                     _timed_lookup,
                     _lookup_clinvar,
-                    batch_rsids,
-                    raw_by_rsid,
+                    query_rsids,
+                    raw_by_query,
                     reference_engine,
                     source_timings=source_timings,
                     source_name="clinvar",
@@ -927,8 +1084,8 @@ def run_annotation(
                     executor.submit(
                         _timed_lookup,
                         _lookup_gnomad,
-                        batch_rsids,
-                        raw_by_rsid,
+                        query_rsids,
+                        raw_by_query,
                         gnomad_engine,
                         source_timings=source_timings,
                         source_name="gnomad",
@@ -940,8 +1097,8 @@ def run_annotation(
                     executor.submit(
                         _timed_lookup,
                         _lookup_dbnsfp,
-                        batch_rsids,
-                        raw_by_rsid,
+                        query_rsids,
+                        raw_by_query,
                         dbnsfp_engine,
                         source_timings=source_timings,
                         source_name="dbnsfp",
@@ -967,6 +1124,15 @@ def run_annotation(
                         extra={"source": source, "error": str(exc)},
                     )
                     result.errors.append(msg)
+
+            # Re-key merge-resolved lookups back to the sample's original rsids
+            # (F18) before any downstream use (coord fallback, telemetry, merge).
+            # A no-op when nothing in this batch was a deprecated rsid.
+            if current_by_old:
+                vep_data = _rekey_to_original(vep_data, lookup_key)
+                clinvar_data = _rekey_to_original(clinvar_data, lookup_key)
+                gnomad_data = _rekey_to_original(gnomad_data, lookup_key)
+                dbnsfp_data = _rekey_to_original(dbnsfp_data, lookup_key)
 
             # Accumulate per-source timings
             result.timing_vep_s += source_timings.get("vep", 0.0)
@@ -1038,7 +1204,13 @@ def run_annotation(
             # 6. Merge results and compute bitmask
             t_merge = time.perf_counter()
             merged = _merge_annotations(
-                batch_rows, vep_data, clinvar_data, gnomad_data, dbnsfp_data, gene_phenotype_data
+                batch_rows,
+                vep_data,
+                clinvar_data,
+                gnomad_data,
+                dbnsfp_data,
+                gene_phenotype_data,
+                merged_rsid_map=current_by_old,
             )
 
             # 6b. Ensemble pathogenicity flag (P2-13)
@@ -1050,7 +1222,7 @@ def run_annotation(
 
             # 7. Bulk upsert
             t_upsert = time.perf_counter()
-            written = _bulk_upsert(sample_engine, merged)
+            written = _bulk_upsert(sample_engine, merged, target=annotated_variants_staging)
             result.timing_upsert_s += time.perf_counter() - t_upsert
             total_written += written
 
@@ -1068,6 +1240,12 @@ def run_annotation(
                 progress_callback(variants_done, len(raw_rows))
 
     result.rows_written = total_written
+
+    # 8b. Atomic swap (F28): every batch staged successfully, so replace the
+    # prior annotation with the staged one in a single transaction. Reached only
+    # on full success — a crash in any batch above propagates out before here,
+    # leaving ``annotated_variants`` (the prior good run) intact.
+    _swap_staging_into_place(sample_engine)
 
     # 9. Coverage telemetry (Plan §5.6). `vep_matched` aggregates both rsid
     # and (chrom, pos) hits; subtract the coord-fallback subset so the

@@ -34,6 +34,7 @@ from backend.analysis.pharmacogenomics import (
     store_prescribing_alerts,
     update_annotation_coverage_cpic,
 )
+from backend.annotation.engine import CPIC_BIT
 from backend.db.sample_schema import create_sample_tables
 from backend.db.tables import (
     annotated_variants,
@@ -1661,7 +1662,7 @@ class TestUpdateAnnotationCoverageCpic:
         return engine
 
     def test_sets_bit4_on_involved_variants(self):
-        """Variants involved in star-allele calls get bit 4 (16) set."""
+        """Variants involved in star-allele calls get the CPIC coverage bit set."""
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1713,13 +1714,13 @@ class TestUpdateAnnotationCoverageCpic:
                 ).fetchall()
             }
 
-        # rs4244285: 0b001111 | 0b010000 = 0b011111 = 31
-        assert rows["rs4244285"] == 0b011111
+        # rs4244285: prior bits 0-3 plus the CPIC bit
+        assert rows["rs4244285"] == 0b001111 | CPIC_BIT
         # rs9999999: unchanged (not involved in CPIC)
         assert rows["rs9999999"] == 0b000011
 
     def test_null_annotation_coverage_gets_cpic_bit(self):
-        """Variant with NULL annotation_coverage gets CPIC bit set to 16."""
+        """Variant with NULL annotation_coverage gets the CPIC bit set."""
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1757,7 +1758,7 @@ class TestUpdateAnnotationCoverageCpic:
                     annotated_variants.c.rsid == "rs4244285"
                 )
             ).scalar()
-        assert row == 16  # CPIC_BIT only
+        assert row == CPIC_BIT  # CPIC_BIT only (its own bit; F33 moved it off GENE_PHENOTYPE_BIT)
 
     def test_no_involved_rsids_returns_zero(self):
         """Star-allele results with no involved rsids → 0 updates."""
@@ -1787,7 +1788,7 @@ class TestUpdateAnnotationCoverageCpic:
         assert updated == 0
 
     def test_multiple_genes_involved_rsids_combined(self):
-        """Rsids from multiple genes are combined and all get bit 4."""
+        """Rsids from multiple genes are combined and all get the CPIC bit."""
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1847,11 +1848,11 @@ class TestUpdateAnnotationCoverageCpic:
                 ).fetchall()
             }
 
-        assert rows["rs4244285"] == 1 | 16  # 17
-        assert rows["rs3892097"] == 3 | 16  # 19
+        assert rows["rs4244285"] == 1 | CPIC_BIT
+        assert rows["rs3892097"] == 3 | CPIC_BIT
 
     def test_idempotent_or(self):
-        """ORing bit 4 when already set is idempotent."""
+        """ORing the CPIC bit when already set is idempotent."""
 
         sample = self._make_sample_with_annotated(
             raw=[
@@ -1863,8 +1864,8 @@ class TestUpdateAnnotationCoverageCpic:
                     "chrom": "10",
                     "pos": 96541616,
                     "genotype": "GA",
-                    "annotation_coverage": 0b011111,
-                },  # bit 4 already set
+                    "annotation_coverage": 0b001111 | CPIC_BIT,
+                },  # CPIC bit already set
             ],
         )
 
@@ -1888,7 +1889,7 @@ class TestUpdateAnnotationCoverageCpic:
                     annotated_variants.c.rsid == "rs4244285"
                 )
             ).scalar()
-        assert val == 0b011111  # unchanged
+        assert val == 0b001111 | CPIC_BIT  # unchanged (idempotent OR)
 
     def test_variant_not_in_annotated_table_skipped(self):
         """Rsids in involved_rsids but not in annotated_variants → not counted."""

@@ -79,7 +79,7 @@ jobs = sa.Table(
         sa.Text,
         nullable=False,
         server_default="pending",
-        comment="pending | running | complete | failed | cancelled",
+        comment="pending | running | complete | partial | failed | cancelled",
     ),
     sa.Column("progress_pct", sa.Float, server_default="0"),
     sa.Column("message", sa.Text, server_default=""),

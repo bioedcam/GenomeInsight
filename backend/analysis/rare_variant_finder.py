@@ -43,6 +43,7 @@ import sqlalchemy as sa
 import structlog
 
 from backend.analysis.evidence import assign_clinvar_evidence_level
+from backend.analysis.zygosity import CARRIED_ZYGOSITIES
 from backend.annotation.vep_bundle import CONSEQUENCE_SEVERITY
 from backend.db.tables import annotated_variants, findings
 
@@ -116,6 +117,16 @@ class RareVariantFilter:
     clinvar_significance: list[str] | None = None
     include_novel: bool = True  # Include variants with no gnomAD AF (novel)
     zygosity: str | None = None  # "het", "hom_alt", or None for any
+    # When True, surface only variants the individual actually carries
+    # (zygosity in {het, hom_alt}). A genotyping chip reports a call at every
+    # probe, so without this the finder dumps homozygous-reference and
+    # unscoreable (indel/no-call) calls as findings. ``run_all`` sets it.
+    carried_only: bool = False
+    # Biologically-inferred sex ("XX"/"XY"/"manual_review"/"unknown"). When set,
+    # findings that contradict it are dropped via ``finding_gate.is_surfaceable``
+    # — chiefly a Y-chromosome finding on an XX sample (F8). ``run_all`` computes
+    # it once and passes it; None means "do not sex-gate" (standalone callers).
+    inferred_sex: str | None = None
 
 
 @dataclass
@@ -307,6 +318,12 @@ def find_rare_variants(
     if filters.zygosity:
         conditions.append(av.c.zygosity == filters.zygosity)
 
+    # Carriage gate: restrict to variants the individual actually carries.
+    # NULL zygosity (unscoreable: indel/no-call/strand-ambiguous) is excluded
+    # by the IN clause, so unscoreable calls never surface as confident findings.
+    if filters.carried_only:
+        conditions.append(av.c.zygosity.in_(list(CARRIED_ZYGOSITIES)))
+
     if conditions:
         stmt = stmt.where(sa.and_(*conditions))
 
@@ -370,6 +387,14 @@ def find_rare_variants(
         )
         variant.evidence_level = _assign_evidence_level(variant)
         variants.append(variant)
+
+    # Sex/chromosome gate (F8): drop findings impossible for the inferred sex —
+    # e.g. a Y-chromosome finding on an XX sample. Applied only when a sex was
+    # supplied (the live ``run_all`` path); standalone callers are unaffected.
+    if filters.inferred_sex is not None:
+        from backend.analysis.finding_gate import is_surfaceable
+
+        variants = [v for v in variants if is_surfaceable(v.chrom, filters.inferred_sex)]
 
     logger.info(
         "rare_variants_found",

@@ -1,0 +1,24 @@
+{
+  "carriage_table": {
+    "clinvar_pathogenic": {
+      "carried": 2,
+      "carried_fraction": 1.0,
+      "hom_ref": 0,
+      "total": 2,
+      "undetermined": 0
+    }
+  },
+  "findings_counts": {
+    "allergy:celiac_combined": 1,
+    "allergy:histamine_combined": 1,
+    "allergy:pathway_summary": 4,
+    "fitness:pathway_summary": 4,
+    "gene_health:pathway_summary": 4,
+    "methylation:pathway_summary": 5,
+    "nutrigenomics:pathway_summary": 6,
+    "rare_variants:clinvar_pathogenic": 2,
+    "skin:pathway_summary": 4,
+    "sleep:pathway_summary": 4,
+    "traits:pathway_summary": 2
+  }
+}

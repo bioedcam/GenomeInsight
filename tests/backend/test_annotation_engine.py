@@ -441,8 +441,13 @@ class TestMergeAnnotations:
         assert len(merged) == 1
         assert merged[0]["annotation_coverage"] == VEP_BIT
 
-    def test_no_match_excluded(self) -> None:
-        """Variants with no matches in any source are excluded."""
+    def test_no_match_gets_coverage_zero(self) -> None:
+        """Variants with no source match are emitted with annotation_coverage=0.
+
+        F36: a processed-but-unmatched variant must leave an explicit
+        ``coverage=0`` marker, not be dropped (which made it indistinguishable
+        from a variant that never entered the pipeline).
+        """
         engine = sa.create_engine("sqlite://")
         with engine.begin() as conn:
             conn.execute(
@@ -452,7 +457,9 @@ class TestMergeAnnotations:
             row = conn.execute(sa.text("SELECT * FROM t")).fetchone()
 
         merged = _merge_annotations([row], {}, {}, {}, {})
-        assert len(merged) == 0
+        assert len(merged) == 1
+        assert merged[0]["rsid"] == "rs_none"
+        assert merged[0]["annotation_coverage"] == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -605,35 +612,48 @@ class TestRunAnnotation:
         sample_with_variants: sa.Engine,
         mock_registry: MagicMock,
     ) -> None:
-        """Variants matched by fewer sources have partial bitmask."""
+        """Variants matched by fewer sources have partial bitmask.
+
+        Matched variants carry a non-zero bitmask of exactly the sources that
+        hit; an unmatched variant (e.g. ``rs_nomatch``) carries the explicit
+        ``coverage=0`` marker (F36) rather than being dropped.
+        """
         run_annotation(sample_with_variants, mock_registry)
 
         with sample_with_variants.connect() as conn:
             rows = conn.execute(sa.select(annotated_variants)).fetchall()
 
+        all_source_bits = VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT | GENE_PHENOTYPE_BIT
         for row in rows:
             coverage = row.annotation_coverage
-            assert coverage is not None
-            assert coverage > 0
-            # At least one bit must be set
-            assert (
-                coverage & (VEP_BIT | CLINVAR_BIT | GNOMAD_BIT | DBNSFP_BIT | GENE_PHENOTYPE_BIT)
-                > 0
-            )
+            assert coverage is not None  # always set (0 for unmatched)
+            if row.rsid == "rs_nomatch":
+                assert coverage == 0
+            else:
+                # Matched variants: at least one source bit set.
+                assert coverage & all_source_bits > 0
 
-    def test_unmatched_variants_excluded(
+    def test_unmatched_variants_marked_coverage_zero(
         self,
         sample_with_variants: sa.Engine,
         mock_registry: MagicMock,
     ) -> None:
-        """Variants matching no source are not in annotated_variants."""
+        """Variants matching no source are present with annotation_coverage=0 (F36).
+
+        Previously dropped, which made "processed but unmatched" indistinguishable
+        from "never processed" and broke raw↔annotated reconciliation.
+        """
         run_annotation(sample_with_variants, mock_registry)
 
         with sample_with_variants.connect() as conn:
             row = conn.execute(
                 sa.select(annotated_variants).where(annotated_variants.c.rsid == "rs_nomatch")
             ).fetchone()
-        assert row is None
+        assert row is not None
+        assert row.annotation_coverage == 0
+        # ...and an unmatched variant has no source-derived data.
+        assert row.clinvar_significance is None
+        assert row.zygosity is None
 
     def test_crash_recovery_clears_previous(
         self,

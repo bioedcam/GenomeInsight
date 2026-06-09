@@ -276,6 +276,14 @@ def _run_rare_variants(sample_engine: Engine, registry: DBRegistry) -> int:
         find_rare_variants,
         store_rare_variant_findings,
     )
+    from backend.services.sex_inference import infer_biological_sex
 
-    result = find_rare_variants(RareVariantFilter(), sample_engine)
+    # Carriage-gate the live finder: only surface variants the individual
+    # actually carries (a chip genotypes every probe regardless of carriage).
+    # Sex-gate it too (F8): infer biological sex once and drop findings that
+    # contradict it (e.g. a Y-chromosome finding on an XX sample).
+    inferred_sex = infer_biological_sex(sample_engine)
+    result = find_rare_variants(
+        RareVariantFilter(carried_only=True, inferred_sex=inferred_sex), sample_engine
+    )
     return store_rare_variant_findings(result, sample_engine)
