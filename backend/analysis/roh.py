@@ -29,6 +29,11 @@ Method (parameters documented and tuned for a dense ~600–700k-marker array):
   - ``FROH = Σ segment length / AUTOSOMAL_GENOME_KB`` (a fixed ~2.77 Gb
     denominator, the convention from McQuillan 2008, so FROH is comparable
     across samples rather than array-relative).
+
+This is a **route-triggered** metric (``POST /api/analysis/roh/run``), not part of
+the auto-run :mod:`backend.analysis.run_all` pipeline: it is a full-genome scan
+that always emits a summary finding, so running it on demand keeps the standard
+post-annotation finding set (and its validation golden snapshot) unchanged.
 """
 
 from __future__ import annotations
