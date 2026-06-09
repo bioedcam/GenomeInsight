@@ -32,7 +32,7 @@ The `lai_bundle` stream pins, per release, a tarball containing:
 Tag prefix: `lai-bundle-v<semver>` (e.g., `lai-bundle-v2.0.0`).
 Asset filename (stable per tag): `genomeinsight_lai_bundle_v<semver>.tar.gz`.
 Asset URL (stable per tag, never expires):
-`https://github.com/<org>/GenomeInsight/releases/download/lai-bundle-v<semver>/genomeinsight_lai_bundle_v<semver>.tar.gz`
+`https://github.com/<org>/Yeliztli/releases/download/lai-bundle-v<semver>/genomeinsight_lai_bundle_v<semver>.tar.gz`
 
 The v1.1 baseline tarball is ~523 MB; v2.0.0 is ~700–750 MB
 (union-catalog panel + larger Gnomix windows).
@@ -59,7 +59,7 @@ Run on `ssh two` (`/exports/people/mondragonlab/ecc1695/lai_bundle_v2/`):
   - `fastmixture --version` (or `admixture --version`) + the locked random seed
     (`scripts/lai_bundle_v2/env.sh::ADMIXTURE_SEED` defaults to `42`).
 - ~500 GB scratch on `$WORKDIR`.
-- `gh` CLI authenticated against the GenomeInsight repo with `repo` scope.
+- `gh` CLI authenticated against the Yeliztli repo with `repo` scope.
 
 The orchestrator script provisions the directory layout on first run; no
 manual `mkdir` is needed.
@@ -282,7 +282,7 @@ release. The tarball lives in `$WORKDIR` (see Phase 7).
 
 ```bash
 gh release create lai-bundle-v2.0.0 \
-  --repo bioedcam/GenomeInsight \
+  --repo bioedcam/Yeliztli \
   --title "LAI bundle v2.0.0" \
   --notes-file docs/release-notes/lai-bundle-v2.0.0.md \
   --draft \
@@ -305,7 +305,7 @@ ships as a GitHub Release asset.
 "lai_bundle": {
   "version": "v2.0.0",
   "build_date": "YYYY-MM-DD",
-  "url": "https://github.com/bioedcam/GenomeInsight/releases/download/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz",
+  "url": "https://github.com/bioedcam/Yeliztli/releases/download/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz",
   "sha256": "<64-hex from .sha256 sidecar>",
   "size_bytes": <bytes from stat on the tarball>,
   "min_app_version": "0.2.0"

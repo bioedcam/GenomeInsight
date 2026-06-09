@@ -23,14 +23,14 @@ ships them.
 ## 1. Overview
 
 The `vep_bundle` stream pins, per release, a SQLite file containing
-per-rsid VEP annotations for every site in the GenomeInsight rsid catalog.
+per-rsid VEP annotations for every site in the Yeliztli rsid catalog.
 Each release rebuilds against an updated catalog (e.g., union of 23andMe v5
 and AncestryDNA v2.0) and bumps the bundle semver.
 
 Tag prefix: `bundle-v<semver>` (e.g., `bundle-v2.0.0`).
 Asset filename (stable per tag): `vep_bundle.db`.
 Asset URL (stable per tag, never expires):
-`https://github.com/<org>/GenomeInsight/releases/download/bundle-v<semver>/vep_bundle.db`
+`https://github.com/<org>/Yeliztli/releases/download/bundle-v<semver>/vep_bundle.db`
 
 The bundle is ≥100 MB on every release ≥ v2.0.0 (~600 MB for the union catalog
 at v2.0.0), so it cannot live on `raw.githubusercontent.com`. Every release ≥
@@ -58,7 +58,7 @@ GRCh37/38 reference, and enough disk for the union site VCF + VEP output):
 - ≥10 GB free disk in the working directory (raw input + intermediate VCFs +
   output bundle).
 - A working `sha256sum` (Linux/WSL2) or `shasum -a 256` (macOS).
-- `gh` CLI authenticated against the GenomeInsight repo with `repo` scope, for
+- `gh` CLI authenticated against the Yeliztli repo with `repo` scope, for
   drafting releases.
 
 ---
@@ -170,7 +170,7 @@ matches expectations (Plan §12.1 Validation gates). Sign-off blocks publication
 
 ```bash
 gh release create bundle-v2.0.0 \
-  --repo <org>/GenomeInsight \
+  --repo <org>/Yeliztli \
   --title "VEP bundle v2.0.0" \
   --notes-file docs/release-notes/bundle-v2.0.0.md \
   --draft \
@@ -186,7 +186,7 @@ this bundle requires (`0.2.0` for v2.0.0).
 ### 4.2 Verify the asset URL is stable
 
 The asset URL is
-`https://github.com/<org>/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db`
+`https://github.com/<org>/Yeliztli/releases/download/bundle-v2.0.0/vep_bundle.db`
 and is reachable as soon as the draft is created. Hit it once with `curl -I`
 to confirm the redirect returns `200` on the underlying object.
 
@@ -200,7 +200,7 @@ Open `bundles/manifest.json` and update the `vep_bundle` entry:
 "vep_bundle": {
   "version": "v2.0.0",
   "build_date": "YYYY-MM-DD",
-  "url": "https://github.com/<org>/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db",
+  "url": "https://github.com/<org>/Yeliztli/releases/download/bundle-v2.0.0/vep_bundle.db",
   "sha256": "<64-hex from step 3.5>",
   "size_bytes": <bytes from step 3.5>,
   "min_app_version": "0.2.0"

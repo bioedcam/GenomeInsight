@@ -21,8 +21,8 @@ Personal genomics analysis platform for 23andMe raw data. Upload your 23andMe fi
 ## Quick Start (Development)
 
 ```bash
-git clone https://github.com/bioedcam/GenomeInsight.git
-cd GenomeInsight
+git clone https://github.com/bioedcam/Yeliztli.git
+cd Yeliztli
 pip install -e ".[dev]"
 cd frontend && npm install && cd ..
 make dev
@@ -68,7 +68,7 @@ make benchmark         # Run annotation pipeline benchmark (600k SNPs)
 ### Project Structure
 
 ```text
-GenomeInsight/
+Yeliztli/
 ├── backend/                 # FastAPI application
 │   ├── analysis/            # 15+ analysis modules
 │   ├── annotation/          # Variant annotation engine

@@ -97,7 +97,7 @@ V2_PAYLOAD: dict = {
         "vep_bundle": {
             "version": "v2.0.0",
             "build_date": "2026-06-01",
-            "url": "https://github.com/bioedcam/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db",
+            "url": "https://github.com/bioedcam/Yeliztli/releases/download/bundle-v2.0.0/vep_bundle.db",
             "sha256": VEP_BUNDLE_SHA256,
             "size_bytes": VEP_BUNDLE_SIZE_BYTES,
             "min_app_version": "0.2.0",

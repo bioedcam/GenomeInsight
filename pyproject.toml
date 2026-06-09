@@ -56,8 +56,8 @@ dev = [
 yeliztli-setup = "backend.installer:main"
 
 [project.urls]
-Homepage = "https://github.com/bioedcam/GenomeInsight"
-Repository = "https://github.com/bioedcam/GenomeInsight"
+Homepage = "https://github.com/bioedcam/Yeliztli"
+Repository = "https://github.com/bioedcam/Yeliztli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]

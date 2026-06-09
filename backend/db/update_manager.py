@@ -329,7 +329,7 @@ def check_vep_bundle_update(
             timeout=httpx.Timeout(timeout, connect=10.0),
         ) as client:
             resp = client.get(
-                "https://api.github.com/repos/bioedcam/GenomeInsight/commits",
+                "https://api.github.com/repos/bioedcam/Yeliztli/commits",
                 params={"path": "bundles/vep_bundle.db", "per_page": "1"},
                 headers={"Accept": "application/vnd.github.v3+json"},
             )

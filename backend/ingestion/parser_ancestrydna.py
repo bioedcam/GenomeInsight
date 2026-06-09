@@ -73,7 +73,7 @@ _ERR_VERSION = (
     "Expected a 'rsid\\tchromosome\\tposition\\tallele1\\tallele2' header "
     "after an '#AncestryDNA' comment block. "
     "Please file a GitHub issue at "
-    "https://github.com/bioedcam/GenomeInsight/issues"
+    "https://github.com/bioedcam/Yeliztli/issues"
 )
 
 _ARRAY_VERSION_RE = re.compile(r"array\s+version:\s*V([0-9.]+)", re.IGNORECASE)

@@ -1,6 +1,6 @@
 """Registry of reference databases available for download.
 
-Defines metadata for each database that GenomeInsight uses: name, description,
+Defines metadata for each database that Yeliztli uses: name, description,
 approximate size, download URL, expected SHA-256, and whether it is required
 or optional for core functionality.
 
@@ -281,7 +281,7 @@ DATABASES: dict[str, DatabaseInfo] = {
             "Pre-computed variant effect predictions for the 23andMe v5 "
             "∪ AncestryDNA v2.0 rsid catalog"
         ),
-        url="https://github.com/bioedcam/GenomeInsight/releases/download/bundle-v2.0.0/vep_bundle.db",
+        url="https://github.com/bioedcam/Yeliztli/releases/download/bundle-v2.0.0/vep_bundle.db",
         filename="vep_bundle.db",
         expected_size_bytes=600_000_000,  # ~600 MB (union catalog; v2.0.0+)
         required=False,
@@ -296,7 +296,7 @@ DATABASES: dict[str, DatabaseInfo] = {
         # In bundled mode the runner reads the authoritative url/sha/size from the
         # manifest (bundles["gnomad"]); this URL is documentation/fallback and points
         # at the published gnomad-bundle-v1.0.0 release asset.
-        url="https://github.com/bioedcam/GenomeInsight/releases/download/gnomad-bundle-v1.0.0/gnomad_af.db",
+        url="https://github.com/bioedcam/Yeliztli/releases/download/gnomad-bundle-v1.0.0/gnomad_af.db",
         filename="gnomad_af.db",
         # Exact size of the published gnomad_af.db asset (byte-matches
         # bundles/manifest.json -> bundles.gnomad.size_bytes; gnomAD r2.1.1 exomes).
@@ -356,7 +356,7 @@ DATABASES: dict[str, DatabaseInfo] = {
             "Local ancestry inference models for chromosome-level ancestry painting. "
             "Optional — requires ~1.6 GB and Java 8+."
         ),
-        url="https://github.com/bioedcam/GenomeInsight/releases/download/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz",
+        url="https://github.com/bioedcam/Yeliztli/releases/download/lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz",
         filename="lai_bundle.tar.gz",
         # Real v2.0.0 tarball size + SHA-256. The SHA MUST byte-match
         # bundles.lai_bundle.sha256 (Phase E1 smoke + nightly cache pin on
