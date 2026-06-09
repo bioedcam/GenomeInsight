@@ -320,3 +320,42 @@ counselor before any medical action; confirm in a CLIA/accredited laboratory.
 - Iron Disorders Institute: https://irondisorders.org/
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
 """
+
+
+# ── Inherited thrombophilia (Factor V Leiden / Prothrombin) module ──────────
+
+THROMBOPHILIA_DISCLAIMER_TITLE = "About Inherited Thrombophilia Results"
+
+THROMBOPHILIA_DISCLAIMER_TEXT = """\
+This section reports two well-established inherited thrombophilia variants — \
+Factor V Leiden (rs6025) and Prothrombin G20210A (rs1799963) — that modestly \
+raise the risk of venous blood clots (venous thromboembolism, VTE).
+
+**Please understand the following before reviewing:**
+
+1. **Relative risk is not absolute risk.** These variants raise *relative* risk \
+(roughly 3–5× for a single Factor V Leiden allele, 2–3× for Prothrombin, ~5× for \
+both together), but the *absolute* lifetime risk for most carriers stays low — \
+only about 10% of Factor V Leiden carriers ever have a clot.
+
+2. **Risk concentrates around triggers.** Most clots in carriers occur with \
+estrogen-containing contraception or hormone therapy, pregnancy and the weeks \
+after delivery, major surgery, or prolonged immobility. These are the situations \
+worth discussing with a clinician.
+
+3. **Carriers are not treated for being carriers.** Asymptomatic carriers are \
+not put on blood thinners, and routine population screening is not recommended.
+
+4. **A negative result does not rule out a clotting disorder.** Many other \
+inherited and acquired factors influence clotting risk and are not tested here.
+
+5. **Family relevance.** A positive result may be relevant for blood relatives, \
+particularly before pregnancy or starting hormonal therapy.
+
+Discuss results with your physician or a genetic counselor; confirm in a \
+CLIA/accredited laboratory before any medical decision.
+
+**Resources:**
+- National Blood Clot Alliance: https://www.stoptheclot.org/
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
+"""

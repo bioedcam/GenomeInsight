@@ -1,0 +1,92 @@
+{
+  "module": "thrombophilia",
+  "version": "1.0.0",
+  "category": "risk_genotype",
+  "description": "Inherited thrombophilia risk-genotype panel: Factor V Leiden (rs6025) and Prothrombin G20210A (rs1799963). Both are minus-strand cross-vendor pitfalls (23andMe reports rs6025 on the minus strand) — calls are strand-harmonized. Relative VTE risk is always paired with absolute context. EXPANSION_STRATEGY.md §6 / roadmap #24.",
+  "evaluation": "first_match",
+  "sex_stratified": false,
+  "ancestry_gate": null,
+  "disclaimer_key": "THROMBOPHILIA",
+  "loci": [
+    {
+      "rsid": "rs6025",
+      "gene_symbol": "F5",
+      "label": "Factor V Leiden (R506Q)",
+      "risk_allele": "A",
+      "ref_allele": "G",
+      "canonical_strand": "minus",
+      "off_chip_risk": "low"
+    },
+    {
+      "rsid": "rs1799963",
+      "gene_symbol": "F2",
+      "label": "Prothrombin G20210A",
+      "risk_allele": "A",
+      "ref_allele": "G",
+      "canonical_strand": "minus",
+      "off_chip_risk": "low"
+    }
+  ],
+  "genotype_models": [
+    {
+      "id": "double_carrier",
+      "match": {"rs6025": {"dosage_min": 1}, "rs1799963": {"dosage_min": 1}},
+      "risk_classification": "Factor V Leiden + Prothrombin G20210A (double carrier)",
+      "zygosity": "het",
+      "evidence_stars": 3,
+      "odds_ratio": "OR 5.24 (95% CI 4.01–6.84; N=938,355) for venous thromboembolism vs non-carriers",
+      "absolute_risk_context": "Even so, most double carriers never have a clot. Absolute risk is concentrated around transient triggers — estrogen-containing contraception/HRT, pregnancy and the postpartum period, major surgery, and prolonged immobility. Asymptomatic carriers are not anticoagulated, and population screening is not recommended.",
+      "finding_text": "You carry both Factor V Leiden (rs6025) and Prothrombin G20210A (rs1799963) ({genotype}). {odds_ratio}. {absolute_risk} Discuss thrombosis-prevention around high-risk situations with a clinician.",
+      "caveats": ["negative_not_clear", "confirm_clinically"],
+      "pmids": ["38498041", "21372680", "19174584"]
+    },
+    {
+      "id": "fvl_homozygous",
+      "match": {"rs6025": {"dosage": 2}},
+      "risk_classification": "Factor V Leiden homozygous",
+      "zygosity": "hom_alt",
+      "evidence_stars": 3,
+      "odds_ratio": "Homozygous Factor V Leiden carries a substantially higher relative VTE risk than the ~3–5× of heterozygotes",
+      "absolute_risk_context": "Absolute lifetime risk is still moderate and concentrated around hormonal exposure, pregnancy/postpartum, surgery, and immobility. Asymptomatic carriers are not routinely anticoagulated; population screening is not recommended.",
+      "finding_text": "Factor V Leiden homozygous (rs6025 {genotype}). {odds_ratio}. {absolute_risk} Discuss thrombosis prevention around high-risk situations with a clinician.",
+      "caveats": ["negative_not_clear", "confirm_clinically"],
+      "pmids": ["38498041", "21372680", "19174584"]
+    },
+    {
+      "id": "fvl_heterozygous",
+      "match": {"rs6025": {"dosage": 1}},
+      "risk_classification": "Factor V Leiden heterozygous",
+      "zygosity": "het",
+      "evidence_stars": 3,
+      "odds_ratio": "~3–5× relative risk of venous thromboembolism vs non-carriers",
+      "absolute_risk_context": "Only about 10% of Factor V Leiden heterozygotes ever have a venous clot. Risk concentrates around estrogen-containing contraception/HRT, pregnancy/postpartum, surgery, and immobility. Asymptomatic carriers are not anticoagulated, and population screening is not recommended.",
+      "finding_text": "Factor V Leiden heterozygous (rs6025 {genotype}) — you carry one copy. {odds_ratio}. {absolute_risk}",
+      "caveats": ["negative_not_clear", "confirm_clinically"],
+      "pmids": ["21372680", "19174584"]
+    },
+    {
+      "id": "f2_homozygous",
+      "match": {"rs1799963": {"dosage": 2}},
+      "risk_classification": "Prothrombin G20210A homozygous",
+      "zygosity": "hom_alt",
+      "evidence_stars": 3,
+      "odds_ratio": "Homozygous Prothrombin G20210A carries a higher relative VTE risk than the ~2–3× of heterozygotes",
+      "absolute_risk_context": "Absolute risk remains modest and trigger-dependent (hormones, pregnancy/postpartum, surgery, immobility). Asymptomatic carriers are not routinely anticoagulated; population screening is not recommended.",
+      "finding_text": "Prothrombin G20210A homozygous (rs1799963 {genotype}). {odds_ratio}. {absolute_risk}",
+      "caveats": ["negative_not_clear", "confirm_clinically"],
+      "pmids": ["21372680", "19174584"]
+    },
+    {
+      "id": "f2_heterozygous",
+      "match": {"rs1799963": {"dosage": 1}},
+      "risk_classification": "Prothrombin G20210A heterozygous",
+      "zygosity": "het",
+      "evidence_stars": 3,
+      "odds_ratio": "~2–3× relative risk of venous thromboembolism vs non-carriers",
+      "absolute_risk_context": "Most carriers never clot. Risk concentrates around estrogen exposure, pregnancy/postpartum, surgery, and immobility. Asymptomatic carriers are not anticoagulated, and population screening is not recommended.",
+      "finding_text": "Prothrombin G20210A heterozygous (rs1799963 {genotype}) — you carry one copy. {odds_ratio}. {absolute_risk}",
+      "caveats": ["negative_not_clear", "confirm_clinically"],
+      "pmids": ["21372680", "19174584"]
+    }
+  ]
+}
