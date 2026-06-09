@@ -254,10 +254,15 @@ def count_deleterious(annot: DbNSFPAnnotation) -> int:
 
     Thresholds follow standard cutoffs:
         - SIFT4G: score < 0.05 (D)
-        - PolyPhen-2 HVAR: score > 0.453 (P or D)
+        - PolyPhen-2 HVAR: score > 0.909 ("probably damaging")
         - CADD: phred ≥ 20
         - REVEL: score ≥ 0.5
         - MetaSVM: score > 0 (D)
+
+    F38: the PolyPhen cutoff is the strict "probably damaging" 0.909, matching
+    the sibling ``evidence_conflict._is_polyphen_deleterious``. The old lenient
+    0.453 ("possibly damaging") double-counted borderline calls and inflated the
+    deleterious vote (~6%) relative to the rest of the codebase.
 
     Returns:
         Number of tools predicting deleterious (0-5).
@@ -265,7 +270,7 @@ def count_deleterious(annot: DbNSFPAnnotation) -> int:
     count = 0
     if annot.sift_score is not None and annot.sift_score < 0.05:
         count += 1
-    if annot.polyphen2_hsvar_score is not None and annot.polyphen2_hsvar_score > 0.453:
+    if annot.polyphen2_hsvar_score is not None and annot.polyphen2_hsvar_score > 0.909:
         count += 1
     if annot.cadd_phred is not None and annot.cadd_phred >= 20:
         count += 1

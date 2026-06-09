@@ -442,7 +442,7 @@ class TestEnsemblePathogenicity:
     def test_exactly_three_deleterious(self):
         annot = self._make_annot(
             sift_score=0.001,  # D: < 0.05
-            polyphen2_hsvar_score=0.999,  # D: > 0.453
+            polyphen2_hsvar_score=0.999,  # D: > 0.909
             cadd_phred=25.0,  # D: >= 20
             revel=0.3,  # T: < 0.5
             metasvm=-0.5,  # T: <= 0
@@ -471,6 +471,19 @@ class TestEnsemblePathogenicity:
         )
         assert count_deleterious(annot) == 0
         assert not is_ensemble_pathogenic(annot)
+
+    def test_polyphen_strict_threshold(self):
+        """F38: PolyPhen uses the strict 0.909 'probably damaging' cutoff.
+
+        A 'possibly damaging' score (old lenient 0.453 < pp <= 0.909) no longer
+        counts as a deleterious vote, matching the sibling
+        ``evidence_conflict._is_polyphen_deleterious`` (> 0.909).
+        """
+        # Possibly-damaging range — does NOT count.
+        assert count_deleterious(self._make_annot(polyphen2_hsvar_score=0.7)) == 0
+        assert count_deleterious(self._make_annot(polyphen2_hsvar_score=0.909)) == 0
+        # Probably-damaging (> 0.909) — counts.
+        assert count_deleterious(self._make_annot(polyphen2_hsvar_score=0.95)) == 1
 
     def test_all_null_scores(self):
         annot = self._make_annot()
