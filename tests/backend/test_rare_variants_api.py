@@ -599,7 +599,7 @@ class TestVCFExport:
         assert resp.status_code == 200
         text = resp.text
         assert text.startswith("##fileformat=VCFv4.2")
-        assert "##source=GenomeInsight-RareVariantFinder" in text
+        assert "##source=Yeliztli-RareVariantFinder" in text
         assert "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" in text
 
     def test_vcf_export_info_fields(self, rare_client: TestClient) -> None:

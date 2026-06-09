@@ -914,7 +914,7 @@ def run_backup_export_task(job_id: str, include_reference_dbs: bool = False) -> 
 
         # Generate timestamped filename
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-        filename = f"genomeinsight_backup_{timestamp}.tar.gz"
+        filename = f"yeliztli_backup_{timestamp}.tar.gz"
         archive_path = downloads_dir / filename
 
         # Collect files to archive

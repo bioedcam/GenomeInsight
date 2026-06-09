@@ -73,7 +73,7 @@ export default function ReportBuilder() {
   const sampleId = parseSampleId(searchParams.get("sample_id"))
 
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set())
-  const [reportTitle, setReportTitle] = useState("GenomeInsight Genomic Report")
+  const [reportTitle, setReportTitle] = useState("Yeliztli Genomic Report")
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -158,7 +158,7 @@ export default function ReportBuilder() {
           const url = URL.createObjectURL(blob)
           const a = document.createElement("a")
           a.href = url
-          a.download = `genomeinsight_report_${sampleId}.pdf`
+          a.download = `yeliztli_report_${sampleId}.pdf`
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
@@ -177,7 +177,7 @@ export default function ReportBuilder() {
           const url = URL.createObjectURL(blob)
           const a = document.createElement("a")
           a.href = url
-          a.download = `genomeinsight_${sampleId}.fhir.json`
+          a.download = `yeliztli_${sampleId}.fhir.json`
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
@@ -289,7 +289,7 @@ export default function ReportBuilder() {
                 "w-full rounded-md border bg-background px-3 py-2 text-sm",
                 "focus:outline-none focus:ring-2 focus:ring-primary/50",
               )}
-              placeholder="GenomeInsight Genomic Report"
+              placeholder="Yeliztli Genomic Report"
             />
           </div>
 

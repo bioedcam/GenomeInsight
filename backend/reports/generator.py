@@ -237,7 +237,7 @@ def _group_findings_into_sections(
 def render_report_html(
     sample_id: int,
     modules: list[str] | None = None,
-    title: str = "GenomeInsight Genomic Report",
+    title: str = "Yeliztli Genomic Report",
 ) -> str:
     """Render the report HTML string (useful for preview / testing).
 
@@ -283,7 +283,7 @@ def render_report_html(
 async def generate_report_pdf(
     sample_id: int,
     modules: list[str] | None = None,
-    title: str = "GenomeInsight Genomic Report",
+    title: str = "Yeliztli Genomic Report",
 ) -> bytes:
     """Generate a PDF report for the given sample.
 

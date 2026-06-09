@@ -289,7 +289,7 @@ describe("ReportBuilder", () => {
     })
 
     const titleInput = screen.getByLabelText("Report Title") as HTMLInputElement
-    expect(titleInput.value).toBe("GenomeInsight Genomic Report")
+    expect(titleInput.value).toBe("Yeliztli Genomic Report")
   })
 
   it("shows no findings empty state when sample has no findings", async () => {

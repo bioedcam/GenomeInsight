@@ -210,7 +210,7 @@ class TestBackupExport:
                 assert status_data["status"] == "complete"
                 assert status_data["progress_pct"] == 100.0
                 assert status_data["download_filename"] == filename
-                assert filename.startswith("genomeinsight_backup_")
+                assert filename.startswith("yeliztli_backup_")
                 assert filename.endswith(".tar.gz")
 
                 # Download via API
@@ -317,7 +317,7 @@ class TestBackupDownload:
 
             app = create_app()
             with TestClient(app) as tc:
-                resp = tc.get("/api/backup/download/genomeinsight_backup_..config.tar.gz")
+                resp = tc.get("/api/backup/download/yeliztli_backup_..config.tar.gz")
             reset_registry()
         # Traversal guard fires → 400 "Invalid filename." (not a 404 fall-through).
         assert resp.status_code == 400
@@ -330,9 +330,33 @@ class TestBackupDownload:
 
             app = create_app()
             with TestClient(app) as tc:
-                resp = tc.get("/api/backup/download/genomeinsight_backup_20250101_000000.tar.gz")
+                resp = tc.get("/api/backup/download/yeliztli_backup_20250101_000000.tar.gz")
             reset_registry()
         assert resp.status_code == 404
+
+    def test_download_accepts_legacy_prefix(self, tmp_data_dir: Path) -> None:
+        """Back-compat (R3): a legacy genomeinsight_backup_*.tar.gz archive still downloads.
+
+        The producer now emits ``yeliztli_backup_*``, but the download
+        validator accepts BOTH prefixes for one release so users' pre-rebrand
+        archives are not stranded (restore is already filename-agnostic). A
+        real legacy-named file is placed in downloads_dir; the validator must
+        pass it through (200), not reject it as an invalid backup filename.
+        """
+        settings = self._make_test_client(tmp_data_dir)
+        legacy_name = "genomeinsight_backup_20250101_000000.tar.gz"
+        settings.downloads_dir.mkdir(parents=True, exist_ok=True)
+        (settings.downloads_dir / legacy_name).write_bytes(b"legacy-archive-bytes")
+        with _make_client(settings):
+            reset_registry()
+            from backend.main import create_app
+
+            app = create_app()
+            with TestClient(app) as tc:
+                resp = tc.get(f"/api/backup/download/{legacy_name}")
+            reset_registry()
+        assert resp.status_code == 200
+        assert resp.content == b"legacy-archive-bytes"
 
 
 # ═══════════════════════════════════════════════════════════════════════

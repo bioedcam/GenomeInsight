@@ -249,13 +249,16 @@ async def backup_download(filename: str) -> FileResponse:
     """Download a completed backup archive.
 
     Only serves files from the downloads directory matching
-    the genomeinsight_backup_*.tar.gz pattern.
+    the yeliztli_backup_*.tar.gz pattern. The legacy genomeinsight_backup_*
+    prefix is also accepted for one release so pre-rebrand archives still
+    download (back-compat shim; restore is filename-agnostic).
     """
     # Validate filename to prevent path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename.")
 
-    if not filename.startswith("genomeinsight_backup_") or not filename.endswith(".tar.gz"):
+    valid_prefix = filename.startswith(("yeliztli_backup_", "genomeinsight_backup_"))
+    if not valid_prefix or not filename.endswith(".tar.gz"):
         raise HTTPException(status_code=400, detail="Invalid backup filename.")
 
     settings = get_settings()

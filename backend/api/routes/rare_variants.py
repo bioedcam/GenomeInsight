@@ -430,7 +430,7 @@ def export_rare_variants_vcf(
     today = date.today().isoformat()
     buf.write("##fileformat=VCFv4.2\n")
     buf.write(f"##fileDate={today}\n")
-    buf.write("##source=GenomeInsight-RareVariantFinder\n")
+    buf.write("##source=Yeliztli-RareVariantFinder\n")
     buf.write("##reference=GRCh37\n")
     buf.write('##INFO=<ID=GENE,Number=1,Type=String,Description="Gene symbol">\n')
     buf.write('##INFO=<ID=CSQ,Number=1,Type=String,Description="Consequence type">\n')

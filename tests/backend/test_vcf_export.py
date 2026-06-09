@@ -2,7 +2,7 @@
 
 Test IDs covered:
   T1-09 — VCF export produces valid VCF 4.2
-  T1-10 — VCF contains correct ##reference=GRCh37 and ##source=GenomeInsight
+  T1-10 — VCF contains correct ##reference=GRCh37 and ##source=Yeliztli
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class TestVCFHeaders:
 
     def test_source_header(self) -> None:
         vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
-        assert "##source=GenomeInsight\n" in vcf
+        assert "##source=Yeliztli\n" in vcf
 
     def test_filedate_header(self) -> None:
         vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
@@ -77,7 +77,7 @@ class TestVCFHeaders:
 
     def test_ref_alt_limitation_note(self) -> None:
         vcf = export_vcf_from_rows([], file_date=FIXED_DATE)
-        assert "##GenomeInsight_note=" in vcf
+        assert "##Yeliztli_note=" in vcf
         assert "inferred from genotype" in vcf
 
     def test_contig_lines_present(self) -> None:
@@ -308,7 +308,7 @@ class TestExportFromEngine:
         )
         assert "##fileformat=VCFv4.2" in vcf
         assert "##reference=GRCh37" in vcf
-        assert "##source=GenomeInsight" in vcf
+        assert "##source=Yeliztli" in vcf
         assert "TestPatient" in vcf
         data = _get_data_lines(vcf)
         # sample_with_variants rows, none are no-calls
