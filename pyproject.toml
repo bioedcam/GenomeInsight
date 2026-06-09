@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "genomeinsight"
+name = "yeliztli"
 version = "0.2.0"
 description = "Personal genomics analysis platform for 23andMe raw data"
 readme = "README.md"
@@ -53,7 +53,7 @@ dev = [
 ]
 
 [project.scripts]
-genomeinsight-setup = "backend.installer:main"
+yeliztli-setup = "backend.installer:main"
 
 [project.urls]
 Homepage = "https://github.com/bioedcam/GenomeInsight"

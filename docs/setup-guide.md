@@ -39,20 +39,20 @@ The installer sets up Yeliztli to run automatically in the background:
 
 ```bash
 # Install services (auto-detects macOS/Linux/WSL2)
-genomeinsight-setup install
+yeliztli-setup install
 
 # Check status
-genomeinsight-setup status
+yeliztli-setup status
 
 # Start/stop manually
-genomeinsight-setup start
-genomeinsight-setup stop
+yeliztli-setup start
+yeliztli-setup stop
 
 # Uninstall (preserves your data)
-genomeinsight-setup uninstall
+yeliztli-setup uninstall
 
 # Uninstall and remove all data
-genomeinsight-setup uninstall --remove-data
+yeliztli-setup uninstall --remove-data
 ```
 
 **macOS**: Uses `launchd` user agents. Services start automatically at login. Logs are written to `~/Library/Logs/yeliztli-*.log`.
@@ -72,8 +72,8 @@ Navigate to [http://localhost:8000](http://localhost:8000) in your browser. The 
 ### Install options
 
 ```bash
-genomeinsight-setup install --skip-pip        # Skip Python package install
-genomeinsight-setup install --skip-frontend   # Skip frontend build
+yeliztli-setup install --skip-pip        # Skip Python package install
+yeliztli-setup install --skip-frontend   # Skip frontend build
 ```
 
 ---
@@ -93,7 +93,7 @@ This starts two services:
 - **api** — FastAPI server on [http://localhost:8000](http://localhost:8000)
 - **huey** — Background task worker for annotation pipeline
 
-Data is persisted in a Docker volume (`genomeinsight-data`).
+Data is persisted in a Docker volume (`yeliztli-data`).
 
 ### 2. Check health
 
@@ -304,7 +304,7 @@ cd GenomeInsight
 git pull
 pip install -e .
 cd frontend && npm install && npm run build && cd ..
-genomeinsight-setup install  # Restart services
+yeliztli-setup install  # Restart services
 ```
 
 ### Database updates
@@ -340,9 +340,9 @@ Import during initial setup (Step 2 of the wizard) or from **Settings > Backup >
 ### Native install
 
 ```bash
-genomeinsight-setup uninstall              # Remove services, keep data
-genomeinsight-setup uninstall --remove-data # Remove services + all data
-pip uninstall genomeinsight
+yeliztli-setup uninstall              # Remove services, keep data
+yeliztli-setup uninstall --remove-data # Remove services + all data
+pip uninstall yeliztli
 ```
 
 ### Docker

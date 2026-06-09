@@ -226,7 +226,7 @@ class TestDockerConfiguration:
 
         content = (_repo_root() / "docker-compose.yml").read_text()
         config = yaml.safe_load(content)
-        assert "genomeinsight-data" in config.get("volumes", {})
+        assert "yeliztli-data" in config.get("volumes", {})
 
 
 # ── Package build ─────────────────────────────────────────
@@ -262,7 +262,7 @@ class TestPackageBuild:
     def test_entry_point_registered_in_pyproject(self):
         """Verify the console_scripts entry point is declared in pyproject.toml."""
         content = (_repo_root() / "pyproject.toml").read_text()
-        assert "genomeinsight-setup" in content
+        assert "yeliztli-setup" in content
         assert "backend.installer:main" in content
 
 

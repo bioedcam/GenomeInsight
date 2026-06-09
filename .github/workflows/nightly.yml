@@ -254,7 +254,7 @@ jobs:
 
       - name: Verify CLI entry point
         id: cli_check
-        run: genomeinsight-setup --help
+        run: yeliztli-setup --help
 
       - name: File cross-os-regression issue
         if: failure() && (steps.pytest.outcome == 'failure' || steps.cli_check.outcome == 'failure')

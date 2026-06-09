@@ -25,11 +25,11 @@ manually before tagging a release.
 
 - [ ] `pip install -e ".[dev]"` succeeds without errors
 - [ ] `cd frontend && npm install` succeeds without errors
-- [ ] `genomeinsight-setup --help` prints usage
+- [ ] `yeliztli-setup --help` prints usage
 
 ### 3. Data Directory
 
-- [ ] `genomeinsight-setup install --skip-pip --skip-frontend` creates `~/.yeliztli/`
+- [ ] `yeliztli-setup install --skip-pip --skip-frontend` creates `~/.yeliztli/`
 - [ ] `~/.yeliztli/samples/` exists
 - [ ] `~/.yeliztli/downloads/` exists
 - [ ] `~/.yeliztli/logs/` exists
@@ -56,7 +56,7 @@ manually before tagging a release.
 - [ ] Huey service active: `systemctl --user is-active yeliztli-huey` returns active
 - [ ] Health check after service start: `curl -s http://localhost:8000/api/health`
 - [ ] Units stop: `systemctl --user stop yeliztli-api yeliztli-huey`
-- [ ] Units uninstall: `genomeinsight-setup uninstall` succeeds
+- [ ] Units uninstall: `yeliztli-setup uninstall` succeeds
 
 ### 7. systemd Not Available (Fallback)
 

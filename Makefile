@@ -10,7 +10,7 @@ NPM ?= npm
 # ──────────────────────────────────────────────
 
 setup: setup-backend setup-frontend  ## Full project setup
-	@echo "✓ GenomeInsight setup complete"
+	@echo "✓ Yeliztli setup complete"
 
 setup-backend:  ## Install Python dependencies
 	$(PIP) install -e ".[dev]"
