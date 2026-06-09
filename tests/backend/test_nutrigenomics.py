@@ -396,8 +396,8 @@ class TestScorePathways:
 
         23andMe reports rs1801133 as C/T, but the panel keys genotype_effects on
         the G/A (Watson–Crick complement) strand. ``_score_snp`` now harmonizes
-        strand via ``_lookup_genotype_effect`` (chip "CT" → panel "GA"), so a
-        real CT heterozygote resolves to Moderate instead of STANDARD.
+        strand via the shared ``genotype_lookup.lookup_by_genotype`` (chip "CT" →
+        panel "GA"), so a real CT heterozygote resolves to Moderate not STANDARD.
         """
         _seed_variants(sample_engine, [("rs1801133", "1", 11856378, "CT")])
 
