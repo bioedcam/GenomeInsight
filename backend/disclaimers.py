@@ -485,3 +485,42 @@ This is a research/educational result, not a clinical test.
 - American Society of Nephrology (APOL1): https://www.asn-online.org/
 - National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
 """
+
+
+# ── Gout / serum-urate (ABCG2 Q141K + SLC2A9) module ────────────────────────
+
+GOUT_DISCLAIMER_TITLE = "About Gout & Serum-Urate Risk Results"
+
+GOUT_DISCLAIMER_TEXT = """\
+This section reports common urate-transporter risk alleles — ABCG2 Q141K \
+(rs2231142) and a SLC2A9 serum-urate variant (rs13129697). These influence how \
+much urate the body retains, which relates to gout susceptibility.
+
+**Please understand the following before reviewing:**
+
+1. **This is a risk modifier, not a diagnosis.** A risk genotype here does not \
+mean you have or will develop gout. Gout is multifactorial — many genetic, \
+clinical, and lifestyle factors contribute, and most people carrying a risk \
+allele never develop gout.
+
+2. **Relative risk, with absolute context.** The ABCG2 Q141K allele is \
+associated with roughly 2-fold higher gout odds per risk allele (and larger \
+effects in East Asian ancestry), but the absolute lifetime risk for most \
+carriers remains modest.
+
+3. **Ancestry context.** The reported effect sizes differ by ancestry; the \
+estimate shown is selected for your inferred ancestry where available.
+
+4. **No medical or lifestyle prescriptions.** Yeliztli does not recommend \
+treatments, foods, supplements, or any lifestyle change. Any decision about \
+urate-lowering therapy or other management belongs with a clinician, based on \
+your measured urate levels, symptoms, and history — not on a genotype alone.
+
+5. **A negative result does not rule out gout susceptibility.** Many other \
+genetic and non-genetic factors are not captured here.
+
+**Resources:**
+- American College of Rheumatology (Gout): https://rheumatology.org/patients/gout
+- National Kidney Foundation: https://www.kidney.org/
+- National Society of Genetic Counselors: https://findageneticcounselor.nsgc.org/\
+"""
