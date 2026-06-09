@@ -577,7 +577,7 @@ describe('App version row', () => {
         update_available: true,
         current_version: '0.1.0',
         latest_version: '0.2.0',
-        release_url: 'https://github.com/bioedcam/GenomeInsight/releases/v0.2.0',
+        release_url: 'https://github.com/bioedcam/Yeliztli/releases/v0.2.0',
         release_notes: 'New features',
         error: null,
       },
@@ -591,7 +591,7 @@ describe('App version row', () => {
     expect(link).not.toBeNull()
     expect(link).toHaveAttribute(
       'href',
-      'https://github.com/bioedcam/GenomeInsight/releases/v0.2.0',
+      'https://github.com/bioedcam/Yeliztli/releases/v0.2.0',
     )
     expect(link).toHaveTextContent('Release notes')
   })

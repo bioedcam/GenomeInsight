@@ -33,7 +33,7 @@ Sequential, prompt-sized steps for executing `docs/setup-update-plan.md`. Each s
   - Dataclasses `BundleManifestEntry`, `PipelinePinEntry`, `Manifest` (frozen).
   - `fetch_manifest(timeout: float = 15.0) -> Manifest` with 1 h in-memory TTL cache. Honors `YELIZTLI_MANIFEST_PATH` env var (deprecated alias: `GENOMEINSIGHT_MANIFEST_PATH`) for tests.
   - `get_bundle_info(name) -> BundleManifestEntry | None`, `get_pipeline_pin(name) -> PipelinePinEntry | None`.
-  - Manifest URL constant: `https://raw.githubusercontent.com/bioedcam/GenomeInsight/main/bundles/manifest.json`.
+  - Manifest URL constant: `https://raw.githubusercontent.com/bioedcam/Yeliztli/main/bundles/manifest.json`.
 - **Tests (`tests/backend/test_manifest.py`):** local-file override path; cache TTL respected; network failure returns last good or raises a typed error (decide and assert).
 - **Out of scope:** any consumer code; just the module + tests.
 

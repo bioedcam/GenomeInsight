@@ -1,6 +1,6 @@
 """App update checker — GitHub Releases API (P4-21d).
 
-On startup, checks the GitHub Releases API for a newer GenomeInsight version.
+On startup, checks the GitHub Releases API for a newer Yeliztli version.
 Compares semantic versions. No auto-update — users upgrade via pip.
 """
 
@@ -17,10 +17,10 @@ from backend.main import VERSION
 
 logger = logging.getLogger(__name__)
 
-GITHUB_REPO = "bioedcam/GenomeInsight"
+GITHUB_REPO = "bioedcam/Yeliztli"
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 REQUEST_TIMEOUT = 10.0  # seconds
-USER_AGENT = f"GenomeInsight/{VERSION}"
+USER_AGENT = f"Yeliztli/{VERSION}"
 
 
 @dataclass
@@ -45,7 +45,7 @@ def parse_version(version_str: str) -> Version | None:
 
 
 async def check_app_update(current_version: str | None = None) -> AppUpdateInfo:
-    """Check GitHub Releases for a newer GenomeInsight version.
+    """Check GitHub Releases for a newer Yeliztli version.
 
     Args:
         current_version: Override for testing. Defaults to backend.main.VERSION.
@@ -56,7 +56,7 @@ async def check_app_update(current_version: str | None = None) -> AppUpdateInfo:
     current = current_version or VERSION
 
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
             resp = await client.get(
                 RELEASES_URL,
                 headers={

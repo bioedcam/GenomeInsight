@@ -70,7 +70,7 @@
     "lai_bundle": {
       "version": "v1.1",
       "build_date": "2026-04-07",
-      "url": "https://github.com/bioedcam/GenomeInsight/releases/download/lai-bundle-v1.1.0/genomeinsight_lai_bundle_v1.1.tar.gz",
+      "url": "https://github.com/bioedcam/Yeliztli/releases/download/lai-bundle-v1.1.0/genomeinsight_lai_bundle_v1.1.tar.gz",
       "sha256": "959ed0fd9ebe2ad8fa542776a59ce73072d928c7ce59839ea81d0f1e78a5c18e",
       "size_bytes": 523801111
     },
@@ -116,7 +116,7 @@ class Manifest:
 ```
 
 Functions:
-- `fetch_manifest(timeout: float = 15.0) -> Manifest` — httpx GET against `https://raw.githubusercontent.com/bioedcam/GenomeInsight/main/bundles/manifest.json`. Lazy fetch + 1 h in-memory cache (TTL).
+- `fetch_manifest(timeout: float = 15.0) -> Manifest` — httpx GET against `https://raw.githubusercontent.com/bioedcam/Yeliztli/main/bundles/manifest.json`. Lazy fetch + 1 h in-memory cache (TTL).
 - `get_bundle_info(name) -> BundleManifestEntry | None`.
 - `get_pipeline_pin(name) -> PipelinePinEntry | None`.
 - Test override: `YELIZTLI_MANIFEST_PATH` env var (deprecated alias: `GENOMEINSIGHT_MANIFEST_PATH`) loads from local file.

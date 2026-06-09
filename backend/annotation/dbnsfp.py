@@ -59,7 +59,6 @@ logger = structlog.get_logger(__name__)
 # The distribution is a ZIP containing per-chromosome TSV files.
 # download_and_load_dbnsfp() streams these through csv.DictReader.
 DBNSFP_TSV_URL = "https://dist.genos.us/academic/e55b09/dbNSFP5.3.1a.zip"
-DBNSFP_PREBUILT_URL = "https://github.com/GenomeInsight/data/releases/download/v1.0/dbnsfp.db.gz"
 
 # Batch sizes
 BATCH_SIZE = 10_000

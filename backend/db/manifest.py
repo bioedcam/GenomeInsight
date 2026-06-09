@@ -37,9 +37,7 @@ from packaging.version import InvalidVersion, Version
 logger = logging.getLogger(__name__)
 _structlog = structlog.get_logger(__name__)
 
-MANIFEST_URL = (
-    "https://raw.githubusercontent.com/bioedcam/GenomeInsight/main/bundles/manifest.json"
-)
+MANIFEST_URL = "https://raw.githubusercontent.com/bioedcam/Yeliztli/main/bundles/manifest.json"
 CACHE_TTL_SECONDS = 3600.0
 # Canonical override env var; the legacy GENOMEINSIGHT_ name is read for one
 # release as a deprecated fallback (see fetch_manifest).

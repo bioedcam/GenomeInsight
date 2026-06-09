@@ -27,8 +27,8 @@ Yeliztli runs entirely on localhost. No internet connection is needed after init
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/bioedcam/GenomeInsight.git
-cd GenomeInsight
+git clone https://github.com/bioedcam/Yeliztli.git
+cd Yeliztli
 pip install -e .
 cd frontend && npm install && npm run build && cd ..
 ```
@@ -83,8 +83,8 @@ yeliztli-setup install --skip-frontend   # Skip frontend build
 ### 1. Build and start
 
 ```bash
-git clone https://github.com/bioedcam/GenomeInsight.git
-cd GenomeInsight
+git clone https://github.com/bioedcam/Yeliztli.git
+cd Yeliztli
 docker compose up -d
 ```
 
@@ -159,8 +159,8 @@ services:
 For contributors or those who want hot-reload during use:
 
 ```bash
-git clone https://github.com/bioedcam/GenomeInsight.git
-cd GenomeInsight
+git clone https://github.com/bioedcam/Yeliztli.git
+cd Yeliztli
 pip install -e ".[dev]"
 cd frontend && npm install && cd ..
 make dev
@@ -300,7 +300,7 @@ Then restart WSL2: `wsl --shutdown` from PowerShell.
 Yeliztli checks for new releases on GitHub at startup (configurable). When an update is available, a subtle indicator appears in the UI. To update:
 
 ```bash
-cd GenomeInsight
+cd Yeliztli
 git pull
 pip install -e .
 cd frontend && npm install && npm run build && cd ..

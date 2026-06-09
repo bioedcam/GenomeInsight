@@ -88,7 +88,7 @@ const UPDATE_AVAILABLE: AppUpdatePayload = {
   update_available: true,
   current_version: '0.1.0',
   latest_version: '1.2.0',
-  release_url: 'https://github.com/bioedcam/GenomeInsight/releases/tag/v1.2.0',
+  release_url: 'https://github.com/bioedcam/Yeliztli/releases/tag/v1.2.0',
   release_notes: null,
   error: null,
 }
@@ -121,7 +121,7 @@ describe('AppUpdateBanner', () => {
     const link = await screen.findByRole('link', { name: /view release notes/i })
     expect(link).toHaveAttribute(
       'href',
-      'https://github.com/bioedcam/GenomeInsight/releases/tag/v1.2.0',
+      'https://github.com/bioedcam/Yeliztli/releases/tag/v1.2.0',
     )
   })
 

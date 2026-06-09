@@ -57,7 +57,7 @@ _ERR_BINARY = "This file contains binary data and is not a valid text file."
 _ERR_UNKNOWN = (
     "Unrecognized file format. Yeliztli expects 23andMe or AncestryDNA "
     "raw data (tab-separated, .txt). Please file a GitHub issue at "
-    "https://github.com/bioedcam/GenomeInsight/issues if you believe this is "
+    "https://github.com/bioedcam/Yeliztli/issues if you believe this is "
     "a bug."
 )
 

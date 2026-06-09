@@ -58,7 +58,7 @@ class TestLAIBundleRegistry:
         # Phase D/Step 32 (PR-0c) repointed this from lai-bundle-v1.1.0 to the
         # published lai-bundle-v2.0.0 release asset.
         assert db.url == (
-            "https://github.com/bioedcam/GenomeInsight/releases/download/"
+            "https://github.com/bioedcam/Yeliztli/releases/download/"
             "lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz"
         )
 
@@ -84,7 +84,7 @@ class TestLAIBundleManifestV2:
                 "version": "v2.0.0",
                 "build_date": "2026-05-20",
                 "url": (
-                    "https://github.com/bioedcam/GenomeInsight/releases/download/"
+                    "https://github.com/bioedcam/Yeliztli/releases/download/"
                     "lai-bundle-v2.0.0/genomeinsight_lai_bundle_v2.0.0.tar.gz"
                 ),
                 "sha256": "0" * 64,

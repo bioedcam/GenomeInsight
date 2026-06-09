@@ -173,7 +173,7 @@ function AboutPage() {
         <ul className="text-sm text-muted-foreground space-y-1">
           <li>
             <a
-              href="https://github.com/bioedcam/GenomeInsight"
+              href="https://github.com/bioedcam/Yeliztli"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:no-underline hover:text-foreground transition-colors"
@@ -183,7 +183,7 @@ function AboutPage() {
           </li>
           <li>
             <a
-              href="https://github.com/bioedcam/GenomeInsight/issues"
+              href="https://github.com/bioedcam/Yeliztli/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:no-underline hover:text-foreground transition-colors"

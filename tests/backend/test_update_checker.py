@@ -118,7 +118,7 @@ class TestCheckAppUpdate:
             200,
             {
                 "tag_name": "v1.0.0",
-                "html_url": "https://github.com/bioedcam/GenomeInsight/releases/v1.0.0",
+                "html_url": "https://github.com/bioedcam/Yeliztli/releases/v1.0.0",
                 "body": "Release notes",
             },
         )
@@ -129,6 +129,21 @@ class TestCheckAppUpdate:
         assert info.latest_version == "1.0.0"
         assert info.current_version == "0.1.0"
         assert info.error is None
+
+    @pytest.mark.asyncio
+    @patch("backend.utils.update_checker.httpx.AsyncClient")
+    async def test_follows_redirects(self, mock_cls):
+        """R7: the AsyncClient must follow redirects so the app-update check
+        survives the GitHub repo-rename 301 redirect to the new ``bioedcam/Yeliztli``
+        slug. Without follow_redirects=True the 301 is not followed and the
+        update banner silently dies for pre-rename installs.
+        """
+        resp = _make_mock_response(200, {"tag_name": "v0.1.0", "html_url": "u", "body": ""})
+        _mock_async_client(mock_cls, resp)
+
+        await check_app_update(current_version="0.1.0")
+
+        assert mock_cls.call_args.kwargs.get("follow_redirects") is True
 
     @pytest.mark.asyncio
     @patch("backend.utils.update_checker.httpx.AsyncClient")

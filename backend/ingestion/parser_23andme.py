@@ -74,7 +74,7 @@ _ERR_VERSION = (
     "Header pattern not recognized as 23andMe v3/v4/v5. "
     "Expected: '# rsid\\tchromosome\\tposition\\tgenotype'. "
     "Please file a GitHub issue at "
-    "https://github.com/bioedcam/GenomeInsight/issues"
+    "https://github.com/bioedcam/Yeliztli/issues"
 )
 
 
