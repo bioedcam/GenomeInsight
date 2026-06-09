@@ -86,6 +86,7 @@ def _get_modules() -> list[tuple[str, Callable]]:
         ("methylation", _run_methylation),
         ("allergy", _run_allergy),
         ("gene_health", _run_gene_health),
+        ("roh", _run_roh),
         ("rare_variants", _run_rare_variants),
     ]
 
@@ -372,6 +373,13 @@ def _run_gene_health(sample_engine: Engine, registry: DBRegistry) -> int:
     panel = load_gene_health_panel()
     result = score_gene_health_pathways(panel, sample_engine, registry.reference_engine)
     return store_gene_health_findings(result, sample_engine)
+
+
+def _run_roh(sample_engine: Engine, registry: DBRegistry) -> int:
+    from backend.analysis.roh import detect_roh, store_roh_findings
+
+    result = detect_roh(sample_engine)
+    return store_roh_findings(result, sample_engine)
 
 
 def _run_rare_variants(sample_engine: Engine, registry: DBRegistry) -> int:
