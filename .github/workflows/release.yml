@@ -128,7 +128,7 @@ jobs:
         run: pip install -e .
 
       - name: Verify CLI entry point
-        run: genomeinsight-setup --help
+        run: yeliztli-setup --help
 
       - name: Verify data dir creation
         run: |
@@ -198,7 +198,7 @@ jobs:
         run: docker compose build
 
       - name: Verify image exists
-        run: docker images genomeinsight:latest --format "{{.Repository}}:{{.Tag}} {{.Size}}"
+        run: docker images yeliztli:latest --format "{{.Repository}}:{{.Tag}} {{.Size}}"
 
       - name: Start services
         run: |
@@ -282,7 +282,7 @@ jobs:
         run: npx playwright test --project=${{ matrix.browser }}
         env:
           CI: true
-          GENOMEINSIGHT_HUEY_IMMEDIATE: "true"
+          YELIZTLI_HUEY_IMMEDIATE: "true"
 
       - name: Upload test artifacts
         if: failure()

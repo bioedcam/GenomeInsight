@@ -133,7 +133,7 @@ function AboutPage() {
               <p className="text-sm text-amber-700 dark:text-amber-300">
                 Upgrade via:{' '}
                 <code className="rounded bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 text-xs font-mono">
-                  pip install --upgrade genomeinsight
+                  pip install --upgrade yeliztli
                 </code>
               </p>
               {appUpdate.release_url && (

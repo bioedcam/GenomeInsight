@@ -7,7 +7,7 @@ Handles:
 - Frontend build
 - Service management (start/stop/status)
 
-Entry point: `genomeinsight-setup` console script.
+Entry point: `yeliztli-setup` console script.
 """
 
 from __future__ import annotations
@@ -430,9 +430,9 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for genomeinsight-setup."""
+    """CLI entry point for yeliztli-setup."""
     parser = argparse.ArgumentParser(
-        prog="genomeinsight-setup",
+        prog="yeliztli-setup",
         description="Yeliztli native install manager",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
