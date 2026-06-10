@@ -88,15 +88,16 @@ def _release_versions(snapshot: dict[str, Any]) -> dict[str, str]:
 def _prior_releases(prior: list[dict[str, Any]]) -> dict[str, str]:
     """The source releases behind the prior findings.
 
-    Every finding in a run pins the same release snapshot, so the first record
-    that carries one is representative. Empty when the prior findings predate
-    SW-A4 provenance (NULL ``provenance``).
+    Findings stamped in one run share a single release snapshot, but a sample can
+    carry findings stamped across runs (or pre-SW-A4 rows with no provenance), so
+    union every record's releases rather than trust the first — a partial first
+    record must not drop sources the others recorded. Empty when no prior finding
+    carries provenance.
     """
+    versions: dict[str, str] = {}
     for rec in prior:
-        versions = rec.get("release_versions")
-        if versions:
-            return dict(versions)
-    return {}
+        versions.update(rec.get("release_versions") or {})
+    return versions
 
 
 # ── Snapshot ──────────────────────────────────────────────────────────────
@@ -139,18 +140,78 @@ def _identity_key(rec: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _group_by_key(records: list[dict[str, Any]]) -> dict[tuple[str, ...], list[dict[str, Any]]]:
-    """Group records by identity key; sort each group by finding_text.
-
-    The deterministic sort makes the element-wise pairing of colliding records
-    (several findings sharing one identity key, e.g. ancestry summaries) stable
-    across runs, so a re-order alone never reads as added/removed.
-    """
+    """Group records by identity key (collisions go in the same list)."""
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for rec in records:
         groups.setdefault(_identity_key(rec), []).append(rec)
-    for group in groups.values():
-        group.sort(key=lambda r: r.get("finding_text") or "")
     return groups
+
+
+def _meaning_tuple(rec: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(rec.get(field) for field in _MEANING_FIELDS)
+
+
+def _field_changes(
+    old_rec: dict[str, Any], new_rec: dict[str, Any]
+) -> list[dict[str, str | None]]:
+    return [
+        {
+            "field": field,
+            "before": _as_text(old_rec.get(field)),
+            "after": _as_text(new_rec.get(field)),
+        }
+        for field in _MEANING_FIELDS
+        if old_rec.get(field) != new_rec.get(field)
+    ]
+
+
+def _diff_group(
+    olds: list[dict[str, Any]], news: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Diff one identity-key group → ``(changed, added, removed)`` projections.
+
+    Findings sharing an identity key (a collision — e.g. several ancestry
+    summaries with NULL identity columns) are matched **meaning-aware**, never
+    positionally: rows equal on every meaning field are paired off as *unchanged*
+    first, so an untouched row is never reported as changed and never
+    double-counted across buckets. Only the genuinely-different remainder is
+    paired as ``changed`` (deterministically by finding_text); any surplus is
+    ``removed`` (prior) or ``added`` (current). Within a group of simultaneous
+    changes the old↔new pairing is inherently ambiguous, but every such row did
+    change, so the honest-framing invariant (no false "your finding changed" on a
+    stable row) always holds.
+    """
+    olds = sorted(olds, key=lambda r: r.get("finding_text") or "")
+    news = sorted(news, key=lambda r: r.get("finding_text") or "")
+
+    # 1. Pair off unchanged rows (identity already equal) by meaning-tuple.
+    news_by_meaning: dict[tuple[Any, ...], list[int]] = {}
+    for idx, new_rec in enumerate(news):
+        news_by_meaning.setdefault(_meaning_tuple(new_rec), []).append(idx)
+
+    used: set[int] = set()
+    leftover_old: list[dict[str, Any]] = []
+    for old_rec in olds:
+        bucket = news_by_meaning.get(_meaning_tuple(old_rec), ())
+        match_idx = next((i for i in bucket if i not in used), None)
+        if match_idx is None:
+            leftover_old.append(old_rec)
+        else:
+            used.add(match_idx)  # unchanged — emit nothing
+    leftover_new = [new_rec for idx, new_rec in enumerate(news) if idx not in used]
+
+    # 2. Pair genuinely-different rows as changed; surplus is removed / added.
+    changed: list[dict[str, Any]] = []
+    paired = min(len(leftover_old), len(leftover_new))
+    for old_rec, new_rec in zip(leftover_old[:paired], leftover_new[:paired], strict=False):
+        field_changes = _field_changes(old_rec, new_rec)
+        if field_changes:  # always true here (meaning differs), but stay defensive
+            entry = _display(new_rec)
+            entry["changes"] = field_changes
+            changed.append(entry)
+    removed = [_display(rec) for rec in leftover_old[paired:]]
+    added = [_display(rec) for rec in leftover_new[paired:]]
+    return changed, added, removed
 
 
 def _as_text(value: Any) -> str | None:
@@ -223,25 +284,12 @@ def compute_finding_diff(
     removed: list[dict[str, Any]] = []
 
     for key in set(prior_groups) | set(current_groups):
-        olds = prior_groups.get(key, [])
-        news = current_groups.get(key, [])
-        paired = min(len(olds), len(news))
-        for old_rec, new_rec in zip(olds[:paired], news[:paired], strict=False):
-            field_changes = [
-                {
-                    "field": field,
-                    "before": _as_text(old_rec.get(field)),
-                    "after": _as_text(new_rec.get(field)),
-                }
-                for field in _MEANING_FIELDS
-                if old_rec.get(field) != new_rec.get(field)
-            ]
-            if field_changes:
-                entry = _display(new_rec)
-                entry["changes"] = field_changes
-                changed.append(entry)
-        removed.extend(_display(rec) for rec in olds[paired:])
-        added.extend(_display(rec) for rec in news[paired:])
+        g_changed, g_added, g_removed = _diff_group(
+            prior_groups.get(key, []), current_groups.get(key, [])
+        )
+        changed.extend(g_changed)
+        added.extend(g_added)
+        removed.extend(g_removed)
 
     changed.sort(key=_sort_key)
     added.sort(key=_sort_key)
@@ -328,11 +376,25 @@ def read_finding_diff(sample_engine: sa.Engine) -> dict[str, Any] | None:
 def dismiss_finding_diff(sample_engine: sa.Engine) -> bool:
     """Mark the stored diff dismissed (it then hides from the banner).
 
+    Read-modify-write in a single transaction so a concurrent
+    ``compute_and_store_finding_diff`` cannot resurrect a just-dismissed banner.
     Returns False when there is no stored diff to dismiss.
     """
-    diff = read_finding_diff(sample_engine)
-    if diff is None:
-        return False
-    diff["dismissed"] = True
-    _write_state(sample_engine, DIFF_STATE_KEY, json.dumps(diff))
+    with sample_engine.begin() as conn:
+        row = conn.execute(
+            sa.select(annotation_state.c.value).where(annotation_state.c.key == DIFF_STATE_KEY)
+        ).fetchone()
+        if row is None:
+            return False
+        try:
+            diff = json.loads(row.value)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        diff["dismissed"] = True
+        stmt = sqlite_insert(annotation_state).values(key=DIFF_STATE_KEY, value=json.dumps(diff))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[annotation_state.c.key],
+            set_={"value": stmt.excluded.value, "updated_at": datetime.now(UTC)},
+        )
+        conn.execute(stmt)
     return True

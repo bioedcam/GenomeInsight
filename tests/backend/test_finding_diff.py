@@ -146,6 +146,62 @@ class TestComputeFindingDiff:
         assert diff["counts"] == {"changed": 1, "added": 0, "removed": 0}
         assert diff["changed"][0]["finding_text"] == "B"
 
+    def test_collision_shrink_does_not_fabricate_a_change(self) -> None:
+        # A collision group loses one member (alpha removed; beta unchanged).
+        # Positional pairing would mis-pair alpha→beta and report a false
+        # "VUS → Pathogenic" change plus double-count beta as removed. Meaning-
+        # aware matching must report exactly: alpha removed, nothing changed.
+        key = {
+            "module": "ancestry",
+            "category": "biogeographic",
+            "gene_symbol": None,
+            "rsid": None,
+            "drug": None,
+            "diplotype": None,
+        }
+        prior = [
+            _record(finding_text="alpha", clinvar_significance="Uncertain_significance", **key),
+            _record(finding_text="beta", clinvar_significance="Pathogenic", **key),
+        ]
+        current = [_record(finding_text="beta", clinvar_significance="Pathogenic", **key)]
+        diff = compute_finding_diff(prior, current, after_releases={})
+        assert diff["counts"] == {"changed": 0, "added": 0, "removed": 1}
+        assert diff["removed"][0]["finding_text"] == "alpha"
+
+    def test_collision_reword_and_reclassify_attributes_correctly(self) -> None:
+        # Within a collision group a reword flips finding_text sort order while one
+        # member is reclassified and another is stably benign. Positional pairing
+        # would emit two bogus changes; meaning-aware matching emits exactly one
+        # (VUS → Pathogenic) and treats the stable-benign row as unchanged.
+        key = {
+            "module": "ancestry",
+            "category": "biogeographic",
+            "gene_symbol": None,
+            "rsid": None,
+            "drug": None,
+            "diplotype": None,
+        }
+        prior = [
+            _record(finding_text="m", clinvar_significance="Uncertain_significance", **key),
+            _record(finding_text="a", clinvar_significance="Benign", **key),
+        ]
+        current = [
+            _record(finding_text="a2", clinvar_significance="Pathogenic", **key),
+            _record(finding_text="z", clinvar_significance="Benign", **key),
+        ]
+        diff = compute_finding_diff(prior, current, after_releases={})
+        assert diff["counts"] == {"changed": 1, "added": 0, "removed": 0}
+        (entry,) = diff["changed"]
+        (c,) = [c for c in entry["changes"] if c["field"] == "clinvar_significance"]
+        assert (c["before"], c["after"]) == ("Uncertain_significance", "Pathogenic")
+
+    def test_reword_with_same_meaning_is_unchanged(self) -> None:
+        # finding_text is not a meaning field, so a pure reword is not a change.
+        prior = [_record(finding_text="BRCA1 likely pathogenic variant")]
+        current = [_record(finding_text="BRCA1 variant (pathogenic)")]
+        diff = compute_finding_diff(prior, current, after_releases={})
+        assert diff["counts"] == {"changed": 0, "added": 0, "removed": 0}
+
     def test_no_prior_snapshot_yields_empty_diff(self) -> None:
         current = [_record(), _record(rsid="rs2")]
         for empty in (None, []):
@@ -164,6 +220,23 @@ class TestComputeFindingDiff:
         diff = compute_finding_diff(prior, current, after)
 
         # gnomad is unchanged → not a delta; clinvar advanced → a delta.
+        assert diff["before_releases"] == {"clinvar": "2024-01", "gnomad": "r2.1.1"}
+        assert diff["release_deltas"] == [
+            {"db_name": "clinvar", "before": "2024-01", "after": "2024-06"}
+        ]
+
+    def test_before_releases_union_avoids_spurious_delta(self) -> None:
+        # Prior findings carry heterogeneous release sets (a partial first record).
+        # Union — not first-wins — must recover gnomad so it is not reported as a
+        # spurious None → r2.1.1 delta.
+        prior = [
+            _record(rsid="rs1", release_versions={"clinvar": "2024-01"}),
+            _record(rsid="rs2", release_versions={"clinvar": "2024-01", "gnomad": "r2.1.1"}),
+        ]
+        current = [_record(rsid="rs1"), _record(rsid="rs2")]
+        after = {"clinvar": "2024-06", "gnomad": "r2.1.1"}
+        diff = compute_finding_diff(prior, current, after)
+
         assert diff["before_releases"] == {"clinvar": "2024-01", "gnomad": "r2.1.1"}
         assert diff["release_deltas"] == [
             {"db_name": "clinvar", "before": "2024-01", "after": "2024-06"}
