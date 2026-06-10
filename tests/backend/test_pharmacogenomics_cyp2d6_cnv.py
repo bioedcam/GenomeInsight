@@ -111,4 +111,4 @@ def test_cyp2d6_caveat_directional_band_text() -> None:
     text = CYP2D6_CNV_CAVEAT.lower()
     assert "ultrarapid" in text  # functional-allele duplication -> higher activity
     assert "poor metabolizer" in text  # *5 gene deletion -> lower activity
-    assert "*5" in CYP2D6_CNV_CAVEAT and "cyp2d7" in text  # deletion + hybrid alleles named
+    assert "*5" in text and "cyp2d7" in text  # deletion + hybrid alleles named
