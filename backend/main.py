@@ -20,6 +20,7 @@ from backend.api.routes.annotation import router as annotation_router
 from backend.api.routes.annotations_api import router as annotations_api_router
 from backend.api.routes.apoe import router as apoe_router
 from backend.api.routes.apol1 import router as apol1_router
+from backend.api.routes.array_confidence import router as array_confidence_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.backup import router as backup_router
 from backend.api.routes.cancer import router as cancer_router
@@ -191,6 +192,7 @@ def create_app() -> FastAPI:
     api_router.include_router(ancestry_router)
     api_router.include_router(apoe_router)
     api_router.include_router(apol1_router)
+    api_router.include_router(array_confidence_router)
     api_router.include_router(backup_router)
     api_router.include_router(annotation_router)
     api_router.include_router(annotations_api_router)

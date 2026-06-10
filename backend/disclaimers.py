@@ -831,3 +831,22 @@ GENE_CONSTRAINT_CONTEXT_ONLY = (
     "A constraint badge does NOT change this finding's classification or evidence "
     "level — it is background on how the gene tolerates loss-of-function variation."
 )
+
+
+# ── Array-genotyping reliability disclosure (SW-A11 / roadmap #14) ────────────
+# Attached to the array-confidence reliability badge
+# (backend.analysis.array_confidence). Weedon 2021 (BMJ; PMID 33589468) showed
+# genotyping-array calls are near-perfect for common variants but increasingly
+# unreliable as allele frequency falls — confirmed by sequencing only ~16% of the
+# time below 0.001%, and ~4% for very rare ClinVar P/LP variants in BRCA1/BRCA2.
+# The badge is a reliability flag only: it NEVER changes a finding's evidence
+# level or ClinVar significance, and a low-reliability flag does not make a true
+# call false — it means the call should be confirmed in a CLIA/accredited lab.
+
+ARRAY_CONFIDENCE_CONTEXT_ONLY = (
+    "Genotyping-array reliability flag (Weedon 2021; reliability flag only). It does "
+    "NOT change this finding's classification or evidence level. Array calls are "
+    "near-perfect for common variants but increasingly unreliable as a variant gets "
+    "rarer — a low-reliability flag means confirm the call in a CLIA/accredited lab "
+    "before any medical action, not that the call is wrong."
+)
