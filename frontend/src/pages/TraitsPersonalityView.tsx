@@ -25,6 +25,7 @@ import type { CrossModuleItem } from "@/types/traits"
 import PathwayCard from "@/components/traits/PathwayCard"
 import PathwayDetailPanel from "@/components/traits/PathwayDetailPanel"
 import TraitsPRSGaugeCard from "@/components/traits/TraitsPRSGaugeCard"
+import TraitArchitectureCard from "@/components/ui/TraitArchitectureCard"
 import BigFiveRadarChart from "@/components/traits/BigFiveRadarChart"
 import EvidenceStars from "@/components/ui/EvidenceStars"
 import PageLoading from "@/components/ui/PageLoading"
@@ -206,6 +207,7 @@ export default function TraitsPersonalityView() {
                   <TraitsPRSGaugeCard key={prs.trait} prs={prs} />
                 ))}
               </div>
+              <TraitArchitectureCard />
             </section>
           )}
 
