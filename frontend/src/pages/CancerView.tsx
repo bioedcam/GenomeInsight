@@ -25,6 +25,7 @@ import type { CancerVariant } from "@/types/cancer"
 import VariantCard from "@/components/cancer/VariantCard"
 import PRSGaugeCard from "@/components/cancer/PRSGaugeCard"
 import VariantDetailPanel from "@/components/cancer/VariantDetailPanel"
+import TraitArchitectureCard from "@/components/ui/TraitArchitectureCard"
 
 export default function CancerView() {
   const [searchParams] = useSearchParams()
@@ -189,6 +190,7 @@ export default function CancerView() {
                   <PRSGaugeCard key={prs.trait} prs={prs} />
                 ))}
               </div>
+              <TraitArchitectureCard />
             </section>
           )}
 

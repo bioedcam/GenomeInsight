@@ -793,6 +793,27 @@ class TestStorePRSFindings:
         assert "bootstrap_ci_upper" in detail
         assert detail["bootstrap_iterations"] == 100
 
+    def test_detail_json_has_trait_architecture(
+        self, weight_set: PRSWeightSet, sample_with_prs_variants: sa.Engine
+    ) -> None:
+        """SW-A2: every PRS finding carries the static trait-architecture block."""
+        result = run_prs(
+            weight_set,
+            sample_with_prs_variants,
+            inferred_ancestry="EUR",
+            n_bootstrap=100,
+            rng_seed=42,
+        )
+        store_prs_findings([result], sample_with_prs_variants, module="cancer")
+
+        with sample_with_prs_variants.connect() as conn:
+            row = conn.execute(sa.select(findings).where(findings.c.category == "prs")).fetchone()
+        arch = json.loads(row.detail_json)["architecture"]
+        assert {"heritability", "portability", "calibration", "citation"} <= set(arch)
+        assert "h²_twin > h²_SNP > h²_PRS" in arch["heritability"]
+        assert "ding" in arch["portability"].lower()
+        assert "calibration is not accuracy" in arch["calibration"].lower()
+
     def test_prs_score_and_percentile_stored(
         self, weight_set: PRSWeightSet, sample_with_prs_variants: sa.Engine
     ) -> None:

@@ -611,6 +611,31 @@ def run_prs(
 
 # ── Findings storage ────────────────────────────────────────────────────
 
+# §12.4 polygenic trait-architecture education block (SW-A2 / roadmap #30).
+# Static context attached to every PRS finding so a percentile is never read as a
+# deterministic prediction. It is purely educational and never changes the score,
+# percentile, CI, or evidence level.
+PRS_TRAIT_ARCHITECTURE: dict[str, str] = {
+    "heritability": (
+        "Twin-study heritability is larger than SNP heritability, which is larger "
+        "than the variance this score explains (h²_twin > h²_SNP > h²_PRS). A "
+        "polygenic score captures only a fraction of even the heritable component "
+        "of a trait."
+    ),
+    "portability": (
+        "Cross-ancestry accuracy is limited: polygenic-score accuracy falls roughly "
+        "linearly with genetic distance from the score's training population "
+        "(Ding et al., Nature 2023; Pearson r ≈ −0.95 across 84 traits). A score "
+        "derived mainly in one population can be miscalibrated in another."
+    ),
+    "calibration": (
+        "Calibration is not accuracy. Even a correctly calibrated percentile (the "
+        "right rank within a population) does not predict your individual outcome — "
+        "most trait variation is environmental and non-PRS genetic."
+    ),
+    "citation": "Ding et al., Nature 618:774-781 (2023); doi:10.1038/s41586-023-06079-4",
+}
+
 
 def store_prs_findings(
     results: list[PRSResult],
@@ -675,6 +700,7 @@ def store_prs_findings(
             "ancestry_mismatch": r.ancestry_mismatch,
             "ancestry_warning_text": r.ancestry_warning_text,
             "research_use_only": True,
+            "architecture": PRS_TRAIT_ARCHITECTURE,
         }
 
         rows.append(
