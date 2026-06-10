@@ -39,6 +39,15 @@ _SEED = {
     "rs9999002": ("GENEU", "Pathogenic", None, "unknown"),  # no annotation row
 }
 
+# Non-P/LP ClinVar codes that must be filtered out of the endpoint.
+_NON_PLP_SIGNIFICANCES = (
+    "Uncertain_significance",
+    "Benign",
+    "Likely benign",
+    "Benign/Likely benign",
+    "Conflicting_interpretations_of_pathogenicity",
+)
+
 
 @pytest.fixture
 def ac_client(tmp_data_dir: Path) -> Generator[TestClient, None, None]:
@@ -86,16 +95,20 @@ def ac_client(tmp_data_dir: Path) -> Generator[TestClient, None, None]:
                         gnomad_af_popmax=popmax,
                     )
                 )
-        # A non-P/LP finding that must never receive a reliability flag.
-        conn.execute(
-            findings.insert().values(
-                module="nutrigenomics",
-                category="pathway_summary",
-                evidence_level=2,
-                finding_text="Folate metabolism — elevated",
-                clinvar_significance="Uncertain_significance",
+        # Non-P/LP findings that must never receive a reliability flag — the
+        # endpoint is strictly scoped to ClinVar Pathogenic/Likely-pathogenic.
+        for sig in _NON_PLP_SIGNIFICANCES:
+            conn.execute(
+                findings.insert().values(
+                    module="cancer",
+                    category="monogenic_variant",
+                    evidence_level=1,
+                    gene_symbol="NEGCTL",
+                    rsid="rs9999003",
+                    finding_text=f"NEGCTL rs9999003 — {sig}",
+                    clinvar_significance=sig,
+                )
             )
-        )
 
     ref_engine.dispose()
     sample_engine.dispose()
@@ -121,10 +134,16 @@ class TestArrayConfidenceEndpoint:
         resp = ac_client.get("/api/analysis/array-confidence?sample_id=1")
         assert resp.status_code == 200
         data = resp.json()
-        # Four P/LP findings; the VUS nutrigenomics finding is excluded.
+        # Only the four P/LP findings; every non-P/LP code is excluded.
         assert len(data) == len(_SEED)
         assert {d["rsid"] for d in data} == set(_SEED)
-        assert "nutrigenomics" not in {d["module"] for d in data}
+
+    def test_non_pathogenic_significances_excluded(self, ac_client: TestClient) -> None:
+        # Benign / VUS / Conflicting / etc. must never appear, not just VUS.
+        data = ac_client.get("/api/analysis/array-confidence?sample_id=1").json()
+        returned_sigs = {d["clinvar_significance"] for d in data}
+        assert returned_sigs.isdisjoint(_NON_PLP_SIGNIFICANCES)
+        assert "rs9999003" not in {d["rsid"] for d in data}
 
     def test_reliability_bands_match_frequency(self, ac_client: TestClient) -> None:
         resp = ac_client.get("/api/analysis/array-confidence?sample_id=1")

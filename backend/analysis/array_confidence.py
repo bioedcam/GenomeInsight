@@ -99,28 +99,37 @@ def _is_catalogued(
     Mirrors ``rare_variant_finder.RareVariantResult.is_catalogued``: a dbSNP
     ``rs`` identifier or any ClinVar record is positive evidence of prior
     description, so the variant is not novel even when gnomAD lacks a frequency.
+    The ``rs`` check is case-insensitive to be robust to mixed-case rsids.
     """
-    has_dbsnp_rsid = bool(rsid) and rsid.startswith("rs")
+    has_dbsnp_rsid = bool(rsid) and rsid.lower().startswith("rs")
     has_clinvar = clinvar_significance is not None or clinvar_accession is not None
     return has_dbsnp_rsid or has_clinvar
+
+
+def _af_unavailable(popmax_af: float | None) -> bool:
+    """A frequency is unusable when it is missing or invalid (negative).
+
+    A popmax AF is a frequency in [0, 1]; a negative value can only mean upstream
+    corruption. Fail-safe: treat it as "no frequency" rather than as a confident
+    rare-variant call, so it never lands in a band that implies reliability.
+    """
+    return popmax_af is None or popmax_af < 0
 
 
 def classify_array_reliability(popmax_af: float | None, is_catalogued: bool) -> str:
     """Map popmax AF + catalogue status to a Weedon reliability band.
 
-    Fail-safe: when no frequency is available we never assume "common/reliable" —
-    a catalogued variant with no AF is ``unknown`` (not assessable) and an
-    uncatalogued one is ``very_low``.
+    Fail-safe: when no usable frequency is available (missing or invalid) we never
+    assume "common/reliable" — a catalogued variant with no AF is ``unknown`` (not
+    assessable) and an uncatalogued one is ``very_low``.
     """
-    if popmax_af is not None:
-        if popmax_af >= COMMON_AF_MIN:
-            return RELIABILITY_HIGH
-        if popmax_af >= RARE_AF_MIN:
-            return RELIABILITY_MODERATE
-        return RELIABILITY_LOW
-    if not is_catalogued:
-        return RELIABILITY_VERY_LOW
-    return RELIABILITY_UNKNOWN
+    if _af_unavailable(popmax_af):
+        return RELIABILITY_UNKNOWN if is_catalogued else RELIABILITY_VERY_LOW
+    if popmax_af >= COMMON_AF_MIN:
+        return RELIABILITY_HIGH
+    if popmax_af >= RARE_AF_MIN:
+        return RELIABILITY_MODERATE
+    return RELIABILITY_LOW
 
 
 def array_confidence_badge(popmax_af: float | None, is_catalogued: bool) -> dict[str, Any]:
@@ -132,7 +141,7 @@ def array_confidence_badge(popmax_af: float | None, is_catalogued: bool) -> dict
         "label": label,
         "detail": detail,
         "gnomad_af_popmax": popmax_af,
-        "is_novel": popmax_af is None and not is_catalogued,
+        "is_novel": _af_unavailable(popmax_af) and not is_catalogued,
         "confirm_in_clia_recommended": confirm,
         "context_only": True,
         "pmid_citations": [WEEDON_PMID],
@@ -146,6 +155,13 @@ def assess_pathogenic_findings(sample_engine: sa.Engine) -> list[dict[str, Any]]
     Left-joins ``findings`` to ``annotated_variants`` on ``rsid`` so a P/LP
     finding whose variant was not annotated still receives a badge (popmax AF
     unknown). Read-only — no finding storage is mutated.
+
+    These findings carry a ClinVar P/LP classification and are therefore
+    catalogued by definition, so every row here is ``is_novel=False`` and the
+    ``very_low`` (uncatalogued) band is unreachable through this endpoint — that
+    band exists for future callers (e.g. SW-F1) that classify uncatalogued
+    candidate variants. The worst reachable band here is ``low`` (very rare but
+    catalogued), which carries the headline Weedon warning.
     """
     av = annotated_variants
     join = findings.join(av, findings.c.rsid == av.c.rsid, isouter=True)

@@ -52,6 +52,11 @@ class ArrayConfidenceResponse(BaseModel):
 def list_array_confidence(
     sample_id: int = Query(..., description="Sample ID"),
 ) -> list[ArrayConfidenceResponse]:
-    """Reliability flag for every ClinVar P/LP finding in the sample."""
+    """Reliability flag for every ClinVar P/LP finding in the sample.
+
+    Every returned finding is ClinVar-catalogued by definition, so ``is_novel``
+    is always ``False`` and reliability is one of ``high`` / ``moderate`` /
+    ``low`` / ``unknown`` (never ``very_low``).
+    """
     engine = resolve_sample_engine(sample_id)
     return [ArrayConfidenceResponse(**item) for item in assess_pathogenic_findings(engine)]
