@@ -4,6 +4,17 @@
 **Branch/worktree:** `worktree-tests` (`.claude/worktrees/tests`, at `026146f`)
 **Scope:** (1) test flaws that mask improper functioning, (2) the parallel `validation` worktree's test work, (3) PR-vs-nightly CI tiering.
 
+> ## Remediation status (updated 2026-06-09, re-verified against `main` @ `ed51cd3`)
+>
+> This document is the **historical audit**; most of what it surfaced has since shipped. Snapshot:
+>
+> - **Part 1 VERIFIED findings #1–#12 — substantially remediated.** The live-engine carriage gate + zygosity column + M1–M9 validation suite (`#315`, `#316`, `#320`), the value-blind unit tests #7–#12 (query-translator `literal_binds`, ancestry/LAI per-population asserts, e2e re-annotation counts, frontend zygosity labels — `#326`), and the nutrigenomics C677T strand fix #6 + shared strand-aware lookup (`#340`, `#344`, `#347`) are all on `main`. **Still open:** finding **#5** (the `test_sample_merge_full_pipeline` hand-overwrite — an `xfail` indel tracker is in place, the `UPDATE` removal is not).
+> - **Part 2 CI tiering — implemented (`#325`).** Path filters (`dorny/paths-filter`), Linux-only PR matrices, the `ci-required` aggregator, the nightly cross-OS backstop, and the `slow`-marks on `test_cross_module_integration` + `test_e2e_pipeline` are all present and verified.
+> - **Part 3 validation-worktree blocker — resolved.** The M1–M9 suite landed and the PR #316 cancer-regression guards (`test_detail_json_has_genotype`, `TestFetchCancerFindingsExcludesPRS`) are confirmed still present on `main`; the "deleted-guards" merge-blocker no longer applies.
+> - **The hom_ref negative-control convention has propagated to new code.** Every expansion-wave risk-genotype module (thrombophilia, alpha-1, AMD, APOL1, gout, HFE, MT-RNR1, LHON, Parkinson's, sex-aneuploidy) ships an all-reference→no-finding negative control. The last finder still missing one is `carrier_status`.
+>
+> The remaining, scoped work is tracked in **`docs/test-suite-debt-remediation-plan.md`** (the live plan). Treat the line numbers in the tables below as **of the audit date** — re-verify before editing.
+
 ---
 
 ## How this was produced
