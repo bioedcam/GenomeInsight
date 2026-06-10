@@ -53,7 +53,8 @@ from scripts.benchmark import (
 # test_ancestry_e2e.py::test_tier1_under_one_second, keyed on the CI
 # environment instead of the OS. (Closing the 10× gap to the PRD < 2 min
 # target is a pipeline-perf concern, tracked separately — out of scope here.)
-_ANNOTATION_TARGET_SECONDS = 120.0  # PRD ideal — informational only
+_ANNOTATION_TARGET_SECONDS = 120.0  # PRD ideal (< 2 min) — informational only
+_ANNOTATION_PRD_HARD_LIMIT_SECONDS = 300.0  # PRD hard limit (< 5 min) — informational only
 _ANNOTATION_HARD_LIMIT_SECONDS = 1800.0  # 30 min — local/reference regression ceiling
 _ANNOTATION_CI_HARD_LIMIT_SECONDS = 2700.0  # 45 min — CI ceiling, < 60-min job timeout
 
@@ -184,7 +185,13 @@ def test_annotation_600k_timing(
     assert not result.errors, f"Annotation errors: {result.errors}"
 
     # Regression ceiling (NOT the PRD target — see "Performance budgets"):
-    # generous on the higher-variance CI runner, tighter on the reference box.
+    # the PRD target is 120 s ideal / 300 s hard
+    # (_ANNOTATION_TARGET_SECONDS / _ANNOTATION_PRD_HARD_LIMIT_SECONDS), but no
+    # available hardware meets it (real runs ~22 min local / ~35 min CI), so this
+    # asserts a realistic ceiling (1800 s local / 2700 s CI) that still trips a
+    # gross regression. The ~10× gap to the 120 s/300 s target is deliberate — do
+    # not silence a failure by loosening this without a pipeline-perf pass.
+    # Generous on the higher-variance CI runner, tighter on the reference box.
     if _running_on_ci():
         limit, where = _ANNOTATION_CI_HARD_LIMIT_SECONDS, "CI runner"
     else:
@@ -202,9 +209,17 @@ def test_annotation_600k_timing(
         f"{result.batches_processed} batches"
     )
     if elapsed <= _ANNOTATION_TARGET_SECONDS:
-        print(f"  Status: PASS (meets PRD target < {_ANNOTATION_TARGET_SECONDS / 60:.0f} min)")
+        print(f"  Status: PASS (meets PRD ideal < {_ANNOTATION_TARGET_SECONDS / 60:.0f} min)")
+    elif elapsed <= _ANNOTATION_PRD_HARD_LIMIT_SECONDS:
+        print(
+            f"  Status: PASS (within PRD hard limit < "
+            f"{_ANNOTATION_PRD_HARD_LIMIT_SECONDS / 60:.0f} min)"
+        )
     else:
-        print(f"  Status: PASS (over PRD target, within {limit / 60:.0f}-min {where} ceiling)")
+        print(
+            f"  Status: PASS (over PRD {_ANNOTATION_PRD_HARD_LIMIT_SECONDS:.0f}s hard limit, "
+            f"within {limit / 60:.0f}-min {where} regression ceiling)"
+        )
 
 
 # ── Smaller benchmark for CI fast path ───────────────────────────────────
