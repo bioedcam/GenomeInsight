@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration. Scope: advisory review guidance only — CodeRabbit
+# uses its defaults for everything not set here.
+reviews:
+  path_instructions:
+    - path: "tests/**"
+      instructions: |
+        Enforce the repo's "Test assertion standards" (see CONTRIBUTING.md) as
+        ADVISORY review comments.
+
+        Flag a NEW or MODIFIED test whose ONLY assertion on a value-producing
+        call is `assert x is not None`, or whose only assertion on a
+        data-returning endpoint is `assert response.status_code == 200` (or a
+        similar status-only check). These pass for almost any non-crashing
+        behavior and hide regressions — ask for an assertion on the actual
+        value, rendered output, returned set, or row count.
+
+        Do NOT flag tests that assert the status AND then assert the body, or
+        where `is not None` is a precondition followed by value assertions, or
+        where the status code itself is the behavior under test (e.g. a 401/404
+        guard test).
+
+        Also flag a `for item in items: assert ...` loop that is not guarded by
+        a non-empty check (`assert items`), since it passes vacuously on an
+        empty list.
+
+        For an analysis module that emits clinical findings whose presence
+        depends on the person CARRYING a variant, check that the change includes
+        (or the module already has) a hom_ref / non-carrier negative control —
+        a test seeding a non-carrier Pathogenic variant (or all-reference
+        genotype) and asserting it is absent from findings. See
+        tests/backend/_carriage_fixtures.py.
