@@ -78,7 +78,10 @@ from backend.api.routes.watches import router as watches_router
 from backend.auth import AuthMiddleware
 from backend.config import get_settings, migrate_legacy_data_dir, warn_deprecated_env
 from backend.db.connection import get_registry, reset_registry
-from backend.db.database_registry import check_genome_build_consistency
+from backend.db.database_registry import (
+    PIPELINE_GENOME_BUILD,
+    check_genome_build_consistency,
+)
 from backend.db.db_health import recover_orphaned_downloads
 from backend.db.reference_schema import ensure_reference_schema_current
 from backend.db.tables import reference_metadata
@@ -124,7 +127,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning(
             "genome_build_skew_detected",
             sources=build_skew,
-            pipeline_build="GRCh37",
+            pipeline_build=PIPELINE_GENOME_BUILD,
         )
     # Configure structured logging with DB persistence
     configure_logging(engine_getter=lambda: registry.reference_engine)
