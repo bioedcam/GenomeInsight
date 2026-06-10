@@ -1,6 +1,7 @@
 # Test-Suite Audit Debt — Remediation Plan
 
 **Created:** 2026-06-09
+**Last refreshed:** 2026-06-09 — re-verified against `main` @ `ed51cd3` (post `#362`) by a multi-agent sweep that read every referenced test + module under current code. Line numbers, test names, and the remaining-work scope below reflect that re-verification, not the original audit snapshot.
 **Source:** an internal 2026-06-08 multi-agent test-suite audit (working notes, not committed to the repo). Its findings are reproduced inline below, so this plan is self-contained.
 **Purpose:** track the remaining test-quality debt after the first remediation wave, with concrete, PR-sized actions.
 
@@ -21,12 +22,16 @@ The audit's headline finding: the test suite encoded the **genotype-agnostic bug
 | Carriage negative-controls + interactive `/search`, `/run`, panel-search gating (#2/#4) | #326, #339 |
 | Nutrigenomics MTHFR C677T strand fix (#6) + shared strand-aware lookup across all 8 panel-scoring modules | #340, #344, #347 |
 | `test_update_manager` ineffective-patch → real `CHECK_FNS` dispatch | #341 |
+| Expansion-wave disease modules **ship with their own negative controls** — every risk-genotype module's `assess_*()` returns `calls == []` (or an indeterminate, never a false-negative) on an all-reference / non-carrier genotype, and each has an explicit test for it (thrombophilia `test_both_reference_no_finding`, HFE `test_homozygous_reference_no_finding`, alpha-1 `test_normal_no_finding`, AMD `test_no_risk_no_finding`, APOL1 `test_single_g1_allele_low_risk_no_finding`, gout `test_ref_ref_no_abcg2_finding`, Parkinson's `test_reference_no_finding`, MT-RNR1/LHON `test_reference_call_no_finding`, sex-aneuploidy `test_typical_xx_no_signal`). The shared `risk_genotype` engine itself is covered by `test_all_reference_no_calls`. | #322–#361 |
+| Live-path validation suite (M1–M9) landed **and** the PR #316 cancer-regression guards (`test_detail_json_has_genotype`, `TestFetchCancerFindingsExcludesPRS`) confirmed still present on `main` — the audit Part 3 "deleted-guards" merge-blocker is **resolved** | #320 |
+
+> **Re-verification note (2026-06-09).** The audit's §1.5.3 asked to "fill gaps (cancer, cardiovascular, the new disease modules …)". That sweep is now **done for the risk-genotype / GWAS-risk modules** — they were authored with negative controls from the start (rows above). The *only* clinical-finding module still missing a negative control is **`carrier_status`** (a ClinVar-carriage finder, like `cancer`/`cardiovascular`, which it predates) plus two panel-scoring nuances (`pharmacogenomics` wildtype→no-alert, `nutrigenomics` standard→no-elevated-finding). The remaining-work list below is scoped to those, not a blanket per-module pass.
 
 ### What remains (this plan)
 
-- **A.** De-mask the one remaining "hand-overwrite the column under test" end-to-end test (audit finding #5 / guardrail §1.5.4).
-- **B.** Operationalize the test-quality guardrails from the audit's §1.5 (anti-`assert-is-not-None` convention; relaxed perf-assert cleanup; the hom_ref negative-control convention as a repo norm).
-- **C.** The medium/low masked-assertion sweep (the ~49 items not yet touched).
+- **A.** De-mask the one remaining "hand-overwrite the column under test" end-to-end test (audit finding #5 / guardrail §1.5.4). *Partial progress already on main:* an `xfail(strict)` indel tracker (`test_f508del_indel_carriage_resolved`) and an `test_f508del_indel_unscoreable_on_chip` invariant exist; what remains is removing the `UPDATE … SET zygosity='het'` by driving the test with a genuinely-scoreable SNV carrier.
+- **B.** Operationalize the test-quality guardrails from the audit's §1.5: (b1) anti-`assert-is-not-None` convention doc; (b2) relaxed perf-assert cleanup (inline the real target); (b3) close the last hom_ref negative-control gap — **`carrier_status`** (+ pgx/nutrigenomics panel cases) — the risk-genotype modules are already done.
+- **C.** The medium/low masked-assertion sweep (the items not yet touched).
 - **D.** Owner-only repo settings (branch protection + merge queue).
 
 > Every file/test reference below should be **re-verified against current code** before editing — line numbers drift and some tests have been renamed.
@@ -60,9 +65,10 @@ The audit's headline finding: the test suite encoded the **genotype-agnostic bug
    - **DoD:** no perf assert sits next to a target it's 10× looser than. ~1 PR.
 
 3. **hom_ref negative-control convention.**
-   - The shared `tests/backend/_carriage_fixtures.py` (`hom_ref_pathogenic_row` / `het_pathogenic_row`) exists. Extend the convention: **every analysis module that emits clinical findings** gets at least one test seeding a `hom_ref` Pathogenic variant and asserting it is absent from findings.
-   - Audit current coverage and fill gaps (cancer, cardiovascular, the new disease modules: thrombophilia, alpha-1, AMD, APOL1, gout, HFE).
-   - **DoD:** each clinical-finding module has a hom_ref negative control. 1–2 PRs (batch by module family).
+   - The shared `tests/backend/_carriage_fixtures.py` (`hom_ref_pathogenic_row` / `het_pathogenic_row`) exists and is used by the ClinVar-carriage finders (`rare_variant_finder`, `custom_panels`).
+   - **Coverage as of 2026-06-09 (re-verified):** `cancer` (`test_excludes_non_carried_zygosity`) and `cardiovascular` (`test_fh_status_negative_when_only_homozygous_reference`) are covered. The expansion-wave **risk-genotype** modules are covered by construction — their gate is risk-allele *dosage*, not ClinVar significance, so the correct negative control is "all-reference genotype → `calls == []`", which each module already asserts (see the "Already remediated" table). Non-carriage modules (`apoe` — everyone carries two alleles; `sex_aneuploidy`/`roh`/`kinship`/`qc` — sample-level metrics) are **N/A**.
+   - **The single remaining gap:** `carrier_status`. It reads `annotated_variants.zygosity` and gates on `zygosity == 'het'` exactly (`backend/analysis/carrier_status.py:304-320`) but has no test seeding a `hom_ref` Pathogenic variant in a panel gene and asserting `carrier_count == 0`. Add `test_hom_ref_pathogenic_excluded` mirroring `cancer`'s. Optionally extend the spirit to the two panel-scoring modules: `pharmacogenomics` (all-wildtype defining variants → `*1/*1`, **no** clinical alert — folded into the P2 pgx phenotype fix) and `nutrigenomics` (standard genotype → no elevated-category SNP finding).
+   - **DoD:** `carrier_status` has a hom_ref negative control; the pgx/nutrigenomics wildtype cases assert absence-of-finding. 1 PR.
 
 ---
 
@@ -77,9 +83,9 @@ Each is a real masked defect; fix the assertion (and the SUT if the assertion th
 | VCF body unverified | `test_export::test_vcf_export` | Assert REF/ALT/GT on data lines (catches dropped variants, swapped REF↔ALT, mis-encoded GT). |
 | Aggregation could drop modules | `test_cross_module_integration::test_unified_findings_aggregates_all_modules` | Assert each expected module contributes, not just `len(findings) > 0`. |
 | APOE genotype too loose | `test_cross_module_integration::test_apoe_genotype_determination` | Assert the exact diplotype (e.g. `ε3/ε3`), not `'3' in str(genotype)`. |
-| PGx phenotype unchecked | `test_pharmacogenomics::test_no_data_defaults_to_normal` | Assert the phenotype call, not only `diplotype=='*1/*1'`. |
-| PRS RUO/cap derived from SUT | `test_traits_api::test_prs_evidence_cap` / `test_prs_research_use_only` | Assert against an independent expected value. |
-| LAI label/remap not value-asserted | `test_lai::test_painting_structure` / `test_remap_indices` | Assert per-segment labels / remap values (same mislabel class as the fixed #9). |
+| PGx phenotype unchecked | `test_pharmacogenomics::test_no_data_defaults_to_wildtype` (renamed since the audit) | Assert the **phenotype** call (`Normal Metabolizer`), not only `diplotype=='*1/*1'`. Pairs with the carrier-convention pgx wildtype-no-alert case (P1-B3). |
+| PRS RUO/cap is a circular fixture | `test_traits_api::test_prs_evidence_cap` / `test_prs_research_use_only` | The expected value is hard-coded in the same fixture the assertion reads back (`research_use_only=True`, `evidence_level≤2` baked into `PRS_FINDINGS`), so a broken cap/flag can't fail it. Feed a fixture row that *violates* the cap/flag and assert the API enforces it. |
+| LAI label/remap not value-asserted | `test_lai::test_painting_structure` / `test_remap_indices` | Assert per-segment labels / remap values against an independent truth table (same mislabel class as the fixed #9). |
 
 **DoD:** each test asserts the behavior it claims to. Batch into ~2–3 PRs by subsystem (variant/export, cross-module, traits/pgx/lai). 
 
@@ -112,6 +118,8 @@ Each is a real masked defect; fix the assertion (and the SUT if the assertion th
 
 ### Owner — repo settings (not code; requires `bioedcam`)
 
+> **Current state (2026-06-09):** `main` has **no branch protection** (`GET /branches/main/protection` → 404) and **no merge queue**. The `ci-required` aggregator and the Tier-2 push/`merge_group` legs are already wired in `ci.yml`, so the config below is the only missing piece. This is intentionally **deferred to a deliberate owner action**: turning on required checks / a merge queue mid-stream would gate in-flight remediation PRs and affect other contributors, so it should not be flipped on as a side effect of the test-debt work.
+
 1. **Branch protection on `main`:** require status checks **`ci-required`** + **`lint`** (the `ci-required` aggregator is already wired in `ci.yml`; skipped jobs are treated as pass, so it is safe as the sole required check alongside `lint`).
 2. **Merge queue:** enable it with the **Tier-2** matrix (macOS `test-backend-cross-os` / `smoke-install-cross-os`, `docker-build`, 3-browser `test-e2e`) as required merge-queue checks — this closes the pre-merge macOS/Docker/E2E blind spot (those legs only run on `push`/`merge_group` today).
 
@@ -125,7 +133,7 @@ One PR per logical change (repo convention), each rebased on current `main`, rev
 
 1. **De-mask #5** (P1) — small; unblocks the last "fixture stubs the SUT" case.
 2. **Perf-assert cleanup** (P1 guardrails item 2) — small, isolated to `test_benchmark`.
-3. **hom_ref negative-control coverage** (P1 guardrails item 3) — one PR, batched by module family (cancer/cardio, then the new disease modules).
+3. **hom_ref negative-control coverage** (P1 guardrails item 3) — now a small PR: `cancer`/`cardiovascular` and every risk-genotype module are already covered, so this is just `carrier_status` + the pgx/nutrigenomics wildtype cases.
 4. **Backend masked-assertion fixes** (P2) — split into ~2–3 PRs by subsystem.
 5. **Frontend chart/mocks** (P2) — ~1–2 frontend PRs.
 6. **Low-severity catch-all** (P3) — a single cleanup PR.
