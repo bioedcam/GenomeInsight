@@ -31,11 +31,12 @@ export default function ClinicalConfirmationGate() {
           <p className="mb-1 text-sm font-semibold">
             Confirm before acting — not a clinical diagnosis
           </p>
+          {/* Verbatim copy of the backend CLIA_CONFIRMATION constant — keep identical. */}
           <p className="text-xs leading-relaxed">
-            These are array-derived research/educational results, not a clinical
-            diagnosis. Genotyping-array calls can be wrong, especially for rare variants.
-            Before any medical decision, confirm an actionable result in a CLIA/accredited
-            laboratory and review it with a genetic counselor or clinician.
+            This is an array-derived research/educational result, not a clinical diagnosis.
+            Genotyping-array calls can be wrong, especially for rare variants. Before any
+            medical decision, confirm an actionable result in a CLIA/accredited laboratory
+            and review it with a genetic counselor or clinician.
           </p>
         </div>
       </div>
