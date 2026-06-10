@@ -53,6 +53,7 @@ _FULLY_GATED_MODULES = frozenset(
         "annotations_api",
         "apoe",
         "apol1",
+        "array_confidence",
         "cancer",
         "cardiovascular",
         "carrier",
