@@ -661,7 +661,18 @@ class TestRunScoring:
         # prove the second run didn't APPEND duplicate rows. Assert the skin
         # findings table holds exactly `count` rows after two runs — i.e. the
         # delete-then-insert in store_skin_findings actually cleared the first run.
-        sample_db = tmp_data_dir / "samples" / f"sample_{sample_id}.db"
+        # Resolve the sample DB path from the samples table rather than assuming
+        # the on-disk filename, so the check doesn't couple to fixture naming.
+        settings = Settings(data_dir=tmp_data_dir, wal_mode=False)
+        ref_engine = sa.create_engine(f"sqlite:///{settings.reference_db_path}")
+        try:
+            with ref_engine.connect() as conn:
+                db_path = conn.execute(
+                    sa.select(samples.c.db_path).where(samples.c.id == sample_id)
+                ).scalar_one()
+        finally:
+            ref_engine.dispose()
+        sample_db = tmp_data_dir / db_path
         engine = sa.create_engine(f"sqlite:///{sample_db}")
         try:
             with engine.connect() as conn:
