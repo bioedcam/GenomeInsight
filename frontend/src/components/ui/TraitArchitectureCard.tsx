@@ -6,9 +6,17 @@
  *   - cross-ancestry portability falls with genetic distance (Ding 2023, r≈−0.95);
  *   - calibration is not accuracy.
  *
- * §12.4 — educational only; it mirrors the static `architecture` block the
- * backend attaches to every PRS finding and changes no score, percentile, CI, or
- * evidence level.
+ * §12.4 — educational only; changes no score, percentile, CI, or evidence level.
+ *
+ * Canonical source of the three facts + citation: the backend
+ * `PRS_TRAIT_ARCHITECTURE` block in `backend/analysis/prs.py` (attached to every
+ * PRS finding's `detail_json`). This card is the **reader-facing register** of
+ * that same content — the substantive claims (h²_twin > h²_SNP > h²_PRS; Ding
+ * 2023 r≈−0.95; calibration ≠ accuracy) and the Ding citation are kept identical
+ * to the backend block by hand; only the surrounding prose is friendlier. The
+ * card is section-level (not per-finding), so it intentionally renders the static
+ * copy rather than threading per-finding detail_json through the API/types. If
+ * you edit either side, update the other to keep them in sync.
  */
 
 import { BookOpen } from "lucide-react"
